@@ -91,6 +91,39 @@ Linux/macOS:
 pwsh ./logs.ps1
 ```
 
+## Tests
+
+Run all checks:
+
+```powershell
+.\test.ps1
+```
+
+Only run the Python import smoke test:
+
+```powershell
+.\test.ps1 -SkipPlaywright
+```
+
+Run a specific Playwright spec:
+
+```powershell
+.\test.ps1 -Spec tests/timeframe-buttons.spec.ts
+```
+
+`test.ps1` now bootstraps Playwright automatically when needed:
+
+- Creates `package.json` with `npm init -y` if missing
+- Installs `@playwright/test` if not present
+- Installs browser binaries via `npx playwright install`
+- Falls back to `npx playwright test` (all tests) if the requested spec path does not exist
+
+CI note:
+
+- Runner needs Node.js + npm for Playwright bootstrap
+- Runner must allow downloading Playwright browser binaries
+- Keep Python `.venv` available because the script always runs the Python import smoke test first
+
 ## What's included in v1?
 
 - Topbar

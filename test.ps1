@@ -26,8 +26,43 @@ Write-Host "==> Playwright tests starten"
 Write-Host "BASE_URL=$BaseUrl"
 $env:BASE_URL = $BaseUrl
 
-if (-not (Test-Path "package.json")) {
-    throw "package.json niet gevonden. Run dit script vanuit de project root."
+$npmCommand = Get-Command npm -ErrorAction SilentlyContinue
+if (-not $npmCommand) {
+    throw "npm niet gevonden. Installeer Node.js (met npm) om Playwright tests te draaien."
 }
 
-npx playwright test $Spec
+$packageJsonPath = Join-Path $PSScriptRoot "package.json"
+if (-not (Test-Path $packageJsonPath)) {
+    Write-Host "package.json niet gevonden, npm project initialiseren..."
+    Push-Location $PSScriptRoot
+    try {
+        npm init -y | Out-Host
+    }
+    finally {
+        Pop-Location
+    }
+}
+
+Push-Location $PSScriptRoot
+try {
+    $playwrightPackagePath = Join-Path $PSScriptRoot "node_modules\@playwright\test\package.json"
+    if (-not (Test-Path $playwrightPackagePath)) {
+        Write-Host "@playwright/test niet gevonden, installeren..."
+        npm install -D @playwright/test | Out-Host
+    }
+
+    Write-Host "Playwright browsers installeren/controleren..."
+    npx playwright install | Out-Host
+
+    $specPath = if ([System.IO.Path]::IsPathRooted($Spec)) { $Spec } else { Join-Path $PSScriptRoot $Spec }
+    if (Test-Path $specPath) {
+        npx playwright test $Spec
+    }
+    else {
+        Write-Warning "Spec niet gevonden op '$specPath'. Alle Playwright tests worden uitgevoerd."
+        npx playwright test
+    }
+}
+finally {
+    Pop-Location
+}

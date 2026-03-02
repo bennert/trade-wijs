@@ -9,8 +9,68 @@ on:
       - '.github/workflows/build-installers.yml'
 
 jobs:
+  run-tests:
+    name: Run tests
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Create venv and install Python dependencies
+        shell: pwsh
+        run: |
+          python -m venv .venv
+          .\.venv\Scripts\python.exe -m pip install --upgrade pip
+          .\.venv\Scripts\python.exe -m pip install -r requirements.txt
+
+      - name: Start app in background
+        shell: pwsh
+        run: |
+          $process = Start-Process -FilePath ".\.venv\Scripts\python.exe" -ArgumentList "app.py" -PassThru
+          "APP_PID=$($process.Id)" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+
+          $maxAttempts = 30
+          for ($attempt = 1; $attempt -le $maxAttempts; $attempt++) {
+            try {
+              Invoke-WebRequest -Uri "http://127.0.0.1:3175" -UseBasicParsing -TimeoutSec 5 | Out-Null
+              Write-Host "App is bereikbaar op http://127.0.0.1:3175"
+              break
+            }
+            catch {
+              if ($attempt -eq $maxAttempts) {
+                throw "App is niet gestart binnen de verwachte tijd."
+              }
+
+              Start-Sleep -Seconds 2
+            }
+          }
+
+      - name: Run test script
+        shell: pwsh
+        run: .\test.ps1
+
+      - name: Stop app
+        if: always()
+        shell: pwsh
+        run: |
+          if ($env:APP_PID) {
+            Stop-Process -Id $env:APP_PID -Force -ErrorAction SilentlyContinue
+          }
+
   package-installers:
     name: Package installer (${{ matrix.os }})
+    needs: run-tests
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false

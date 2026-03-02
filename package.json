@@ -1,0 +1,15 @@
+{
+  "name": "trade-wijs",
+  "version": "1.0.0",
+  "description": "First version of a Python web app with only a TradingView-like screen layout.",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "devDependencies": {
+    "@playwright/test": "^1.58.2"
+  }
+}
