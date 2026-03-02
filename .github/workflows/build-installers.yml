@@ -1,0 +1,74 @@
+name: Build Installers
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [ main, master ]
+    paths:
+      - 'installers/**'
+      - '.github/workflows/build-installers.yml'
+
+jobs:
+  package-installers:
+    name: Package installer (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Prepare package folder
+        shell: bash
+        run: |
+          mkdir -p dist
+          cp docker-compose.yml dist/
+          cp installers/README.md dist/
+
+      - name: Package Linux installer
+        if: matrix.os == 'ubuntu-latest'
+        shell: bash
+        run: |
+          cp installers/linux/install-trade-wijs.sh dist/
+          chmod +x dist/install-trade-wijs.sh
+          tar -czf trade-wijs-installer-linux.tar.gz -C dist .
+
+      - name: Package macOS installer
+        if: matrix.os == 'macos-latest'
+        shell: bash
+        run: |
+          cp installers/macos/install-trade-wijs.sh dist/
+          chmod +x dist/install-trade-wijs.sh
+          tar -czf trade-wijs-installer-macos.tar.gz -C dist .
+
+      - name: Package Windows installer
+        if: matrix.os == 'windows-latest'
+        shell: pwsh
+        run: |
+          Copy-Item installers/windows/install-trade-wijs.ps1 dist/
+          Copy-Item installers/windows/startup-trade-wijs.ps1 dist/
+          Compress-Archive -Path dist/* -DestinationPath trade-wijs-installer-windows.zip -Force
+
+      - name: Upload Linux artifact
+        if: matrix.os == 'ubuntu-latest'
+        uses: actions/upload-artifact@v4
+        with:
+          name: trade-wijs-installer-linux
+          path: trade-wijs-installer-linux.tar.gz
+
+      - name: Upload macOS artifact
+        if: matrix.os == 'macos-latest'
+        uses: actions/upload-artifact@v4
+        with:
+          name: trade-wijs-installer-macos
+          path: trade-wijs-installer-macos.tar.gz
+
+      - name: Upload Windows artifact
+        if: matrix.os == 'windows-latest'
+        uses: actions/upload-artifact@v4
+        with:
+          name: trade-wijs-installer-windows
+          path: trade-wijs-installer-windows.zip

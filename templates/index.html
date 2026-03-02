@@ -1,0 +1,2871 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Trade Wijs</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}" />
+  <script src="https://unpkg.com/lightweight-charts@4.2.0/dist/lightweight-charts.standalone.production.js"></script>
+</head>
+<body>
+  <div class="app-shell">
+    <header class="topbar">
+      <div class="brand">Trade Wijs v{{ app_version }}</div>
+      <div id="symbol-info" class="symbol-info">{{ market_data.display_symbol }} · {{ market_data.timeframe }} · {{ market_data.exchange }}</div>
+      <div class="top-actions"><span id="refresh-status" class="refresh-status">Live</span></div>
+    </header>
+
+    <main class="chart-area">
+      <div class="chart-toolbar">
+        <div class="toolbar-group toolbar-group--timeframes">
+          <div id="timeframe-buttons" class="timeframe-buttons" role="group" aria-label="Timeframe">
+            <button type="button" class="timeframe-btn{% if market_data.timeframe == '1m' %} is-active{% endif %}" data-timeframe="1m">1m</button>
+            <button type="button" class="timeframe-btn{% if market_data.timeframe == '3m' %} is-active{% endif %}" data-timeframe="3m">3m</button>
+            <button type="button" class="timeframe-btn{% if market_data.timeframe == '5m' %} is-active{% endif %}" data-timeframe="5m">5m</button>
+            <button type="button" class="timeframe-btn{% if market_data.timeframe == '15m' %} is-active{% endif %}" data-timeframe="15m">15m</button>
+            <button type="button" class="timeframe-btn{% if market_data.timeframe == '1h' %} is-active{% endif %}" data-timeframe="1h">1h</button>
+            <button type="button" class="timeframe-btn{% if market_data.timeframe == '4h' %} is-active{% endif %}" data-timeframe="4h">4h</button>
+            <button type="button" class="timeframe-btn{% if market_data.timeframe == '1d' %} is-active{% endif %}" data-timeframe="1d">1d</button>
+            <button type="button" class="timeframe-btn{% if market_data.timeframe == '1w' %} is-active{% endif %}" data-timeframe="1w">1w</button>
+            <button type="button" class="timeframe-btn{% if market_data.timeframe == '1M' %} is-active{% endif %}" data-timeframe="1M">1M</button>
+          </div>
+        </div>
+        <div class="toolbar-divider" aria-hidden="true"></div>
+        <div class="toolbar-group toolbar-group--indicators">
+          <div class="indicator-buttons" role="group" aria-label="Indicators">
+            <button type="button" class="indicator-btn is-active" data-indicator="bb">BB</button>
+            <button type="button" class="indicator-btn is-active" data-indicator="fvg">FVG</button>
+            <button type="button" class="indicator-btn is-active" data-indicator="rsi">RSI</button>
+            <button type="button" class="indicator-btn is-active" data-indicator="smc">SMC</button>
+            <button type="button" class="indicator-btn is-active" data-indicator="stoch">Stoch</button>
+            <button type="button" class="indicator-btn is-active" data-indicator="volume">Volume</button>
+          </div>
+        </div>
+        <div class="toolbar-divider" aria-hidden="true"></div>
+        <div class="drawing-tools" role="group" aria-label="Drawing tools">
+          <button id="draw-line-btn" type="button" class="draw-tool-btn">Draw Line</button>
+        </div>
+      </div>
+      <div class="chart-stats-row" aria-live="polite">
+        <div id="ohlc-display" class="ohlc-display">
+          <span>O: <strong id="ohlc-open">-</strong></span>
+          <span>H: <strong id="ohlc-high">-</strong></span>
+          <span>L: <strong id="ohlc-low">-</strong></span>
+          <span>C: <strong id="ohlc-close">-</strong></span>
+          <span>Vol: <strong id="ohlc-bar-volume">-</strong></span>
+          <span>24h Vol: <strong id="ohlc-vol24">{{ market_data.quote_volume_compact }}</strong></span>
+        </div>
+      </div>
+      <div class="chart-canvas">
+        <div id="tv-chart" class="tv-chart"></div>
+        <div id="fvg-overlay" class="fvg-overlay" aria-hidden="true"></div>
+        <div id="smc-overlay" class="smc-overlay" aria-hidden="true"></div>
+        <div id="price-hover-guide-line" class="price-hover-guide-line" aria-hidden="true"></div>
+        <div id="price-hover-guide-label" class="price-hover-guide-label" aria-hidden="true">
+          <span class="price-hover-guide-plus">+</span>
+          <span id="price-hover-guide-value">-</span>
+        </div>
+        <div id="pane-scale-overlay" class="pane-scale-overlay" aria-hidden="true"></div>
+        <div id="pane-reorder-overlay" class="pane-reorder-overlay" aria-hidden="true"></div>
+        <button id="scroll-to-recent-btn" type="button" class="scroll-to-recent-btn" aria-label="Scroll to most recent bar">↦ Latest</button>
+        <div id="stoch-divider" class="scale-divider scale-divider--stoch" role="separator" aria-orientation="horizontal" aria-label="Stoch scale divider"></div>
+        <div id="stoch-divider-label-left" class="scale-divider-label scale-divider-label--left" aria-live="polite"></div>
+        <div id="stoch-divider-label-right" class="scale-divider-label scale-divider-label--right" aria-live="polite"></div>
+        <div id="rsi-divider" class="scale-divider scale-divider--rsi" role="separator" aria-orientation="horizontal" aria-label="RSI scale divider"></div>
+        <div id="rsi-divider-label-left" class="scale-divider-label scale-divider-label--left" aria-live="polite"></div>
+        <div id="rsi-divider-label-right" class="scale-divider-label scale-divider-label--right" aria-live="polite"></div>
+        <div id="scale-divider" class="scale-divider" role="separator" aria-orientation="horizontal" aria-label="Chart scale divider"></div>
+        <div id="scale-divider-label-left" class="scale-divider-label scale-divider-label--left" aria-live="polite"></div>
+        <div id="scale-divider-label-right" class="scale-divider-label scale-divider-label--right" aria-live="polite"></div>
+      </div>
+      <div id="chart-footer" class="chart-footer">
+        <span>Wheel: Zoom</span>
+        <span>Drag: Pan</span>
+        <span>Click 2 points: Draw line</span>
+      </div>
+    </main>
+
+    <aside class="right-panel">
+      <section>
+        <div id="right-panel-tabs" class="panel-tabs" role="tablist" aria-label="Right panel tabs">
+          <button type="button" class="panel-tab is-active" role="tab" aria-selected="true" data-panel="order">Order Panel</button>
+          <button type="button" class="panel-tab" role="tab" aria-selected="false" data-panel="watchlist">Watchlist</button>
+        </div>
+
+        <div id="panel-order" class="tab-panel is-active" role="tabpanel">
+          <div class="order-actions">
+            <button type="button" class="trade-btn buy-btn">Buy</button>
+            <button type="button" class="trade-btn sell-btn">Sell</button>
+          </div>
+          <div class="order-type-group" role="radiogroup" aria-label="Order type">
+            <input type="radio" name="order-type" id="type-limit" checked />
+            <label for="type-limit">Limit</label>
+
+            <input type="radio" name="order-type" id="type-stop-limit" />
+            <label for="type-stop-limit">Stop Lmt</label>
+
+            <input type="radio" name="order-type" id="type-market" />
+            <label for="type-market">Market</label>
+
+            <input type="radio" name="order-type" id="type-stop-market" />
+            <label for="type-stop-market">Stop Mkt</label>
+
+            <input type="radio" name="order-type" id="type-oco" />
+            <label for="type-oco">OCO</label>
+          </div>
+        </div>
+
+        <div id="panel-watchlist" class="tab-panel" role="tabpanel">
+          <ul class="watchlist-list">
+            <li>BTCUSDT</li>
+            <li>ETHUSDT</li>
+            <li>SOLUSDT</li>
+            <li>EURUSD</li>
+            <li>NAS100</li>
+          </ul>
+        </div>
+      </section>
+      <section>
+        <h2 id="market-title">{{ market_data.display_symbol }} Info</h2>
+        {% if market_data.error %}
+          <div id="market-error" class="placeholder-block">Unable to load market data: {{ market_data.error }}</div>
+        {% else %}
+          <div id="market-error" class="placeholder-block" style="display:none;"></div>
+          <div id="market-info-grid" class="market-info-grid">
+            <div class="info-item">
+              <span class="info-label">Last</span>
+              <span id="value-last" class="info-value">{{ market_data.last if market_data.last is not none else '-' }}</span>
+            </div>
+            <div class="info-item">
+              <span class="info-label">Bid</span>
+              <span id="value-bid" class="info-value">{{ market_data.bid if market_data.bid is not none else '-' }}</span>
+            </div>
+            <div class="info-item">
+              <span class="info-label">Ask</span>
+              <span id="value-ask" class="info-value">{{ market_data.ask if market_data.ask is not none else '-' }}</span>
+            </div>
+            <div class="info-item">
+              <span class="info-label">24h High</span>
+              <span id="value-high" class="info-value">{{ market_data.high if market_data.high is not none else '-' }}</span>
+            </div>
+            <div class="info-item">
+              <span class="info-label">24h Low</span>
+              <span id="value-low" class="info-value">{{ market_data.low if market_data.low is not none else '-' }}</span>
+            </div>
+            <div class="info-item">
+              <span class="info-label">Quote Volume</span>
+              <span id="value-volume" class="info-value">{{ market_data.quote_volume_compact }}</span>
+            </div>
+          </div>
+          <div id="market-updated" class="market-updated">Updated: {{ market_data.timestamp if market_data.timestamp else 'Unknown' }}</div>
+        {% endif %}
+      </section>
+    </aside>
+
+    <footer class="bottom-panel">
+      <div>Orders</div>
+      <div>Trades</div>
+      <div>History</div>
+      <div>Log</div>
+    </footer>
+  </div>
+
+  <script id="candles-data" type="application/json">{{ candles | tojson }}</script>
+  <script>
+    (function () {
+      const chartFooterElement = document.getElementById("chart-footer");
+      const chartElement = document.getElementById("tv-chart");
+      const chartCanvas = document.querySelector(".chart-canvas");
+      const scrollToRecentButtonElement = document.getElementById("scroll-to-recent-btn");
+      const fvgOverlayElement = document.getElementById("fvg-overlay");
+      const smcOverlayElement = document.getElementById("smc-overlay");
+      const priceHoverGuideLineElement = document.getElementById("price-hover-guide-line");
+      const priceHoverGuideLabelElement = document.getElementById("price-hover-guide-label");
+      const priceHoverGuideValueElement = document.getElementById("price-hover-guide-value");
+      const paneScaleOverlayElement = document.getElementById("pane-scale-overlay");
+      const paneReorderOverlayElement = document.getElementById("pane-reorder-overlay");
+      const stochDividerElement = document.getElementById("stoch-divider");
+      const stochDividerLabelElements = [
+        document.getElementById("stoch-divider-label-left"),
+        document.getElementById("stoch-divider-label-right"),
+      ].filter(Boolean);
+      const rsiDividerElement = document.getElementById("rsi-divider");
+      const rsiDividerLabelElements = [
+        document.getElementById("rsi-divider-label-left"),
+        document.getElementById("rsi-divider-label-right"),
+      ].filter(Boolean);
+      const scaleDividerElement = document.getElementById("scale-divider");
+      const scaleDividerLabelElements = [
+        document.getElementById("scale-divider-label-left"),
+        document.getElementById("scale-divider-label-right"),
+      ].filter(Boolean);
+      const dataElement = document.getElementById("candles-data");
+      const refreshStatusElement = document.getElementById("refresh-status");
+      const timeframeButtonsElement = document.getElementById("timeframe-buttons");
+      const timeframeButtonElements = Array.from(document.querySelectorAll(".timeframe-btn"));
+      const indicatorButtonsElement = document.querySelector(".indicator-buttons");
+      const indicatorButtonElements = Array.from(document.querySelectorAll(".indicator-btn"));
+      const drawLineButtonElement = document.getElementById("draw-line-btn");
+      const rightPanelTabsElement = document.getElementById("right-panel-tabs");
+      const panelTabButtons = Array.from(document.querySelectorAll(".panel-tab"));
+      const panelOrderElement = document.getElementById("panel-order");
+      const panelWatchlistElement = document.getElementById("panel-watchlist");
+      const ohlcOpenElement = document.getElementById("ohlc-open");
+      const ohlcHighElement = document.getElementById("ohlc-high");
+      const ohlcLowElement = document.getElementById("ohlc-low");
+      const ohlcCloseElement = document.getElementById("ohlc-close");
+      const ohlcBarVolumeElement = document.getElementById("ohlc-bar-volume");
+      const ohlcVol24Element = document.getElementById("ohlc-vol24");
+      const symbolInfoElement = document.getElementById("symbol-info");
+      const marketTitleElement = document.getElementById("market-title");
+      const marketErrorElement = document.getElementById("market-error");
+      const marketInfoGridElement = document.getElementById("market-info-grid");
+      const marketUpdatedElement = document.getElementById("market-updated");
+      const valueLastElement = document.getElementById("value-last");
+      const valueBidElement = document.getElementById("value-bid");
+      const valueAskElement = document.getElementById("value-ask");
+      const valueHighElement = document.getElementById("value-high");
+      const valueLowElement = document.getElementById("value-low");
+      const valueVolumeElement = document.getElementById("value-volume");
+
+      if (!chartElement || !chartCanvas || !dataElement || !window.LightweightCharts) {
+        return;
+      }
+
+      let allCandles = JSON.parse(dataElement.textContent || "[]");
+      if (!Array.isArray(allCandles) || allCandles.length === 0) {
+        return;
+      }
+
+      let currentTimeframe = "{{ market_data.timeframe }}";
+      const timeframeStorageKey = "trade-wijs-timeframe";
+      const validTimeframes = new Set(timeframeButtonElements.map((button) => button.dataset.timeframe).filter(Boolean));
+      let shouldInitialTimeframeRefresh = false;
+      let isRefreshing = false;
+      let refreshRequestCounter = 0;
+      let pendingPriorityRefresh = false;
+      let loadingTimeframe = null;
+      let refreshTimerId = null;
+      const indicatorStorageKey = "trade-wijs-indicators";
+      let chartData = [];
+      let pendingLinePoint = null;
+      let hasFitContent = false;
+      const drawnLineSeries = [];
+      let drawLineMode = false;
+      let isDraggingScaleDivider = false;
+      let isDraggingStochDivider = false;
+      let isDraggingRsiDivider = false;
+      const indicatorState = {
+        bb: true,
+        smc: true,
+        stoch: true,
+        rsi: true,
+        volume: true,
+        fvg: true,
+      };
+      const chartSplitStorageKey = "trade-wijs-chart-split";
+      const minVisiblePaneHeightRatio = 0.1;
+      let chartSplitRatio = 0.75;
+      let lastVolumeSplitRatio = chartSplitRatio;
+      const paneOrderStorageKey = "trade-wijs-pane-order";
+      const chartViewStorageKey = "trade-wijs-chart-view";
+      let paneOrder = ["candle", "stoch", "rsi", "volume"];
+      let draggedPaneName = null;
+      let paneLayout = {};
+      let renderedPaneLayout = {};
+      let visiblePaneOrder = [];
+      let candleVolumeByTime = new Map();
+      let stochKByTime = new Map();
+      let stochDByTime = new Map();
+      let rsiByTime = new Map();
+      let hoveredCandleTime = null;
+      let savedChartViewByTimeframe = {};
+      let pendingRestoreLogicalRange = null;
+      const stochSplitStorageKey = "trade-wijs-stoch-split";
+      let stochHeightRatio = 0.2;
+      let lastStochHeightRatio = stochHeightRatio;
+      const rsiSplitStorageKey = "trade-wijs-rsi-split";
+      let rsiHeightRatio = 0.2;
+      let lastRsiHeightRatio = rsiHeightRatio;
+
+      const clamp = (value, min, max) => Math.max(min, Math.min(max, value));
+
+      try {
+        const savedIndicators = JSON.parse(localStorage.getItem(indicatorStorageKey) || "{}");
+        if (savedIndicators && typeof savedIndicators === "object") {
+          ["bb", "smc", "stoch", "rsi", "volume", "fvg"].forEach((name) => {
+            if (typeof savedIndicators[name] === "boolean") {
+              indicatorState[name] = savedIndicators[name];
+            }
+          });
+
+          if (typeof savedIndicators.bb !== "boolean" && typeof savedIndicators.sma === "boolean") {
+            indicatorState.bb = savedIndicators.sma;
+          }
+        }
+      } catch (_error) {
+      }
+
+      try {
+        const savedTimeframe = localStorage.getItem(timeframeStorageKey);
+        if (savedTimeframe && validTimeframes.has(savedTimeframe) && savedTimeframe !== currentTimeframe) {
+          currentTimeframe = savedTimeframe;
+          shouldInitialTimeframeRefresh = true;
+        }
+      } catch (_error) {
+      }
+
+      try {
+        const savedPaneOrder = JSON.parse(localStorage.getItem(paneOrderStorageKey) || "[]");
+        if (Array.isArray(savedPaneOrder)) {
+          const normalizedOrder = savedPaneOrder.filter((pane) => ["candle", "stoch", "rsi", "volume"].includes(pane));
+          ["candle", "stoch", "rsi", "volume"].forEach((pane) => {
+            if (!normalizedOrder.includes(pane)) {
+              normalizedOrder.push(pane);
+            }
+          });
+          paneOrder = normalizedOrder;
+        }
+      } catch (_error) {
+      }
+
+      try {
+        const savedChartView = JSON.parse(localStorage.getItem(chartViewStorageKey) || "{}");
+        if (savedChartView && typeof savedChartView === "object") {
+          savedChartViewByTimeframe = savedChartView;
+          const timeframeView = savedChartViewByTimeframe[currentTimeframe];
+          if (
+            timeframeView &&
+            Number.isFinite(Number(timeframeView.from)) &&
+            Number.isFinite(Number(timeframeView.to))
+          ) {
+            pendingRestoreLogicalRange = {
+              from: Number(timeframeView.from),
+              to: Number(timeframeView.to),
+            };
+          }
+        }
+      } catch (_error) {
+      }
+
+      const chart = LightweightCharts.createChart(chartElement, {
+        width: chartElement.clientWidth,
+        height: chartElement.clientHeight,
+        layout: {
+          background: { color: "#151925" },
+          textColor: "#9aa5bd",
+        },
+        grid: {
+          vertLines: { color: "rgba(0,0,0,0)" },
+          horzLines: { color: "rgba(0,0,0,0)" },
+        },
+        rightPriceScale: {
+          visible: true,
+          borderColor: "#2b3345",
+        },
+        timeScale: {
+          borderColor: "#2b3345",
+          timeVisible: true,
+          secondsVisible: false,
+        },
+        crosshair: {
+          mode: LightweightCharts.CrosshairMode.Normal,
+        },
+      });
+
+      const candleSeries = chart.addCandlestickSeries({
+        priceScaleId: "price",
+        upColor: "#29b37d",
+        downColor: "#cf5f6b",
+        wickUpColor: "#8794b6",
+        wickDownColor: "#8794b6",
+        borderVisible: false,
+      });
+
+      const bbUpperSeries = chart.addLineSeries({
+        priceScaleId: "price",
+        color: "#5fa8ff",
+        lineWidth: 2,
+        priceLineVisible: false,
+      });
+
+      const bbMiddleSeries = chart.addLineSeries({
+        priceScaleId: "price",
+        color: "#f6c23e",
+        lineWidth: 2,
+        priceLineVisible: false,
+      });
+
+      const bbLowerSeries = chart.addLineSeries({
+        priceScaleId: "price",
+        color: "#5fa8ff",
+        lineWidth: 2,
+        priceLineVisible: false,
+      });
+
+      chart.priceScale("price").applyOptions({
+        visible: true,
+        autoScale: true,
+        borderColor: "#2b3345",
+        ticksVisible: true,
+        minimumWidth: 64,
+        scaleMargins: {
+          top: 0,
+          bottom: 0.25,
+        },
+      });
+
+      const stochKSeries = chart.addLineSeries({
+        color: "#7dd3fc",
+        lineWidth: 2,
+        priceScaleId: "stoch",
+        priceLineVisible: false,
+        lastValueVisible: true,
+        autoscaleInfoProvider: () => ({
+          priceRange: {
+            minValue: 0,
+            maxValue: 100,
+          },
+        }),
+      });
+
+      const stochDSeries = chart.addLineSeries({
+        color: "#f59e0b",
+        lineWidth: 2,
+        priceScaleId: "stoch",
+        priceLineVisible: false,
+        lastValueVisible: true,
+        autoscaleInfoProvider: () => ({
+          priceRange: {
+            minValue: 0,
+            maxValue: 100,
+          },
+        }),
+      });
+
+      const stochOverboughtSeries = chart.addLineSeries({
+        color: "rgba(255, 255, 255, 1)",
+        lineWidth: 1,
+        lineStyle: LightweightCharts.LineStyle.Dashed,
+        priceScaleId: "stoch",
+        priceLineVisible: false,
+        lastValueVisible: false,
+        crosshairMarkerVisible: false,
+      });
+
+      const stochOversoldSeries = chart.addLineSeries({
+        color: "rgba(255, 255, 255, 1)",
+        lineWidth: 1,
+        lineStyle: LightweightCharts.LineStyle.Dashed,
+        priceScaleId: "stoch",
+        priceLineVisible: false,
+        lastValueVisible: false,
+        crosshairMarkerVisible: false,
+      });
+
+      chart.priceScale("stoch").applyOptions({
+        visible: true,
+        autoScale: true,
+        borderColor: "#2b3345",
+        ticksVisible: true,
+        minimumWidth: 58,
+        scaleMargins: {
+          top: 0,
+          bottom: 0.8,
+        },
+      });
+
+      const rsiSeries = chart.addLineSeries({
+        color: "#a78bfa",
+        lineWidth: 2,
+        priceScaleId: "rsi",
+        priceLineVisible: false,
+        lastValueVisible: true,
+        autoscaleInfoProvider: () => ({
+          priceRange: {
+            minValue: 0,
+            maxValue: 100,
+          },
+        }),
+      });
+
+      const rsiOverboughtSeries = chart.addLineSeries({
+        color: "rgba(255, 255, 255, 1)",
+        lineWidth: 1,
+        lineStyle: LightweightCharts.LineStyle.Dashed,
+        priceScaleId: "rsi",
+        priceLineVisible: false,
+        lastValueVisible: false,
+        crosshairMarkerVisible: false,
+      });
+
+      const rsiOversoldSeries = chart.addLineSeries({
+        color: "rgba(255, 255, 255, 1)",
+        lineWidth: 1,
+        lineStyle: LightweightCharts.LineStyle.Dashed,
+        priceScaleId: "rsi",
+        priceLineVisible: false,
+        lastValueVisible: false,
+        crosshairMarkerVisible: false,
+      });
+
+      chart.priceScale("rsi").applyOptions({
+        visible: true,
+        autoScale: true,
+        borderColor: "#2b3345",
+        ticksVisible: true,
+        minimumWidth: 58,
+        scaleMargins: {
+          top: 0,
+          bottom: 0.8,
+        },
+      });
+
+      const volumeSeries = chart.addHistogramSeries({
+        priceFormat: {
+          type: "volume",
+        },
+        priceScaleId: "volume",
+        base: 0,
+        color: "rgba(143, 159, 187, 0.6)",
+        priceLineVisible: false,
+        lastValueVisible: false,
+      });
+
+      chart.priceScale("volume").applyOptions({
+        visible: true,
+        autoScale: true,
+        borderColor: "#2b3345",
+        ticksVisible: true,
+        minimumWidth: 64,
+        scaleMargins: {
+          top: 0.75,
+          bottom: 0,
+        },
+      });
+
+      try {
+        const savedChartSplitRatio = Number(localStorage.getItem(chartSplitStorageKey));
+        if (!Number.isNaN(savedChartSplitRatio)) {
+          chartSplitRatio = clamp(savedChartSplitRatio, 0, 1);
+          lastVolumeSplitRatio = chartSplitRatio;
+        }
+      } catch (_error) {
+      }
+
+      try {
+        const savedStochHeightRatio = Number(localStorage.getItem(stochSplitStorageKey));
+        if (!Number.isNaN(savedStochHeightRatio)) {
+          stochHeightRatio = clamp(savedStochHeightRatio, 0, 1);
+          lastStochHeightRatio = stochHeightRatio;
+        }
+      } catch (_error) {
+      }
+
+      try {
+        const savedRsiHeightRatio = Number(localStorage.getItem(rsiSplitStorageKey));
+        if (!Number.isNaN(savedRsiHeightRatio)) {
+          rsiHeightRatio = clamp(savedRsiHeightRatio, 0, 1);
+          lastRsiHeightRatio = rsiHeightRatio;
+        }
+      } catch (_error) {
+      }
+
+      const getVolumeHeightRatio = () => clamp(1 - chartSplitRatio, minVisiblePaneHeightRatio, 1 - minVisiblePaneHeightRatio);
+
+      const getStochHeightRatio = () => clamp(stochHeightRatio, minVisiblePaneHeightRatio, 1 - minVisiblePaneHeightRatio);
+
+      const getRsiHeightRatio = () => clamp(rsiHeightRatio, minVisiblePaneHeightRatio, 1 - minVisiblePaneHeightRatio);
+
+      const getPaneMaxHeightRatio = (paneName) => {
+        const otherVisibleCount =
+          1 +
+          (paneName !== "volume" && indicatorState.volume ? 1 : 0) +
+          (paneName !== "stoch" && indicatorState.stoch ? 1 : 0) +
+          (paneName !== "rsi" && indicatorState.rsi ? 1 : 0);
+        return Math.max(minVisiblePaneHeightRatio, 1 - otherVisibleCount * minVisiblePaneHeightRatio);
+      };
+
+      const normalizePersistedPaneRatios = () => {
+        let volumeHeight = indicatorState.volume
+          ? clamp(getVolumeHeightRatio(), minVisiblePaneHeightRatio, getPaneMaxHeightRatio("volume"))
+          : 0;
+        let stochHeight = indicatorState.stoch
+          ? clamp(getStochHeightRatio(), minVisiblePaneHeightRatio, getPaneMaxHeightRatio("stoch"))
+          : 0;
+        let rsiHeight = indicatorState.rsi
+          ? clamp(getRsiHeightRatio(), minVisiblePaneHeightRatio, getPaneMaxHeightRatio("rsi"))
+          : 0;
+
+        let candleHeight = 1 - volumeHeight - stochHeight - rsiHeight;
+        if (candleHeight < minVisiblePaneHeightRatio) {
+          let deficit = minVisiblePaneHeightRatio - candleHeight;
+
+          const reducibleVolume = Math.max(0, volumeHeight - minVisiblePaneHeightRatio);
+          if (reducibleVolume > 0) {
+            const reduction = Math.min(reducibleVolume, deficit);
+            volumeHeight -= reduction;
+            deficit -= reduction;
+          }
+
+          const reducibleStoch = Math.max(0, stochHeight - minVisiblePaneHeightRatio);
+          if (reducibleStoch > 0 && deficit > 0) {
+            const reduction = Math.min(reducibleStoch, deficit);
+            stochHeight -= reduction;
+            deficit -= reduction;
+          }
+
+          const reducibleRsi = Math.max(0, rsiHeight - minVisiblePaneHeightRatio);
+          if (reducibleRsi > 0 && deficit > 0) {
+            const reduction = Math.min(reducibleRsi, deficit);
+            rsiHeight -= reduction;
+            deficit -= reduction;
+          }
+        }
+
+        if (indicatorState.volume) {
+          chartSplitRatio = 1 - volumeHeight;
+          lastVolumeSplitRatio = chartSplitRatio;
+          try {
+            localStorage.setItem(chartSplitStorageKey, String(chartSplitRatio));
+          } catch (_error) {
+          }
+        }
+
+        if (indicatorState.stoch) {
+          stochHeightRatio = stochHeight;
+          lastStochHeightRatio = stochHeight;
+          try {
+            localStorage.setItem(stochSplitStorageKey, String(stochHeightRatio));
+          } catch (_error) {
+          }
+        }
+
+        if (indicatorState.rsi) {
+          rsiHeightRatio = rsiHeight;
+          lastRsiHeightRatio = rsiHeight;
+          try {
+            localStorage.setItem(rsiSplitStorageKey, String(rsiHeightRatio));
+          } catch (_error) {
+          }
+        }
+      };
+
+      normalizePersistedPaneRatios();
+
+      const computePaneLayout = () => {
+        const activeOrder = paneOrder.filter((pane) => pane === "candle" || indicatorState[pane]);
+        if (!activeOrder.includes("candle")) {
+          activeOrder.push("candle");
+        }
+
+        let volumeHeight = indicatorState.volume
+          ? clamp(getVolumeHeightRatio(), minVisiblePaneHeightRatio, getPaneMaxHeightRatio("volume"))
+          : 0;
+        let stochHeight = indicatorState.stoch
+          ? clamp(getStochHeightRatio(), minVisiblePaneHeightRatio, getPaneMaxHeightRatio("stoch"))
+          : 0;
+        let rsiHeight = indicatorState.rsi
+          ? clamp(getRsiHeightRatio(), minVisiblePaneHeightRatio, getPaneMaxHeightRatio("rsi"))
+          : 0;
+        let candleHeight = 1 - volumeHeight - stochHeight - rsiHeight;
+
+        const minCandleHeight = minVisiblePaneHeightRatio;
+        if (candleHeight < minCandleHeight) {
+          let deficit = minCandleHeight - candleHeight;
+          const reducibleVolume = Math.max(0, volumeHeight - minVisiblePaneHeightRatio);
+          const reducibleStoch = Math.max(0, stochHeight - minVisiblePaneHeightRatio);
+          const reducibleRsi = Math.max(0, rsiHeight - minVisiblePaneHeightRatio);
+          const reducibleTotal = reducibleVolume + reducibleStoch + reducibleRsi;
+
+          if (reducibleTotal > 0) {
+            if (reducibleVolume > 0) {
+              const reduction = Math.min(reducibleVolume, deficit * (reducibleVolume / reducibleTotal));
+              volumeHeight -= reduction;
+              deficit -= reduction;
+            }
+
+            if (reducibleStoch > 0 && deficit > 0) {
+              const reduction = Math.min(reducibleStoch, deficit);
+              stochHeight -= reduction;
+              deficit -= reduction;
+            }
+
+            if (reducibleRsi > 0 && deficit > 0) {
+              const reduction = Math.min(reducibleRsi, deficit);
+              rsiHeight -= reduction;
+              deficit -= reduction;
+            }
+          }
+
+          candleHeight = 1 - volumeHeight - stochHeight - rsiHeight;
+        }
+
+        const normalizedHeights = {
+          candle: Math.max(0, candleHeight),
+          stoch: Math.max(0, stochHeight),
+          rsi: Math.max(0, rsiHeight),
+          volume: Math.max(0, volumeHeight),
+        };
+
+        if (indicatorState.volume) {
+          chartSplitRatio = 1 - normalizedHeights.volume;
+          lastVolumeSplitRatio = chartSplitRatio;
+        }
+
+        if (indicatorState.stoch) {
+          stochHeightRatio = normalizedHeights.stoch;
+          lastStochHeightRatio = normalizedHeights.stoch;
+        }
+
+        if (indicatorState.rsi) {
+          rsiHeightRatio = normalizedHeights.rsi;
+          lastRsiHeightRatio = normalizedHeights.rsi;
+        }
+
+        let cursor = 0;
+        const nextLayout = {};
+        activeOrder.forEach((pane) => {
+          const paneHeight = normalizedHeights[pane] || 0;
+          const top = cursor;
+          const bottom = cursor + paneHeight;
+          nextLayout[pane] = { top, bottom, height: paneHeight };
+          cursor = bottom;
+        });
+
+        paneLayout = nextLayout;
+        visiblePaneOrder = activeOrder;
+      };
+
+      const renderPaneReorderHandles = () => {
+        if (!paneReorderOverlayElement) {
+          return;
+        }
+
+        paneReorderOverlayElement.innerHTML = "";
+
+        visiblePaneOrder.forEach((paneName) => {
+          const segment = paneLayout[paneName];
+          if (!segment || segment.height <= 0) {
+            return;
+          }
+
+          const paneLabelByName = {
+            candle: "Price",
+            stoch: "Stoch",
+            rsi: "RSI",
+            volume: "Volume",
+          };
+          const paneLabel = paneLabelByName[paneName] || paneName;
+          const handleButton = document.createElement("button");
+          handleButton.type = "button";
+          handleButton.className = "pane-reorder-handle";
+          handleButton.dataset.pane = paneName;
+          handleButton.style.top = `${((segment.top + segment.bottom) / 2) * 100}%`;
+          handleButton.title = `Reorder ${paneLabel} pane`;
+          handleButton.setAttribute("aria-label", `Reorder ${paneLabel} pane`);
+
+          const icon = document.createElement("span");
+          icon.className = "pane-reorder-icon";
+          icon.setAttribute("aria-hidden", "true");
+          handleButton.appendChild(icon);
+
+          paneReorderOverlayElement.appendChild(handleButton);
+        });
+      };
+
+      const clearPaneScaleOverlay = () => {
+        if (paneScaleOverlayElement) {
+          paneScaleOverlayElement.innerHTML = "";
+        }
+      };
+
+      const renderPaneScaleOverlay = () => {
+        if (!paneScaleOverlayElement || !chartCanvas) {
+          return;
+        }
+
+        clearPaneScaleOverlay();
+
+        const canvasHeight = chartCanvas.clientHeight;
+        if (!canvasHeight) {
+          return;
+        }
+
+        const timeAxisSafeZonePx = 22;
+        const usableBottomPx = Math.max(0, canvasHeight - timeAxisSafeZonePx);
+        const mapPaneSegment = (segment) => {
+          if (!segment) {
+            return null;
+          }
+
+          return {
+            top: segment.top * usableBottomPx,
+            bottom: segment.bottom * usableBottomPx,
+            height: segment.height * usableBottomPx,
+          };
+        };
+
+        const labelHeightPx = 14;
+        const maxLabelTopPx = Math.max(0, canvasHeight - labelHeightPx - timeAxisSafeZonePx);
+        const dividerAvoidancePx = 10;
+        const dividerClearancePx = 10;
+        const dividerPositionsPx = [];
+
+        [stochDividerElement, rsiDividerElement, scaleDividerElement].forEach((dividerElement) => {
+          if (!dividerElement || dividerElement.classList.contains("is-hidden")) {
+            return;
+          }
+
+          const topPercent = Number.parseFloat(dividerElement.style.top || "");
+          if (!Number.isFinite(topPercent)) {
+            return;
+          }
+
+          dividerPositionsPx.push((topPercent / 100) * canvasHeight);
+        });
+
+        const resolveDividerCollision = (labelTopPx, paneMinTopPx, paneMaxTopPx) => {
+          let adjustedTop = Math.max(paneMinTopPx, Math.min(paneMaxTopPx, labelTopPx));
+
+          dividerPositionsPx.forEach((dividerY) => {
+            const labelCenter = adjustedTop + labelHeightPx / 2;
+            if (Math.abs(labelCenter - dividerY) > dividerAvoidancePx) {
+              return;
+            }
+
+            if (labelCenter < dividerY) {
+              adjustedTop = dividerY + dividerClearancePx;
+            } else {
+              adjustedTop = dividerY - dividerClearancePx - labelHeightPx;
+            }
+          });
+
+          return Math.max(paneMinTopPx, Math.min(paneMaxTopPx, adjustedTop));
+        };
+
+        const addLabel = (text, yPositionPx, paneTopPx, paneBottomPx, className = "pane-scale-label") => {
+          const label = document.createElement("div");
+          label.className = className;
+          label.textContent = text;
+          const paneMinTopPx = Math.max(0, paneTopPx);
+          const paneMaxTopPx = Math.max(
+            paneMinTopPx,
+            Math.min(maxLabelTopPx, paneBottomPx - labelHeightPx),
+          );
+          label.style.top = `${resolveDividerCollision(yPositionPx, paneMinTopPx, paneMaxTopPx)}px`;
+          paneScaleOverlayElement.appendChild(label);
+        };
+
+        const formatPriceScaleValue = (value) => {
+          const numericValue = Number(value);
+          if (!Number.isFinite(numericValue)) {
+            return "-";
+          }
+
+          if (Math.abs(numericValue) >= 1000) {
+            return numericValue.toFixed(0);
+          }
+
+          return numericValue.toFixed(2);
+        };
+
+        const candleSegment = mapPaneSegment(paneLayout.candle);
+        if (candleSegment && candleSegment.height > 0 && chartData.length > 0) {
+          const topPx = candleSegment.top;
+          const segmentHeight = candleSegment.height;
+          const highs = chartData.map((point) => Number(point.high));
+          const lows = chartData.map((point) => Number(point.low));
+          const maxPrice = highs.length ? Math.max(...highs) : null;
+          const minPrice = lows.length ? Math.min(...lows) : null;
+
+          if (maxPrice !== null && minPrice !== null) {
+            const midPrice = (maxPrice + minPrice) / 2;
+            addLabel(formatPriceScaleValue(maxPrice), topPx - 7, topPx, topPx + segmentHeight);
+            addLabel(formatPriceScaleValue(midPrice), topPx + segmentHeight / 2 - 7, topPx, topPx + segmentHeight);
+            addLabel(formatPriceScaleValue(minPrice), topPx + segmentHeight - 7, topPx, topPx + segmentHeight);
+          }
+        }
+
+        const stochSegment = mapPaneSegment(paneLayout.stoch);
+        if (indicatorState.stoch && stochSegment && stochSegment.height > 0) {
+          const topPx = stochSegment.top;
+          const segmentHeight = stochSegment.height;
+          [80, 50, 20].forEach((value) => {
+            const y = topPx + ((100 - value) / 100) * segmentHeight;
+            addLabel(String(value), y - 7, topPx, topPx + segmentHeight);
+          });
+
+          const effectiveHoverTime = hoveredCandleTime ?? (chartData[chartData.length - 1]?.time ?? null);
+          const hoveredK = effectiveHoverTime !== null ? stochKByTime.get(Number(effectiveHoverTime)) : null;
+          const hoveredD = effectiveHoverTime !== null ? stochDByTime.get(Number(effectiveHoverTime)) : null;
+
+          let kLabelY = null;
+          let dLabelY = null;
+
+          if (Number.isFinite(hoveredK)) {
+            kLabelY = topPx + ((100 - Number(hoveredK)) / 100) * segmentHeight - 7;
+          }
+
+          if (Number.isFinite(hoveredD)) {
+            dLabelY = topPx + ((100 - Number(hoveredD)) / 100) * segmentHeight - 7;
+          }
+
+          if (kLabelY !== null && dLabelY !== null && Math.abs(kLabelY - dLabelY) < 14) {
+            const separationPx = 8;
+            if (kLabelY <= dLabelY) {
+              kLabelY -= separationPx;
+              dLabelY += separationPx;
+            } else {
+              kLabelY += separationPx;
+              dLabelY -= separationPx;
+            }
+          }
+
+          if (Number.isFinite(hoveredK)) {
+            addLabel(
+              `K ${Number(hoveredK).toFixed(2)}`,
+              kLabelY,
+              topPx,
+              topPx + segmentHeight,
+              "pane-scale-label pane-scale-label--stoch-k-current",
+            );
+          }
+
+          if (Number.isFinite(hoveredD)) {
+            addLabel(
+              `D ${Number(hoveredD).toFixed(2)}`,
+              dLabelY,
+              topPx,
+              topPx + segmentHeight,
+              "pane-scale-label pane-scale-label--stoch-d-current",
+            );
+          }
+        }
+
+        const volumeSegment = mapPaneSegment(paneLayout.volume);
+        if (indicatorState.volume && volumeSegment && volumeSegment.height > 0) {
+          const topPx = volumeSegment.top;
+          const segmentHeight = volumeSegment.height;
+          const volumeValues = allCandles.map((candle) => Number(candle.volume || 0));
+          const maxVolume = volumeValues.length ? Math.max(...volumeValues, 0) : 0;
+          const midVolume = maxVolume / 2;
+
+          addLabel(formatCompactVolume(maxVolume), topPx - 7, topPx, topPx + segmentHeight);
+          addLabel(formatCompactVolume(midVolume), topPx + segmentHeight / 2 - 7, topPx, topPx + segmentHeight);
+          addLabel(formatCompactVolume(0), topPx + segmentHeight - 7, topPx, topPx + segmentHeight);
+        }
+
+        const rsiSegment = mapPaneSegment(paneLayout.rsi);
+        if (indicatorState.rsi && rsiSegment && rsiSegment.height > 0) {
+          const topPx = rsiSegment.top;
+          const segmentHeight = rsiSegment.height;
+          [70, 50, 30].forEach((value) => {
+            const y = topPx + ((100 - value) / 100) * segmentHeight;
+            addLabel(String(value), y - 7, topPx, topPx + segmentHeight);
+          });
+
+          const effectiveHoverTime = hoveredCandleTime ?? (chartData[chartData.length - 1]?.time ?? null);
+          const hoveredRsi = effectiveHoverTime !== null ? rsiByTime.get(Number(effectiveHoverTime)) : null;
+          if (Number.isFinite(hoveredRsi)) {
+            const rsiLabelY = topPx + ((100 - Number(hoveredRsi)) / 100) * segmentHeight - 7;
+            addLabel(
+              `RSI ${Number(hoveredRsi).toFixed(2)}`,
+              rsiLabelY,
+              topPx,
+              topPx + segmentHeight,
+              "pane-scale-label pane-scale-label--rsi-current",
+            );
+          }
+        }
+      };
+
+      const reorderPaneByPointer = (clientY) => {
+        if (!draggedPaneName || !chartCanvas || !visiblePaneOrder.includes(draggedPaneName)) {
+          return;
+        }
+
+        const canvasRect = chartCanvas.getBoundingClientRect();
+        if (canvasRect.height <= 0) {
+          return;
+        }
+
+        const pointerRatio = clamp((clientY - canvasRect.top) / canvasRect.height, 0, 1);
+        const visibleWithoutDragged = visiblePaneOrder.filter((paneName) => paneName !== draggedPaneName);
+
+        let insertIndex = visibleWithoutDragged.length;
+        for (let index = 0; index < visibleWithoutDragged.length; index += 1) {
+          const paneName = visibleWithoutDragged[index];
+          const segment = paneLayout[paneName];
+          const mid = segment ? (segment.top + segment.bottom) / 2 : 1;
+          if (pointerRatio < mid) {
+            insertIndex = index;
+            break;
+          }
+        }
+
+        const baseOrder = paneOrder.filter((paneName) => paneName !== draggedPaneName);
+        const anchorPane = visibleWithoutDragged[insertIndex] || null;
+        let targetIndex = baseOrder.length;
+
+        if (anchorPane) {
+          targetIndex = baseOrder.indexOf(anchorPane);
+        } else {
+          const lastVisiblePane = visibleWithoutDragged[visibleWithoutDragged.length - 1] || null;
+          if (lastVisiblePane) {
+            targetIndex = baseOrder.indexOf(lastVisiblePane) + 1;
+          }
+        }
+
+        const nextOrder = [...baseOrder];
+        nextOrder.splice(Math.max(0, targetIndex), 0, draggedPaneName);
+
+        if (nextOrder.join("|") !== paneOrder.join("|")) {
+          paneOrder = nextOrder;
+          applyChartSplit();
+          renderFvgOverlay();
+          updateScaleDividerLabel(false);
+          updateStochDividerLabel(false);
+          updateRsiDividerLabel(false);
+        }
+      };
+
+      const updateDividerForPane = (paneName, dividerElement, labelElements, labelPrefix) => {
+        if (!dividerElement || !labelElements || labelElements.length === 0) {
+          return;
+        }
+
+        const segment = renderedPaneLayout[paneName] || paneLayout[paneName];
+        const paneIndex = visiblePaneOrder.indexOf(paneName);
+        if (!segment || paneIndex === -1 || visiblePaneOrder.length < 2) {
+          dividerElement.classList.add("is-hidden");
+          labelElements.forEach((labelElement) => labelElement.classList.remove("is-visible"));
+          return;
+        }
+
+        const boundaryRatio = paneIndex === 0 ? segment.bottom : segment.top;
+        dividerElement.style.top = `${boundaryRatio * 100}%`;
+        dividerElement.dataset.pane = paneName;
+        dividerElement.dataset.boundary = paneIndex === 0 ? "bottom" : "top";
+        dividerElement.classList.remove("is-hidden");
+
+        const percentage = Math.round(segment.height * 100);
+        labelElements.forEach((labelElement) => {
+          labelElement.textContent = `${labelPrefix} ${percentage}%`;
+          labelElement.style.top = `${boundaryRatio * 100}%`;
+        });
+      };
+
+      const applyChartSplit = () => {
+        computePaneLayout();
+
+        const candleSegment = paneLayout.candle || { top: 0, bottom: 1 };
+        const volumeSegment = paneLayout.volume || null;
+        const stochSegment = paneLayout.stoch || null;
+        const rsiSegment = paneLayout.rsi || null;
+        const paneTopPaddingRatio = 0.006;
+
+        const normalizedCandleSegment = {
+          top: candleSegment.top,
+          bottom: candleSegment.bottom,
+          height: Math.max(0, candleSegment.bottom - candleSegment.top),
+        };
+        const normalizedVolumeSegment = volumeSegment
+          ? {
+              top: volumeSegment.top,
+              bottom: volumeSegment.bottom,
+              height: Math.max(0, volumeSegment.bottom - volumeSegment.top),
+            }
+          : null;
+        const normalizedStochSegment = stochSegment
+          ? {
+              top: stochSegment.top,
+              bottom: stochSegment.bottom,
+              height: Math.max(0, stochSegment.bottom - stochSegment.top),
+            }
+          : null;
+        const normalizedRsiSegment = rsiSegment
+          ? {
+              top: rsiSegment.top,
+              bottom: rsiSegment.bottom,
+              height: Math.max(0, rsiSegment.bottom - rsiSegment.top),
+            }
+          : null;
+
+        renderedPaneLayout = {
+          candle: normalizedCandleSegment,
+          stoch: normalizedStochSegment,
+          rsi: normalizedRsiSegment,
+          volume: normalizedVolumeSegment,
+        };
+
+        const getPaddedSegment = (segment) => {
+          if (!segment || segment.height <= 0) {
+            return null;
+          }
+
+          const maxTopPadding = Math.max(0, segment.height - 0.001);
+          const topPadding = Math.min(paneTopPaddingRatio, maxTopPadding);
+          return {
+            top: segment.top + topPadding,
+            bottom: segment.bottom,
+          };
+        };
+
+        const paddedVolumeSegment = getPaddedSegment(normalizedVolumeSegment);
+        const paddedStochSegment = getPaddedSegment(normalizedStochSegment);
+        const paddedRsiSegment = getPaddedSegment(normalizedRsiSegment);
+
+        const canvasHeightPx = Math.max(1, chartCanvas ? chartCanvas.clientHeight : chartElement.clientHeight);
+        const timeScaleApi = chart.timeScale();
+        const timeScaleHeightPx =
+          timeScaleApi && typeof timeScaleApi.height === "function"
+            ? Math.max(0, Number(timeScaleApi.height()) || 0)
+            : 0;
+        const drawableHeightPx = Math.max(1, canvasHeightPx - timeScaleHeightPx);
+
+        const toScaleMarginTop = (ratio) => {
+          const topPx = clamp(ratio, 0, 1) * canvasHeightPx;
+          return clamp(topPx / drawableHeightPx, 0, 1);
+        };
+
+        const toScaleMarginBottom = (ratio) => {
+          const bottomPx = clamp(ratio, 0, 1) * canvasHeightPx;
+          return clamp(bottomPx / drawableHeightPx, 0, 1);
+        };
+
+        const getScaleMargins = (segment) => {
+          if (!segment) {
+            return { top: 1, bottom: 0 };
+          }
+
+          const topMargin = toScaleMarginTop(segment.top);
+          const bottomMargin = toScaleMarginBottom(1 - segment.bottom);
+          const overflow = topMargin + bottomMargin - 1;
+
+          if (overflow <= 0) {
+            return { top: topMargin, bottom: bottomMargin };
+          }
+
+          return {
+            top: clamp(topMargin - overflow / 2, 0, 1),
+            bottom: clamp(bottomMargin - overflow / 2, 0, 1),
+          };
+        };
+
+        const candleScaleMargins = getScaleMargins(normalizedCandleSegment);
+        const volumeScaleMargins = getScaleMargins(paddedVolumeSegment);
+        const stochScaleMargins = getScaleMargins(paddedStochSegment);
+        const rsiScaleMargins = getScaleMargins(paddedRsiSegment);
+
+        candleSeries.priceScale().applyOptions({
+          scaleMargins: candleScaleMargins,
+        });
+
+        chart.priceScale("volume").applyOptions({
+          visible: Boolean(normalizedVolumeSegment),
+          autoScale: true,
+          borderColor: "#2b3345",
+          borderVisible: false,
+          ticksVisible: true,
+          minimumWidth: 64,
+          scaleMargins: volumeScaleMargins,
+        });
+
+        chart.priceScale("stoch").applyOptions({
+          visible: Boolean(normalizedStochSegment),
+          autoScale: true,
+          borderColor: "#2b3345",
+          borderVisible: false,
+          ticksVisible: true,
+          minimumWidth: 58,
+          scaleMargins: stochScaleMargins,
+        });
+
+        chart.priceScale("rsi").applyOptions({
+          visible: Boolean(normalizedRsiSegment),
+          autoScale: true,
+          borderColor: "#2b3345",
+          borderVisible: false,
+          ticksVisible: true,
+          minimumWidth: 58,
+          scaleMargins: rsiScaleMargins,
+        });
+
+        updateDividerForPane("stoch", stochDividerElement, stochDividerLabelElements, "Stoch");
+        updateDividerForPane("rsi", rsiDividerElement, rsiDividerLabelElements, "RSI");
+        updateDividerForPane("volume", scaleDividerElement, scaleDividerLabelElements, "Volume");
+
+        if (indicatorState.volume) {
+          localStorage.setItem(chartSplitStorageKey, String(chartSplitRatio));
+        }
+
+        if (indicatorState.stoch) {
+          localStorage.setItem(stochSplitStorageKey, String(stochHeightRatio));
+        }
+
+        if (indicatorState.rsi) {
+          localStorage.setItem(rsiSplitStorageKey, String(rsiHeightRatio));
+        }
+
+        localStorage.setItem(paneOrderStorageKey, JSON.stringify(paneOrder));
+        renderPaneReorderHandles();
+        renderPaneScaleOverlay();
+        hidePriceHoverGuide();
+      };
+
+      const updateChartSplitFromClientY = (clientY) => {
+        if (!chartCanvas) {
+          return;
+        }
+
+        const canvasRect = chartCanvas.getBoundingClientRect();
+        if (canvasRect.height <= 0) {
+          return;
+        }
+
+        const nextRatio = (clientY - canvasRect.top) / canvasRect.height;
+        const dividerBoundary = scaleDividerElement ? scaleDividerElement.dataset.boundary : "top";
+        const volumeSegment = paneLayout.volume;
+        if (!volumeSegment) {
+          return;
+        }
+
+        let nextHeight = volumeSegment.height;
+        if (dividerBoundary === "top") {
+          nextHeight = volumeSegment.bottom - nextRatio;
+        } else {
+          nextHeight = nextRatio - volumeSegment.top;
+        }
+
+        const maxHeight = getPaneMaxHeightRatio("volume");
+        const clampedHeight = clamp(nextHeight, minVisiblePaneHeightRatio, maxHeight);
+        chartSplitRatio = 1 - clampedHeight;
+        applyChartSplit();
+      };
+
+      const updateStochSplitFromClientY = (clientY) => {
+        if (!chartCanvas) {
+          return;
+        }
+
+        const canvasRect = chartCanvas.getBoundingClientRect();
+        if (canvasRect.height <= 0) {
+          return;
+        }
+
+        const nextRatio = (clientY - canvasRect.top) / canvasRect.height;
+        const dividerBoundary = stochDividerElement ? stochDividerElement.dataset.boundary : "top";
+        const stochSegment = paneLayout.stoch;
+        if (!stochSegment) {
+          return;
+        }
+
+        let nextHeight = stochHeightRatio;
+        if (dividerBoundary === "top") {
+          nextHeight = stochSegment.bottom - nextRatio;
+        } else {
+          nextHeight = nextRatio - stochSegment.top;
+        }
+
+        const maxHeight = getPaneMaxHeightRatio("stoch");
+        stochHeightRatio = clamp(nextHeight, minVisiblePaneHeightRatio, maxHeight);
+        applyChartSplit();
+      };
+
+      const updateRsiSplitFromClientY = (clientY) => {
+        if (!chartCanvas) {
+          return;
+        }
+
+        const canvasRect = chartCanvas.getBoundingClientRect();
+        if (canvasRect.height <= 0) {
+          return;
+        }
+
+        const nextRatio = (clientY - canvasRect.top) / canvasRect.height;
+        const dividerBoundary = rsiDividerElement ? rsiDividerElement.dataset.boundary : "top";
+        const rsiSegment = paneLayout.rsi;
+        if (!rsiSegment) {
+          return;
+        }
+
+        let nextHeight = rsiHeightRatio;
+        if (dividerBoundary === "top") {
+          nextHeight = rsiSegment.bottom - nextRatio;
+        } else {
+          nextHeight = nextRatio - rsiSegment.top;
+        }
+
+        const maxHeight = getPaneMaxHeightRatio("rsi");
+        rsiHeightRatio = clamp(nextHeight, minVisiblePaneHeightRatio, maxHeight);
+        applyChartSplit();
+      };
+
+      const updateScaleDividerLabel = (isVisible) => {
+        if (scaleDividerLabelElements.length === 0) {
+          return;
+        }
+
+        if (!indicatorState.volume) {
+          scaleDividerLabelElements.forEach((labelElement) => labelElement.classList.remove("is-visible"));
+          return;
+        }
+
+        const volumePercent = Math.round((paneLayout.volume?.height || getVolumeHeightRatio()) * 100);
+        scaleDividerLabelElements.forEach((labelElement) => {
+          labelElement.textContent = `Volume ${volumePercent}%`;
+          if (scaleDividerElement) {
+            labelElement.style.top = scaleDividerElement.style.top;
+          }
+          labelElement.classList.toggle("is-visible", isVisible);
+        });
+      };
+
+      const updateStochDividerLabel = (isVisible) => {
+        if (stochDividerLabelElements.length === 0) {
+          return;
+        }
+
+        if (!indicatorState.stoch) {
+          stochDividerLabelElements.forEach((labelElement) => labelElement.classList.remove("is-visible"));
+          return;
+        }
+
+        const stochPercent = Math.round((paneLayout.stoch?.height || getStochHeightRatio()) * 100);
+        stochDividerLabelElements.forEach((labelElement) => {
+          labelElement.textContent = `Stoch ${stochPercent}%`;
+          if (stochDividerElement) {
+            labelElement.style.top = stochDividerElement.style.top;
+          }
+          labelElement.classList.toggle("is-visible", isVisible);
+        });
+      };
+
+      const updateRsiDividerLabel = (isVisible) => {
+        if (rsiDividerLabelElements.length === 0) {
+          return;
+        }
+
+        if (!indicatorState.rsi) {
+          rsiDividerLabelElements.forEach((labelElement) => labelElement.classList.remove("is-visible"));
+          return;
+        }
+
+        const rsiPercent = Math.round((paneLayout.rsi?.height || getRsiHeightRatio()) * 100);
+        rsiDividerLabelElements.forEach((labelElement) => {
+          labelElement.textContent = `RSI ${rsiPercent}%`;
+          if (rsiDividerElement) {
+            labelElement.style.top = rsiDividerElement.style.top;
+          }
+          labelElement.classList.toggle("is-visible", isVisible);
+        });
+      };
+
+      if (paneReorderOverlayElement) {
+        const stopPaneReorderDrag = () => {
+          if (!draggedPaneName) {
+            return;
+          }
+
+          draggedPaneName = null;
+          paneReorderOverlayElement.querySelectorAll(".pane-reorder-handle").forEach((handle) => {
+            handle.classList.remove("is-dragging");
+          });
+          document.body.classList.remove("is-dragging-pane-order");
+        };
+
+        paneReorderOverlayElement.addEventListener("mousedown", (event) => {
+          const handle = event.target.closest(".pane-reorder-handle");
+          if (!handle) {
+            return;
+          }
+
+          event.preventDefault();
+          draggedPaneName = handle.dataset.pane || null;
+          if (!draggedPaneName) {
+            return;
+          }
+
+          document.body.classList.add("is-dragging-pane-order");
+          handle.classList.add("is-dragging");
+          reorderPaneByPointer(event.clientY);
+        });
+
+        window.addEventListener("mousemove", (event) => {
+          if (!draggedPaneName) {
+            return;
+          }
+
+          reorderPaneByPointer(event.clientY);
+        });
+
+        window.addEventListener("mouseup", stopPaneReorderDrag);
+        window.addEventListener("mouseleave", stopPaneReorderDrag);
+      }
+
+      if (scaleDividerElement) {
+        const stopDividerDrag = () => {
+          if (!isDraggingScaleDivider) {
+            return;
+          }
+
+          isDraggingScaleDivider = false;
+          document.body.classList.remove("is-dragging-scale-divider");
+          updateScaleDividerLabel(false);
+        };
+
+        scaleDividerElement.addEventListener("mousedown", (event) => {
+          if (!indicatorState.volume) {
+            return;
+          }
+
+          event.preventDefault();
+          isDraggingScaleDivider = true;
+          document.body.classList.add("is-dragging-scale-divider");
+          updateChartSplitFromClientY(event.clientY);
+          updateScaleDividerLabel(true);
+        });
+
+        window.addEventListener("mousemove", (event) => {
+          if (!isDraggingScaleDivider) {
+            return;
+          }
+
+          updateChartSplitFromClientY(event.clientY);
+          updateScaleDividerLabel(true);
+        });
+
+        window.addEventListener("mouseup", stopDividerDrag);
+        window.addEventListener("mouseleave", stopDividerDrag);
+      }
+
+      if (stochDividerElement) {
+        const stopStochDividerDrag = () => {
+          if (!isDraggingStochDivider) {
+            return;
+          }
+
+          isDraggingStochDivider = false;
+          document.body.classList.remove("is-dragging-scale-divider");
+          updateStochDividerLabel(false);
+        };
+
+        stochDividerElement.addEventListener("mousedown", (event) => {
+          if (!indicatorState.stoch) {
+            return;
+          }
+
+          event.preventDefault();
+          isDraggingStochDivider = true;
+          document.body.classList.add("is-dragging-scale-divider");
+          updateStochSplitFromClientY(event.clientY);
+          updateStochDividerLabel(true);
+        });
+
+        window.addEventListener("mousemove", (event) => {
+          if (!isDraggingStochDivider) {
+            return;
+          }
+
+          updateStochSplitFromClientY(event.clientY);
+          updateStochDividerLabel(true);
+        });
+
+        window.addEventListener("mouseup", stopStochDividerDrag);
+        window.addEventListener("mouseleave", stopStochDividerDrag);
+      }
+
+      if (rsiDividerElement) {
+        const stopRsiDividerDrag = () => {
+          if (!isDraggingRsiDivider) {
+            return;
+          }
+
+          isDraggingRsiDivider = false;
+          document.body.classList.remove("is-dragging-scale-divider");
+          updateRsiDividerLabel(false);
+        };
+
+        rsiDividerElement.addEventListener("mousedown", (event) => {
+          if (!indicatorState.rsi) {
+            return;
+          }
+
+          event.preventDefault();
+          isDraggingRsiDivider = true;
+          document.body.classList.add("is-dragging-scale-divider");
+          updateRsiSplitFromClientY(event.clientY);
+          updateRsiDividerLabel(true);
+        });
+
+        window.addEventListener("mousemove", (event) => {
+          if (!isDraggingRsiDivider) {
+            return;
+          }
+
+          updateRsiSplitFromClientY(event.clientY);
+          updateRsiDividerLabel(true);
+        });
+
+        window.addEventListener("mouseup", stopRsiDividerDrag);
+        window.addEventListener("mouseleave", stopRsiDividerDrag);
+      }
+
+      const fvgZoneSeries = [];
+      const smcGuideSeries = [];
+      let currentFvgZones = [];
+      let currentSmcZones = [];
+      let currentSmcLabels = [];
+      const fvgDisplayLengthCandles = 20;
+      const fvgMinGapPercent = 0.3;
+
+      const clearFvgOverlay = () => {
+        if (fvgOverlayElement) {
+          fvgOverlayElement.innerHTML = "";
+        }
+      };
+
+      const clearSmcOverlay = () => {
+        if (smcOverlayElement) {
+          smcOverlayElement.innerHTML = "";
+        }
+      };
+
+      const clearSmcGuideSeries = () => {
+        while (smcGuideSeries.length > 0) {
+          const lineSeries = smcGuideSeries.pop();
+          chart.removeSeries(lineSeries);
+        }
+      };
+
+      const clearFvgZoneSeries = () => {
+        while (fvgZoneSeries.length > 0) {
+          const zone = fvgZoneSeries.pop();
+          chart.removeSeries(zone.upperSeries);
+          chart.removeSeries(zone.lowerSeries);
+        }
+
+        currentFvgZones = [];
+        clearFvgOverlay();
+      };
+
+      const renderFvgOverlay = () => {
+        if (!fvgOverlayElement) {
+          return;
+        }
+
+        clearFvgOverlay();
+
+        if (!indicatorState.fvg || currentFvgZones.length === 0) {
+          return;
+        }
+
+        currentFvgZones.forEach((zone) => {
+          const startX = chart.timeScale().timeToCoordinate(zone.startTime);
+          const endX = chart.timeScale().timeToCoordinate(zone.endTime);
+          const upperY = candleSeries.priceToCoordinate(zone.upper);
+          const lowerY = candleSeries.priceToCoordinate(zone.lower);
+
+          if (
+            startX === null ||
+            endX === null ||
+            upperY === null ||
+            lowerY === null ||
+            Number.isNaN(startX) ||
+            Number.isNaN(endX) ||
+            Number.isNaN(upperY) ||
+            Number.isNaN(lowerY)
+          ) {
+            return;
+          }
+
+          const left = Math.min(startX, endX);
+          const width = Math.max(1, Math.abs(endX - startX));
+          const top = Math.min(upperY, lowerY);
+          const height = Math.max(1, Math.abs(lowerY - upperY));
+
+          const zoneElement = document.createElement("div");
+          zoneElement.className = zone.isBullish ? "fvg-zone fvg-zone--bull" : "fvg-zone fvg-zone--bear";
+          zoneElement.style.left = `${left}px`;
+          zoneElement.style.top = `${top}px`;
+          zoneElement.style.width = `${width}px`;
+          zoneElement.style.height = `${height}px`;
+          fvgOverlayElement.appendChild(zoneElement);
+        });
+      };
+
+      const renderSmcOverlay = () => {
+        if (!smcOverlayElement) {
+          return;
+        }
+
+        clearSmcOverlay();
+
+        if (!indicatorState.smc || (currentSmcZones.length === 0 && currentSmcLabels.length === 0)) {
+          return;
+        }
+
+        const chartCanvasWidth = chartCanvas ? chartCanvas.clientWidth : 0;
+        const rightScaleReservePx = 66;
+        const maxDrawableRightPx = Math.max(0, chartCanvasWidth - rightScaleReservePx);
+
+        currentSmcZones.forEach((zone) => {
+          const startX = chart.timeScale().timeToCoordinate(zone.startTime);
+          const endX = chart.timeScale().timeToCoordinate(zone.endTime);
+          const upperY = candleSeries.priceToCoordinate(zone.upper);
+          const lowerY = candleSeries.priceToCoordinate(zone.lower);
+
+          if (
+            startX === null ||
+            endX === null ||
+            upperY === null ||
+            lowerY === null ||
+            Number.isNaN(startX) ||
+            Number.isNaN(endX) ||
+            Number.isNaN(upperY) ||
+            Number.isNaN(lowerY)
+          ) {
+            return;
+          }
+
+          const rawLeft = Math.min(startX, endX);
+          const rawRight = Math.max(startX, endX);
+          const left = Math.max(0, rawLeft);
+          const right = Math.min(maxDrawableRightPx, rawRight);
+          const width = Math.max(0, right - left);
+          const top = Math.min(upperY, lowerY);
+          const height = Math.max(1, Math.abs(lowerY - upperY));
+
+          if (width <= 0) {
+            return;
+          }
+
+          const zoneElement = document.createElement("div");
+          zoneElement.className = zone.isBullish ? "smc-zone smc-zone--bull" : "smc-zone smc-zone--bear";
+          zoneElement.style.left = `${left}px`;
+          zoneElement.style.top = `${top}px`;
+          zoneElement.style.width = `${width}px`;
+          zoneElement.style.height = `${height}px`;
+          smcOverlayElement.appendChild(zoneElement);
+        });
+
+        currentSmcLabels.forEach((label) => {
+          const startX = chart.timeScale().timeToCoordinate(label.startTime);
+          const endX = chart.timeScale().timeToCoordinate(label.endTime);
+          const y = candleSeries.priceToCoordinate(label.price);
+
+          if (
+            startX === null ||
+            endX === null ||
+            y === null ||
+            Number.isNaN(startX) ||
+            Number.isNaN(endX) ||
+            Number.isNaN(y)
+          ) {
+            return;
+          }
+
+          const midpointX = (startX + endX) / 2;
+          const clampedX = Math.max(0, Math.min(maxDrawableRightPx, midpointX));
+
+          const labelElement = document.createElement("div");
+          labelElement.className = "smc-structure-label";
+          labelElement.textContent = label.text;
+          labelElement.style.left = `${clampedX}px`;
+          labelElement.style.top = `${y}px`;
+          labelElement.style.color = label.color;
+          smcOverlayElement.appendChild(labelElement);
+        });
+      };
+
+      const renderSmcGuides = (guides) => {
+        clearSmcGuideSeries();
+
+        if (!indicatorState.smc || !guides) {
+          return;
+        }
+
+        const buildGuideSeries = (guide, style) => {
+          const series = chart.addLineSeries({
+            priceScaleId: "price",
+            color: guide.color,
+            lineWidth: style === "dashed" ? 1 : 2,
+            lineStyle: style === "dashed" ? LightweightCharts.LineStyle.Dashed : LightweightCharts.LineStyle.Solid,
+            priceLineVisible: false,
+            lastValueVisible: false,
+            crosshairMarkerVisible: false,
+          });
+
+          series.setData([
+            { time: guide.startTime, value: guide.price },
+            { time: guide.endTime, value: guide.price },
+          ]);
+
+          smcGuideSeries.push(series);
+        };
+
+        guides.dashed.forEach((guide) => buildGuideSeries(guide, "dashed"));
+        guides.solid.forEach((guide) => buildGuideSeries(guide, "solid"));
+      };
+
+      const chartResizeObserver = new ResizeObserver(() => {
+        chart.applyOptions({
+          width: chartElement.clientWidth,
+          height: chartElement.clientHeight,
+        });
+        applyChartSplit();
+        renderFvgOverlay();
+        renderSmcOverlay();
+        renderPaneScaleOverlay();
+        updateScrollToRecentButtonVisibility();
+      });
+      chartResizeObserver.observe(chartElement);
+
+      chart.timeScale().subscribeVisibleTimeRangeChange(() => {
+        renderFvgOverlay();
+        renderSmcOverlay();
+        renderPaneScaleOverlay();
+        updateScrollToRecentButtonVisibility();
+      });
+
+      chart.timeScale().subscribeVisibleLogicalRangeChange((range) => {
+        if (!range || !Number.isFinite(Number(range.from)) || !Number.isFinite(Number(range.to))) {
+          return;
+        }
+
+        savedChartViewByTimeframe[currentTimeframe] = {
+          from: Number(range.from),
+          to: Number(range.to),
+        };
+
+        localStorage.setItem(chartViewStorageKey, JSON.stringify(savedChartViewByTimeframe));
+      });
+
+      const formatValue = (value) => (value === null || value === undefined ? "-" : String(value));
+      const formatCompactVolume = (value) => {
+        if (value === null || value === undefined || Number.isNaN(Number(value))) {
+          return "-";
+        }
+
+        const number = Number(value);
+        const absolute = Math.abs(number);
+
+        if (absolute >= 1_000_000) {
+          return `${(number / 1_000_000).toFixed(2)}M`;
+        }
+        if (absolute >= 1_000) {
+          return `${(number / 1_000).toFixed(2)}k`;
+        }
+        return number.toFixed(2);
+      };
+
+      const setRefreshStatus = (text, state) => {
+        if (!refreshStatusElement) {
+          return;
+        }
+
+        refreshStatusElement.textContent = text;
+        refreshStatusElement.classList.remove("is-live", "is-updating", "is-error");
+        refreshStatusElement.classList.add(state);
+      };
+
+      const formatPriceGuideValue = (value) => {
+        const numericValue = Number(value);
+        if (!Number.isFinite(numericValue)) {
+          return "-";
+        }
+
+        if (Math.abs(numericValue) >= 1000) {
+          return numericValue.toFixed(0);
+        }
+
+        return numericValue.toFixed(2);
+      };
+
+      const hidePriceHoverGuide = () => {
+        if (priceHoverGuideLineElement) {
+          priceHoverGuideLineElement.classList.remove("is-visible");
+        }
+        if (priceHoverGuideLabelElement) {
+          priceHoverGuideLabelElement.classList.remove("is-visible");
+        }
+      };
+
+      const updatePriceHoverGuide = (param) => {
+        if (!priceHoverGuideLineElement || !priceHoverGuideLabelElement || !priceHoverGuideValueElement || !chartCanvas) {
+          return;
+        }
+
+        if (!param || !param.point || !param.time || !paneLayout.candle) {
+          hidePriceHoverGuide();
+          return;
+        }
+
+        const yCoordinate = Number(param.point.y);
+        if (!Number.isFinite(yCoordinate)) {
+          hidePriceHoverGuide();
+          return;
+        }
+
+        const canvasHeight = chartCanvas.clientHeight;
+        const canvasWidth = chartCanvas.clientWidth;
+        if (canvasHeight <= 0 || canvasWidth <= 0) {
+          hidePriceHoverGuide();
+          return;
+        }
+
+        const timeAxisSafeZonePx = 22;
+        const usableBottomPx = Math.max(0, canvasHeight - timeAxisSafeZonePx);
+        const candleTopPx = paneLayout.candle.top * usableBottomPx;
+        const candleBottomPx = paneLayout.candle.bottom * usableBottomPx;
+
+        if (yCoordinate < candleTopPx || yCoordinate > candleBottomPx) {
+          hidePriceHoverGuide();
+          return;
+        }
+
+        const hoverPrice = candleSeries.coordinateToPrice(yCoordinate);
+        if (!Number.isFinite(Number(hoverPrice))) {
+          hidePriceHoverGuide();
+          return;
+        }
+
+        const rightScaleReservePx = 66;
+        const maxDrawableRightPx = Math.max(0, canvasWidth - rightScaleReservePx);
+
+        priceHoverGuideLineElement.style.top = `${yCoordinate}px`;
+        priceHoverGuideLineElement.style.left = "0px";
+        priceHoverGuideLineElement.style.width = `${maxDrawableRightPx}px`;
+        priceHoverGuideLineElement.classList.add("is-visible");
+
+        priceHoverGuideValueElement.textContent = formatPriceGuideValue(hoverPrice);
+        priceHoverGuideLabelElement.style.top = `${yCoordinate}px`;
+        priceHoverGuideLabelElement.classList.add("is-visible");
+      };
+
+      const updateScrollToRecentButtonVisibility = () => {
+        if (!scrollToRecentButtonElement) {
+          return;
+        }
+
+        const scrollPosition = Number(chart.timeScale().scrollPosition());
+        const isAwayFromLatest = Number.isFinite(scrollPosition) && scrollPosition < -3;
+        scrollToRecentButtonElement.classList.toggle("is-visible", isAwayFromLatest);
+      };
+
+      const setActiveTimeframeButton = (timeframe) => {
+        timeframeButtonElements.forEach((button) => {
+          button.classList.toggle("is-active", button.dataset.timeframe === timeframe);
+        });
+      };
+
+      const setDrawLineMode = (enabled) => {
+        drawLineMode = enabled;
+        if (!enabled) {
+          pendingLinePoint = null;
+        }
+
+        if (drawLineButtonElement) {
+          drawLineButtonElement.classList.toggle("is-active", enabled);
+        }
+      };
+
+      const setIndicatorButtonState = () => {
+        indicatorButtonElements.forEach((button) => {
+          const indicatorName = button.dataset.indicator;
+          const isActive = Boolean(indicatorState[indicatorName]);
+          button.classList.toggle("is-active", isActive);
+          button.setAttribute("aria-pressed", isActive ? "true" : "false");
+        });
+
+        localStorage.setItem(indicatorStorageKey, JSON.stringify(indicatorState));
+      };
+
+      const setRightPanelTab = (panelName) => {
+        const isOrder = panelName === "order";
+
+        if (panelOrderElement) {
+          panelOrderElement.classList.toggle("is-active", isOrder);
+        }
+        if (panelWatchlistElement) {
+          panelWatchlistElement.classList.toggle("is-active", !isOrder);
+        }
+
+        panelTabButtons.forEach((button) => {
+          const isActive = button.dataset.panel === panelName;
+          button.classList.toggle("is-active", isActive);
+          button.setAttribute("aria-selected", isActive ? "true" : "false");
+        });
+      };
+
+      const getRefreshIntervalMs = (timeframe) => {
+        const fastTimeframes = new Set(["1m", "3m", "5m"]);
+        return fastTimeframes.has(timeframe) ? 5000 : 60000;
+      };
+
+      const scheduleNextRefresh = () => {
+        if (refreshTimerId) {
+          clearTimeout(refreshTimerId);
+        }
+
+        refreshTimerId = setTimeout(async () => {
+          await refreshChartData();
+          scheduleNextRefresh();
+        }, getRefreshIntervalMs(currentTimeframe));
+      };
+
+      const setLoadingTimeframeButton = (timeframe) => {
+        loadingTimeframe = timeframe;
+        timeframeButtonElements.forEach((button) => {
+          button.classList.toggle("is-loading", timeframe !== null && button.dataset.timeframe === timeframe);
+        });
+      };
+
+      const toChartData = (candles) =>
+        candles.map((candle) => ({
+          time: Number(candle.time),
+          open: Number(candle.open),
+          high: Number(candle.high),
+          low: Number(candle.low),
+          close: Number(candle.close),
+        }));
+
+      const calculateBollingerBands = (seriesData, period = 20, multiplier = 2) => {
+        const upper = [];
+        const middle = [];
+        const lower = [];
+        const closes = seriesData.map((point) => Number(point.close));
+
+        for (let index = period - 1; index < seriesData.length; index += 1) {
+          const windowStart = index - period + 1;
+          const windowValues = closes.slice(windowStart, index + 1);
+          const mean = windowValues.reduce((sum, value) => sum + value, 0) / period;
+          const variance = windowValues.reduce((sum, value) => {
+            const delta = value - mean;
+            return sum + delta * delta;
+          }, 0) / period;
+          const stdDev = Math.sqrt(variance);
+          const time = seriesData[index].time;
+
+          middle.push({ time, value: mean });
+          upper.push({ time, value: mean + multiplier * stdDev });
+          lower.push({ time, value: mean - multiplier * stdDev });
+        }
+
+        return { upper, middle, lower };
+      };
+
+      const calculateVolume = (sourceCandles) =>
+        sourceCandles.map((candle) => ({
+          time: Number(candle.time),
+          value: Number(candle.volume || 0),
+          color:
+            Number(candle.close) >= Number(candle.open)
+              ? "rgba(41, 179, 125, 0.55)"
+              : "rgba(207, 95, 107, 0.55)",
+        }));
+
+      const calculateStochastic = (seriesData, kPeriod = 14, kSmoothing = 3, dPeriod = 3) => {
+        if (seriesData.length < kPeriod) {
+          return { k: [], d: [] };
+        }
+
+        const rawK = [];
+
+        for (let index = kPeriod - 1; index < seriesData.length; index += 1) {
+          const window = seriesData.slice(index - kPeriod + 1, index + 1);
+          const highestHigh = window.reduce((maxValue, point) => Math.max(maxValue, Number(point.high)), Number.NEGATIVE_INFINITY);
+          const lowestLow = window.reduce((minValue, point) => Math.min(minValue, Number(point.low)), Number.POSITIVE_INFINITY);
+          const closeValue = Number(seriesData[index].close);
+          const range = highestHigh - lowestLow;
+          const stochasticKRaw = range === 0 ? 50 : ((closeValue - lowestLow) / range) * 100;
+          const stochasticK = clamp(stochasticKRaw, 0, 100);
+
+          rawK.push({
+            time: Number(seriesData[index].time),
+            value: stochasticK,
+          });
+        }
+
+        const smoothSeries = (source, period) => {
+          const output = [];
+          let rollingSum = 0;
+
+          for (let index = 0; index < source.length; index += 1) {
+            rollingSum += source[index].value;
+            if (index >= period) {
+              rollingSum -= source[index - period].value;
+            }
+            if (index >= period - 1) {
+              output.push({
+                time: source[index].time,
+                value: rollingSum / period,
+              });
+            }
+          }
+
+          return output;
+        };
+
+        const kLine = smoothSeries(rawK, kSmoothing);
+        const dLine = smoothSeries(kLine, dPeriod);
+        return { k: kLine, d: dLine };
+      };
+
+      const calculateRsi = (seriesData, period = 14) => {
+        if (seriesData.length <= period) {
+          return [];
+        }
+
+        const closes = seriesData.map((point) => Number(point.close));
+        let gainSum = 0;
+        let lossSum = 0;
+
+        for (let index = 1; index <= period; index += 1) {
+          const delta = closes[index] - closes[index - 1];
+          if (delta >= 0) {
+            gainSum += delta;
+          } else {
+            lossSum += Math.abs(delta);
+          }
+        }
+
+        let averageGain = gainSum / period;
+        let averageLoss = lossSum / period;
+        const rsiSeriesData = [];
+
+        const computeRsiValue = () => {
+          if (averageLoss === 0) {
+            return 100;
+          }
+
+          const relativeStrength = averageGain / averageLoss;
+          return 100 - 100 / (1 + relativeStrength);
+        };
+
+        rsiSeriesData.push({
+          time: seriesData[period].time,
+          value: computeRsiValue(),
+        });
+
+        for (let index = period + 1; index < seriesData.length; index += 1) {
+          const delta = closes[index] - closes[index - 1];
+          const gain = Math.max(delta, 0);
+          const loss = Math.max(-delta, 0);
+
+          averageGain = ((averageGain * (period - 1)) + gain) / period;
+          averageLoss = ((averageLoss * (period - 1)) + loss) / period;
+
+          rsiSeriesData.push({
+            time: seriesData[index].time,
+            value: computeRsiValue(),
+          });
+        }
+
+        return rsiSeriesData;
+      };
+
+      const calculateSmcSignals = (seriesData, swingLookback = 2) => {
+        if (seriesData.length < swingLookback * 2 + 1) {
+          return { dashed: [], solid: [], zones: [], labels: [] };
+        }
+
+        const smcMaxZoneCandles = 200;
+
+        const candleTouchesZone = (candle, lower, upper) => {
+          const values = [candle.open, candle.close, candle.high, candle.low].map((value) => Number(value));
+          return values.some((value) => Number.isFinite(value) && value >= lower && value <= upper);
+        };
+
+        const resolveSmcZoneEndIndex = (zoneStartIndex, lower, upper) => {
+          const maxEndIndex = Math.min(seriesData.length - 1, zoneStartIndex + smcMaxZoneCandles - 1);
+          const firstTouchCheckIndex = Math.min(maxEndIndex, zoneStartIndex + 3);
+
+          for (let index = firstTouchCheckIndex; index <= maxEndIndex; index += 1) {
+            if (candleTouchesZone(seriesData[index], lower, upper)) {
+              return index;
+            }
+          }
+
+          return maxEndIndex;
+        };
+
+        const swingHighs = [];
+        const swingLows = [];
+
+        for (let index = swingLookback; index < seriesData.length - swingLookback; index += 1) {
+          const point = seriesData[index];
+          const high = Number(point.high);
+          const low = Number(point.low);
+
+          let isSwingHigh = true;
+          let isSwingLow = true;
+
+          for (let offset = 1; offset <= swingLookback; offset += 1) {
+            const left = seriesData[index - offset];
+            const right = seriesData[index + offset];
+
+            if (high < Number(left.high) || high <= Number(right.high)) {
+              isSwingHigh = false;
+            }
+
+            if (low > Number(left.low) || low >= Number(right.low)) {
+              isSwingLow = false;
+            }
+          }
+
+          if (isSwingHigh) {
+            swingHighs.push({ index, price: high });
+          }
+
+          if (isSwingLow) {
+            swingLows.push({ index, price: low });
+          }
+        }
+
+        let highPointer = 0;
+        let lowPointer = 0;
+        let activeSwingHigh = null;
+        let activeSwingLow = null;
+        let lastBrokenHighIndex = -1;
+        let lastBrokenLowIndex = -1;
+        let structureBias = null;
+
+        const dashed = [];
+        const solid = [];
+        const zones = [];
+        const labels = [];
+
+        const findOrderBlockCandle = (fromIndex, direction, lookback = 8) => {
+          const minIndex = Math.max(0, fromIndex - lookback);
+          for (let index = fromIndex; index >= minIndex; index -= 1) {
+            const candle = seriesData[index];
+            const open = Number(candle.open);
+            const close = Number(candle.close);
+            const isBearish = close < open;
+            const isBullish = close > open;
+
+            if (direction === "bullish" && isBearish) {
+              return { index, candle };
+            }
+
+            if (direction === "bearish" && isBullish) {
+              return { index, candle };
+            }
+          }
+
+          return null;
+        };
+
+        for (let index = 0; index < seriesData.length; index += 1) {
+          while (highPointer < swingHighs.length && swingHighs[highPointer].index < index) {
+            activeSwingHigh = swingHighs[highPointer];
+            highPointer += 1;
+          }
+
+          while (lowPointer < swingLows.length && swingLows[lowPointer].index < index) {
+            activeSwingLow = swingLows[lowPointer];
+            lowPointer += 1;
+          }
+
+          const candle = seriesData[index];
+          const close = Number(candle.close);
+
+          if (activeSwingHigh && close > activeSwingHigh.price && activeSwingHigh.index !== lastBrokenHighIndex) {
+            const isChoch = structureBias === "bearish";
+            const swingTime = seriesData[activeSwingHigh.index].time;
+            const structureText = isChoch ? "CHoCH" : "BOS";
+            const structureColor = isChoch ? "#a78bfa" : "#5fa8ff";
+
+            dashed.push({
+              startTime: swingTime,
+              endTime: candle.time,
+              price: activeSwingHigh.price,
+              color: "rgba(95, 168, 255, 0.65)",
+            });
+
+            solid.push({
+              startTime: swingTime,
+              endTime: candle.time,
+              price: activeSwingHigh.price,
+              color: structureColor,
+            });
+
+            labels.push({
+              startTime: swingTime,
+              endTime: candle.time,
+              price: activeSwingHigh.price,
+              text: structureText,
+              color: structureColor,
+            });
+
+            const orderBlock = findOrderBlockCandle(index - 1, "bullish");
+            if (orderBlock) {
+              const firstCandle = seriesData[orderBlock.index];
+              const secondCandle = seriesData[Math.min(seriesData.length - 1, orderBlock.index + 1)];
+              const obOpen = Number(orderBlock.candle.open);
+              const obClose = Number(orderBlock.candle.close);
+              const zoneUpper = Math.max(obOpen, obClose);
+              const zoneLower = Math.min(Number(firstCandle.low), Number(secondCandle.low));
+              const zoneEndIndex = resolveSmcZoneEndIndex(orderBlock.index, zoneLower, zoneUpper);
+              zones.push({
+                isBullish: true,
+                startTime: Number(orderBlock.candle.time),
+                endTime: Number(seriesData[zoneEndIndex].time),
+                upper: zoneUpper,
+                lower: zoneLower,
+              });
+            }
+
+            structureBias = "bullish";
+            lastBrokenHighIndex = activeSwingHigh.index;
+          }
+
+          if (activeSwingLow && close < activeSwingLow.price && activeSwingLow.index !== lastBrokenLowIndex) {
+            const isChoch = structureBias === "bullish";
+            const swingTime = seriesData[activeSwingLow.index].time;
+            const structureText = isChoch ? "CHoCH" : "BOS";
+            const structureColor = isChoch ? "#a78bfa" : "#cf5f6b";
+
+            dashed.push({
+              startTime: swingTime,
+              endTime: candle.time,
+              price: activeSwingLow.price,
+              color: "rgba(207, 95, 107, 0.65)",
+            });
+
+            solid.push({
+              startTime: swingTime,
+              endTime: candle.time,
+              price: activeSwingLow.price,
+              color: structureColor,
+            });
+
+            labels.push({
+              startTime: swingTime,
+              endTime: candle.time,
+              price: activeSwingLow.price,
+              text: structureText,
+              color: structureColor,
+            });
+
+            const orderBlock = findOrderBlockCandle(index - 1, "bearish");
+            if (orderBlock) {
+              const firstCandle = seriesData[orderBlock.index];
+              const secondCandle = seriesData[Math.min(seriesData.length - 1, orderBlock.index + 1)];
+              const obOpen = Number(orderBlock.candle.open);
+              const obClose = Number(orderBlock.candle.close);
+              const zoneUpper = Math.max(Number(firstCandle.high), Number(secondCandle.high));
+              const zoneLower = Math.min(obOpen, obClose);
+              const zoneEndIndex = resolveSmcZoneEndIndex(orderBlock.index, zoneLower, zoneUpper);
+              zones.push({
+                isBullish: false,
+                startTime: Number(orderBlock.candle.time),
+                endTime: Number(seriesData[zoneEndIndex].time),
+                upper: zoneUpper,
+                lower: zoneLower,
+              });
+            }
+
+            structureBias = "bearish";
+            lastBrokenLowIndex = activeSwingLow.index;
+          }
+        }
+
+        return {
+          dashed: dashed.slice(-40),
+          solid: solid.slice(-40),
+          zones: zones.slice(-30),
+          labels: labels.slice(-40),
+        };
+      };
+
+      const buildFvgZones = (seriesData, maxZones = 30) => {
+        const zones = [];
+
+        const candleTouchesZone = (candle, lower, upper) => {
+          const values = [candle.open, candle.close, candle.high, candle.low].map((value) => Number(value));
+          return values.some((value) => Number.isFinite(value) && value >= lower && value <= upper);
+        };
+
+        const resolveFvgEndIndex = (startIndex, creatorIndex, lower, upper) => {
+          const firstCheckIndex = creatorIndex + 1;
+          const maxEndIndex = Math.min(seriesData.length - 1, creatorIndex + fvgDisplayLengthCandles);
+
+          for (let index = firstCheckIndex; index <= maxEndIndex; index += 1) {
+            if (candleTouchesZone(seriesData[index], lower, upper)) {
+              return index;
+            }
+          }
+
+          return maxEndIndex;
+        };
+
+        for (let index = 2; index < seriesData.length; index += 1) {
+          const current = seriesData[index];
+          const twoBack = seriesData[index - 2];
+
+          if (current.low > twoBack.high) {
+            const lower = Number(twoBack.high);
+            const upper = Number(current.low);
+            const gapPercent = lower > 0 ? ((upper - lower) / lower) * 100 : 0;
+            if (gapPercent < fvgMinGapPercent) {
+              continue;
+            }
+            const startIndex = index - 1;
+            const endIndex = resolveFvgEndIndex(startIndex, index, lower, upper);
+
+            zones.push({
+              isBullish: true,
+              startTime: Number(seriesData[startIndex].time),
+              endTime: Number(seriesData[endIndex].time),
+              upper,
+              lower,
+            });
+            continue;
+          }
+
+          if (current.high < twoBack.low) {
+            const lower = Number(current.high);
+            const upper = Number(twoBack.low);
+            const gapPercent = lower > 0 ? ((upper - lower) / lower) * 100 : 0;
+            if (gapPercent < fvgMinGapPercent) {
+              continue;
+            }
+            const startIndex = index - 1;
+            const endIndex = resolveFvgEndIndex(startIndex, index, lower, upper);
+
+            zones.push({
+              isBullish: false,
+              startTime: Number(seriesData[startIndex].time),
+              endTime: Number(seriesData[endIndex].time),
+              upper,
+              lower,
+            });
+          }
+        }
+
+        return zones.slice(-maxZones);
+      };
+
+      const renderFvgZones = (seriesData) => {
+        clearFvgZoneSeries();
+
+        if (!indicatorState.fvg || seriesData.length < 3) {
+          return;
+        }
+
+        const zones = buildFvgZones(seriesData);
+        currentFvgZones = zones;
+
+        zones.forEach((zone) => {
+          const zoneColor = zone.isBullish ? "rgba(41, 179, 125, 0.3)" : "rgba(207, 95, 107, 0.3)";
+
+          const upperSeries = chart.addLineSeries({
+            priceScaleId: "price",
+            color: zoneColor,
+            lineWidth: 1,
+            priceLineVisible: false,
+            lastValueVisible: false,
+            crosshairMarkerVisible: false,
+          });
+
+          const lowerSeries = chart.addLineSeries({
+            priceScaleId: "price",
+            color: zoneColor,
+            lineWidth: 1,
+            priceLineVisible: false,
+            lastValueVisible: false,
+            crosshairMarkerVisible: false,
+          });
+
+          upperSeries.setData([
+            { time: zone.startTime, value: zone.upper },
+            { time: zone.endTime, value: zone.upper },
+          ]);
+
+          lowerSeries.setData([
+            { time: zone.startTime, value: zone.lower },
+            { time: zone.endTime, value: zone.lower },
+          ]);
+
+          fvgZoneSeries.push({ upperSeries, lowerSeries });
+        });
+
+        renderFvgOverlay();
+      };
+
+      const getNearestCandleTime = (xCoordinate) => {
+        if (!chartData.length) {
+          return null;
+        }
+
+        const logical = chart.timeScale().coordinateToLogical(xCoordinate);
+        if (logical === null) {
+          return chartData[chartData.length - 1].time;
+        }
+
+        const index = Math.max(0, Math.min(chartData.length - 1, Math.round(logical)));
+        return chartData[index].time;
+      };
+
+      const updateOHLCDisplay = (barData, barVolume = null) => {
+        if (!ohlcOpenElement || !ohlcHighElement || !ohlcLowElement || !ohlcCloseElement || !ohlcBarVolumeElement) {
+          return;
+        }
+
+        const ohlcValueElements = [
+          ohlcOpenElement,
+          ohlcHighElement,
+          ohlcLowElement,
+          ohlcCloseElement,
+          ohlcBarVolumeElement,
+        ];
+
+        const setOhlcValueTone = (tone) => {
+          ohlcValueElements.forEach((element) => {
+            element.classList.remove("ohlc-value--up", "ohlc-value--down");
+            if (tone) {
+              element.classList.add(tone);
+            }
+          });
+        };
+
+        if (!barData) {
+          ohlcOpenElement.textContent = "-";
+          ohlcHighElement.textContent = "-";
+          ohlcLowElement.textContent = "-";
+          ohlcCloseElement.textContent = "-";
+          ohlcBarVolumeElement.textContent = "-";
+          setOhlcValueTone(null);
+          return;
+        }
+
+        const openValue = Number(barData.open);
+        const closeValue = Number(barData.close);
+        const valueTone = closeValue >= openValue ? "ohlc-value--up" : "ohlc-value--down";
+
+        ohlcOpenElement.textContent = openValue.toFixed(2);
+        ohlcHighElement.textContent = Number(barData.high).toFixed(2);
+        ohlcLowElement.textContent = Number(barData.low).toFixed(2);
+        ohlcCloseElement.textContent = closeValue.toFixed(2);
+        ohlcBarVolumeElement.textContent = formatCompactVolume(barVolume);
+        setOhlcValueTone(valueTone);
+      };
+
+      const redrawChart = () => {
+        chartData = toChartData(allCandles);
+        candleVolumeByTime = new Map(allCandles.map((candle) => [Number(candle.time), Number(candle.volume || 0)]));
+        if (!chartData.length) {
+          clearFvgZoneSeries();
+          clearSmcGuideSeries();
+          clearSmcOverlay();
+          clearPaneScaleOverlay();
+          updateOHLCDisplay(null);
+          return;
+        }
+
+        const bollingerBands = calculateBollingerBands(chartData, 20, 2);
+        const smcSignals = calculateSmcSignals(chartData, 2);
+        const stochastic = calculateStochastic(chartData, 14, 3, 3);
+        const rsi = calculateRsi(chartData, 14);
+        stochKByTime = new Map(stochastic.k.map((point) => [Number(point.time), Number(point.value)]));
+        stochDByTime = new Map(stochastic.d.map((point) => [Number(point.time), Number(point.value)]));
+        rsiByTime = new Map(rsi.map((point) => [Number(point.time), Number(point.value)]));
+
+        candleSeries.setData(chartData);
+        bbUpperSeries.setData(indicatorState.bb ? bollingerBands.upper : []);
+        bbMiddleSeries.setData(indicatorState.bb ? bollingerBands.middle : []);
+        bbLowerSeries.setData(indicatorState.bb ? bollingerBands.lower : []);
+        candleSeries.setMarkers([]);
+        currentSmcZones = indicatorState.smc ? smcSignals.zones : [];
+        currentSmcLabels = indicatorState.smc ? smcSignals.labels : [];
+        renderSmcGuides(indicatorState.smc ? smcSignals : null);
+        stochKSeries.setData(indicatorState.stoch ? stochastic.k : []);
+        stochDSeries.setData(indicatorState.stoch ? stochastic.d : []);
+        rsiSeries.setData(indicatorState.rsi ? rsi : []);
+        if (indicatorState.stoch && chartData.length > 1) {
+          const firstTime = chartData[0].time;
+          const lastTime = chartData[chartData.length - 1].time;
+          stochOverboughtSeries.setData([
+            { time: firstTime, value: 80 },
+            { time: lastTime, value: 80 },
+          ]);
+          stochOversoldSeries.setData([
+            { time: firstTime, value: 20 },
+            { time: lastTime, value: 20 },
+          ]);
+        } else {
+          stochOverboughtSeries.setData([]);
+          stochOversoldSeries.setData([]);
+        }
+
+        if (indicatorState.rsi && chartData.length > 1) {
+          const firstTime = chartData[0].time;
+          const lastTime = chartData[chartData.length - 1].time;
+          rsiOverboughtSeries.setData([
+            { time: firstTime, value: 70 },
+            { time: lastTime, value: 70 },
+          ]);
+          rsiOversoldSeries.setData([
+            { time: firstTime, value: 30 },
+            { time: lastTime, value: 30 },
+          ]);
+        } else {
+          rsiOverboughtSeries.setData([]);
+          rsiOversoldSeries.setData([]);
+        }
+
+        volumeSeries.setData(indicatorState.volume ? calculateVolume(allCandles) : []);
+        renderFvgZones(chartData);
+          const latestBar = chartData[chartData.length - 1];
+          const latestVolume = latestBar ? candleVolumeByTime.get(Number(latestBar.time)) ?? null : null;
+          updateOHLCDisplay(latestBar, latestVolume);
+
+        if (!hasFitContent) {
+          if (pendingRestoreLogicalRange) {
+            chart.timeScale().setVisibleLogicalRange(pendingRestoreLogicalRange);
+          } else {
+            chart.timeScale().fitContent();
+          }
+          hasFitContent = true;
+        }
+
+        renderFvgOverlay();
+        renderSmcOverlay();
+        renderPaneScaleOverlay();
+      };
+
+      chart.subscribeCrosshairMove((param) => {
+        if (!param || !param.point || !param.time) {
+          hoveredCandleTime = null;
+          hidePriceHoverGuide();
+          const latestBar = chartData[chartData.length - 1] || null;
+          const latestVolume = latestBar ? candleVolumeByTime.get(Number(latestBar.time)) ?? null : null;
+          updateOHLCDisplay(latestBar, latestVolume);
+          renderPaneScaleOverlay();
+          return;
+        }
+
+        const candleAtCrosshair = param.seriesData.get(candleSeries);
+        if (!candleAtCrosshair) {
+          hoveredCandleTime = null;
+          hidePriceHoverGuide();
+          const latestBar = chartData[chartData.length - 1] || null;
+          const latestVolume = latestBar ? candleVolumeByTime.get(Number(latestBar.time)) ?? null : null;
+          updateOHLCDisplay(latestBar, latestVolume);
+          renderPaneScaleOverlay();
+          return;
+        }
+
+        const hoveredTime = Number(param.time);
+        hoveredCandleTime = hoveredTime;
+        updatePriceHoverGuide(param);
+        const hoveredVolume = candleVolumeByTime.get(hoveredTime) ?? null;
+        updateOHLCDisplay(candleAtCrosshair, hoveredVolume);
+        renderPaneScaleOverlay();
+      });
+
+      const refreshMarketInfo = (marketData) => {
+        if (!marketData) {
+          return;
+        }
+
+        if (symbolInfoElement) {
+          symbolInfoElement.textContent = `${marketData.display_symbol} · ${marketData.timeframe} · ${marketData.exchange}`;
+        }
+        if (marketTitleElement) {
+          marketTitleElement.textContent = `${marketData.display_symbol} Info`;
+        }
+
+        if (marketData.error) {
+          if (marketErrorElement) {
+            marketErrorElement.style.display = "block";
+            marketErrorElement.textContent = `Unable to load market data: ${marketData.error}`;
+          }
+          if (marketInfoGridElement) {
+            marketInfoGridElement.style.display = "none";
+          }
+          if (marketUpdatedElement) {
+            marketUpdatedElement.style.display = "none";
+          }
+          return;
+        }
+
+        if (marketErrorElement) {
+          marketErrorElement.style.display = "none";
+        }
+        if (marketInfoGridElement) {
+          marketInfoGridElement.style.display = "grid";
+        }
+        if (marketUpdatedElement) {
+          marketUpdatedElement.style.display = "block";
+          marketUpdatedElement.textContent = `Updated: ${marketData.timestamp || "Unknown"}`;
+        }
+
+        if (valueLastElement) valueLastElement.textContent = formatValue(marketData.last);
+        if (valueBidElement) valueBidElement.textContent = formatValue(marketData.bid);
+        if (valueAskElement) valueAskElement.textContent = formatValue(marketData.ask);
+        if (valueHighElement) valueHighElement.textContent = formatValue(marketData.high);
+        if (valueLowElement) valueLowElement.textContent = formatValue(marketData.low);
+        if (valueVolumeElement) valueVolumeElement.textContent = formatCompactVolume(marketData.quote_volume);
+        if (ohlcVol24Element) ohlcVol24Element.textContent = formatCompactVolume(marketData.quote_volume);
+      };
+
+      const refreshChartData = async (options = {}) => {
+        const isPriority = options.priority === true;
+
+        if (isRefreshing) {
+          if (isPriority) {
+            pendingPriorityRefresh = true;
+          }
+          return;
+        }
+
+        isRefreshing = true;
+        pendingPriorityRefresh = false;
+        const requestId = ++refreshRequestCounter;
+        const requestedTimeframe = currentTimeframe;
+        setLoadingTimeframeButton(requestedTimeframe);
+        setRefreshStatus("Updating...", "is-updating");
+
+        try {
+          const response = await fetch(`/api/chart-data?timeframe=${encodeURIComponent(requestedTimeframe)}`, { cache: "no-store" });
+          if (!response.ok) {
+            setRefreshStatus("Retrying", "is-error");
+            isRefreshing = false;
+            setLoadingTimeframeButton(null);
+            if (pendingPriorityRefresh) {
+              pendingPriorityRefresh = false;
+              refreshChartData({ priority: true });
+            }
+            return;
+          }
+
+          const payload = await response.json();
+
+          if (requestId !== refreshRequestCounter || requestedTimeframe !== currentTimeframe) {
+            isRefreshing = false;
+            setLoadingTimeframeButton(null);
+            if (pendingPriorityRefresh) {
+              pendingPriorityRefresh = false;
+              refreshChartData({ priority: true });
+            }
+            return;
+          }
+
+          const nextCandles = Array.isArray(payload.candles) ? payload.candles : [];
+
+          if (nextCandles.length === 0) {
+            refreshMarketInfo(payload.market_data);
+            setRefreshStatus("Live", "is-live");
+            isRefreshing = false;
+            setLoadingTimeframeButton(null);
+            if (pendingPriorityRefresh) {
+              pendingPriorityRefresh = false;
+              refreshChartData({ priority: true });
+            }
+            return;
+          }
+
+          allCandles = nextCandles;
+
+          refreshMarketInfo(payload.market_data);
+          redrawChart();
+          setRefreshStatus("Live", "is-live");
+          setLoadingTimeframeButton(null);
+        } catch (_error) {
+          setRefreshStatus("Retrying", "is-error");
+          setLoadingTimeframeButton(null);
+        }
+
+        isRefreshing = false;
+        if (pendingPriorityRefresh) {
+          pendingPriorityRefresh = false;
+          refreshChartData({ priority: true });
+        }
+      };
+
+      if (timeframeButtonsElement) {
+        timeframeButtonsElement.addEventListener("click", (event) => {
+          const button = event.target.closest(".timeframe-btn");
+          if (!button) {
+            return;
+          }
+
+          const nextTimeframe = button.dataset.timeframe;
+          if (!nextTimeframe || nextTimeframe === currentTimeframe) {
+            return;
+          }
+
+          currentTimeframe = nextTimeframe;
+          localStorage.setItem(timeframeStorageKey, currentTimeframe);
+          pendingRestoreLogicalRange = null;
+          const timeframeView = savedChartViewByTimeframe[currentTimeframe];
+          if (
+            timeframeView &&
+            Number.isFinite(Number(timeframeView.from)) &&
+            Number.isFinite(Number(timeframeView.to))
+          ) {
+            pendingRestoreLogicalRange = {
+              from: Number(timeframeView.from),
+              to: Number(timeframeView.to),
+            };
+          }
+          hasFitContent = false;
+          setActiveTimeframeButton(currentTimeframe);
+          setLoadingTimeframeButton(currentTimeframe);
+          refreshChartData({ priority: true });
+          scheduleNextRefresh();
+        });
+      }
+
+      if (indicatorButtonsElement) {
+        indicatorButtonsElement.addEventListener("click", (event) => {
+          const button = event.target.closest(".indicator-btn");
+          if (!button) {
+            return;
+          }
+
+          const indicatorName = button.dataset.indicator;
+          if (!indicatorName || !(indicatorName in indicatorState)) {
+            return;
+          }
+
+          if (indicatorName === "volume") {
+            if (indicatorState.volume) {
+              lastVolumeSplitRatio = chartSplitRatio;
+            } else {
+              chartSplitRatio = clamp(lastVolumeSplitRatio, 0, 1);
+            }
+          }
+
+          if (indicatorName === "stoch") {
+            if (indicatorState.stoch) {
+              lastStochHeightRatio = stochHeightRatio;
+            } else {
+              stochHeightRatio = clamp(lastStochHeightRatio, 0, 1);
+            }
+          }
+
+          if (indicatorName === "rsi") {
+            if (indicatorState.rsi) {
+              lastRsiHeightRatio = rsiHeightRatio;
+            } else {
+              rsiHeightRatio = clamp(lastRsiHeightRatio, 0, 1);
+            }
+          }
+
+          indicatorState[indicatorName] = !indicatorState[indicatorName];
+          setIndicatorButtonState();
+          redrawChart();
+          applyChartSplit();
+          updateScaleDividerLabel(false);
+          updateStochDividerLabel(false);
+          updateRsiDividerLabel(false);
+        });
+      }
+
+      chart.subscribeClick((param) => {
+        if (!drawLineMode) {
+          return;
+        }
+
+        if (!param.point) {
+          return;
+        }
+
+        const clickedPrice = candleSeries.coordinateToPrice(param.point.y);
+        if (clickedPrice === null || clickedPrice === undefined) {
+          return;
+        }
+
+        const clickedTime = param.time || getNearestCandleTime(param.point.x);
+        if (!clickedTime) {
+          return;
+        }
+
+        if (!pendingLinePoint) {
+          pendingLinePoint = { time: clickedTime, price: clickedPrice };
+          setRefreshStatus("Line point 1/2", "is-updating");
+          return;
+        }
+
+        const lineSeries = chart.addLineSeries({
+          priceScaleId: "price",
+          color: "#5fa8ff",
+          lineWidth: 2,
+          priceLineVisible: false,
+          lastValueVisible: false,
+          crosshairMarkerVisible: false,
+        });
+
+        lineSeries.setData([
+          { time: pendingLinePoint.time, value: pendingLinePoint.price },
+          { time: clickedTime, value: clickedPrice },
+        ]);
+        drawnLineSeries.push(lineSeries);
+        setDrawLineMode(false);
+        setRefreshStatus("Live", "is-live");
+      });
+
+      if (drawLineButtonElement) {
+        drawLineButtonElement.addEventListener("click", () => {
+          const nextMode = !drawLineMode;
+          setDrawLineMode(nextMode);
+          if (nextMode) {
+            setRefreshStatus("Line point 1/2", "is-updating");
+          } else {
+            setRefreshStatus("Live", "is-live");
+          }
+        });
+      }
+
+      if (scrollToRecentButtonElement) {
+        scrollToRecentButtonElement.addEventListener("click", () => {
+          chart.timeScale().scrollToRealTime();
+          updateScrollToRecentButtonVisibility();
+        });
+      }
+
+      if (rightPanelTabsElement) {
+        rightPanelTabsElement.addEventListener("click", (event) => {
+          const button = event.target.closest(".panel-tab");
+          if (!button) {
+            return;
+          }
+
+          const panelName = button.dataset.panel;
+          if (!panelName) {
+            return;
+          }
+
+          setRightPanelTab(panelName);
+        });
+      }
+
+      if (chartFooterElement) {
+        chartFooterElement.style.justifyContent = "space-between";
+      }
+
+      redrawChart();
+      applyChartSplit();
+      updateScaleDividerLabel(false);
+      updateStochDividerLabel(false);
+      updateRsiDividerLabel(false);
+      setActiveTimeframeButton(currentTimeframe);
+      setIndicatorButtonState();
+      setRightPanelTab("order");
+      setDrawLineMode(false);
+      setLoadingTimeframeButton(null);
+      setRefreshStatus("Live", "is-live");
+      updateScrollToRecentButtonVisibility();
+      if (shouldInitialTimeframeRefresh) {
+        refreshChartData({ priority: true });
+      }
+      scheduleNextRefresh();
+    })();
+  </script>
+</body>
+</html>

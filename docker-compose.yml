@@ -1,0 +1,7 @@
+services:
+  trade-wijs:
+    build: .
+    container_name: trade-wijs
+    ports:
+      - "3175:3175"
+    restart: unless-stopped
