@@ -1,9 +1,10 @@
 param(
     [string]$BaseUrl = "http://127.0.0.1:3175",
-    [string]$Spec = "tests/timeframe-buttons.spec.ts",
-    [string]$PlaywrightReporter = "list",
-    [string]$PlaywrightJunitOutputFile,
-    [switch]$SkipPlaywright
+    [string]$Feature = "tests/gherkin/features/timeframe-buttons.feature",
+    [Alias("Spec")]
+    [string]$LegacySpec,
+    [Alias("SkipPlaywright")]
+    [switch]$SkipGherkin
 )
 
 $ErrorActionPreference = "Stop"
@@ -19,18 +20,22 @@ if ($LASTEXITCODE -ne 0) {
     throw "Python import smoke test failed."
 }
 
-if ($SkipPlaywright) {
-    Write-Host "Playwright tests skipped (-SkipPlaywright)."
+if ($SkipGherkin) {
+    Write-Host "Gherkin tests skipped (-SkipGherkin)."
     exit 0
 }
 
-Write-Host "==> Starting Playwright tests"
+if ($LegacySpec) {
+    $Feature = $LegacySpec
+}
+
+Write-Host "==> Starting Gherkin tests"
 Write-Host "BASE_URL=$BaseUrl"
 $env:BASE_URL = $BaseUrl
 
 $npmCommand = Get-Command npm -ErrorAction SilentlyContinue
 if (-not $npmCommand) {
-    throw "npm not found. Install Node.js (with npm) to run Playwright tests."
+    throw "npm not found. Install Node.js (with npm) to run Gherkin tests."
 }
 
 $packageJsonPath = Join-Path $PSScriptRoot "package.json"
@@ -48,44 +53,22 @@ if (-not (Test-Path $packageJsonPath)) {
 Push-Location $PSScriptRoot
 try {
     $playwrightPackagePath = Join-Path $PSScriptRoot "node_modules\@playwright\test\package.json"
-    if (-not (Test-Path $playwrightPackagePath)) {
-        Write-Host "@playwright/test not found, installing..."
-        npm install -D @playwright/test | Out-Host
+    $cucumberPackagePath = Join-Path $PSScriptRoot "node_modules\@cucumber\cucumber\package.json"
+    if (-not (Test-Path $playwrightPackagePath) -or -not (Test-Path $cucumberPackagePath)) {
+        Write-Host "Required test packages not found, installing..."
+        npm install -D @playwright/test @cucumber/cucumber | Out-Host
     }
 
-    Write-Host "Installing/checking Playwright browsers..."
-    npx playwright install | Out-Host
+    $featurePath = if ([System.IO.Path]::IsPathRooted($Feature)) { $Feature } else { Join-Path $PSScriptRoot $Feature }
+    $gherkinFeatureRoot = Join-Path $PSScriptRoot "tests/gherkin/features"
+    $stepDefinitionsGlob = "tests/gherkin/steps/**/*.js"
 
-    $playwrightArgs = @("playwright", "test")
-    if ($PlaywrightReporter) {
-        $playwrightArgs += @("--reporter", $PlaywrightReporter)
-    }
-
-    if ($PlaywrightJunitOutputFile) {
-        $resolvedJunitOutputFile = if ([System.IO.Path]::IsPathRooted($PlaywrightJunitOutputFile)) {
-            $PlaywrightJunitOutputFile
-        }
-        else {
-            Join-Path $PSScriptRoot $PlaywrightJunitOutputFile
-        }
-
-        $junitDirectory = Split-Path -Path $resolvedJunitOutputFile -Parent
-        if ($junitDirectory) {
-            New-Item -ItemType Directory -Path $junitDirectory -Force | Out-Null
-        }
-
-        $env:PLAYWRIGHT_JUNIT_OUTPUT_FILE = $resolvedJunitOutputFile
-        Write-Host "JUnit output: $resolvedJunitOutputFile"
-    }
-
-    $specPath = if ([System.IO.Path]::IsPathRooted($Spec)) { $Spec } else { Join-Path $PSScriptRoot $Spec }
-    if (Test-Path $specPath) {
-        $playwrightArgsWithSpec = $playwrightArgs + $Spec
-        & npx @playwrightArgsWithSpec
+    if (Test-Path $featurePath) {
+        & npx cucumber-js $Feature --require $stepDefinitionsGlob
     }
     else {
-        Write-Warning "Spec not found at '$specPath'. Running all Playwright tests."
-        & npx @playwrightArgs
+        Write-Warning "Feature not found at '$featurePath'. Running all Gherkin features."
+        & npx cucumber-js $gherkinFeatureRoot --require $stepDefinitionsGlob
     }
 }
 finally {

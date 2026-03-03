@@ -104,26 +104,25 @@ Run all checks:
 Only run the Python import smoke test:
 
 ```powershell
-.\test.ps1 -SkipPlaywright
+.\test.ps1 -SkipGherkin
 ```
 
-Run a specific Playwright spec:
+Run a specific Gherkin feature:
 
 ```powershell
-.\test.ps1 -Spec tests/timeframe-buttons.spec.ts
+.\test.ps1 -Feature tests/gherkin/features/timeframe-buttons.feature
 ```
 
-`test.ps1` now bootstraps Playwright automatically when needed:
+`test.ps1` now bootstraps Cucumber automatically when needed:
 
 - Creates `package.json` with `npm init -y` if missing
-- Installs `@playwright/test` if not present
-- Installs browser binaries via `npx playwright install`
-- Falls back to `npx playwright test` (all tests) if the requested spec path does not exist
+- Installs `@cucumber/cucumber` and `@playwright/test` if not present
+- Runs `npx cucumber-js` with the configured feature path
+- Falls back to all Gherkin features if the requested feature path does not exist
 
 CI note:
 
-- Runner needs Node.js + npm for Playwright bootstrap
-- Runner must allow downloading Playwright browser binaries
+- Runner needs Node.js + npm for Cucumber/Playwright bootstrap
 - Keep Python `.venv` available because the script always runs the Python import smoke test first
 
 ## What's included in v1?

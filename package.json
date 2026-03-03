@@ -4,12 +4,14 @@
   "description": "First version of a Python web app with only a TradingView-like screen layout.",
   "main": "index.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "test:gherkin": "cucumber-js tests/gherkin/features --require tests/gherkin/steps/**/*.js"
   },
   "keywords": [],
   "author": "",
   "license": "ISC",
   "devDependencies": {
+    "@cucumber/cucumber": "^10.9.0",
     "@playwright/test": "^1.58.2"
   }
 }
