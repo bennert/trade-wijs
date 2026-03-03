@@ -58,7 +58,55 @@ jobs:
 
       - name: Run test script
         shell: pwsh
-        run: .\test.ps1
+        run: .\test.ps1 -PlaywrightReporter "line,junit" -PlaywrightJunitOutputFile "test-results/playwright-junit.xml"
+
+      - name: Upload Playwright test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-test-results
+          path: test-results/playwright-junit.xml
+          if-no-files-found: warn
+
+      - name: Publish test summary
+        if: always()
+        shell: pwsh
+        run: |
+          $reportPath = Join-Path $PWD "test-results/playwright-junit.xml"
+          if (-not (Test-Path $reportPath)) {
+            "### Test Results`nJUnit rapport niet gevonden op $reportPath" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Encoding utf8 -Append
+            exit 0
+          }
+
+          [xml]$report = Get-Content -Path $reportPath
+          $suite = $null
+
+          if ($report.testsuites) {
+            $suite = $report.testsuites
+          }
+          elseif ($report.testsuite) {
+            $suite = $report.testsuite
+          }
+
+          if (-not $suite) {
+            "### Test Results`nKon JUnit XML niet parsen." | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Encoding utf8 -Append
+            exit 0
+          }
+
+          $total = [int]($suite.tests)
+          $failures = [int]($suite.failures)
+          $errors = [int]($suite.errors)
+          $skipped = [int]($suite.skipped)
+          $passed = $total - $failures - $errors - $skipped
+
+          @(
+            "### Test Results"
+            "- Passed: $passed"
+            "- Failed: $failures"
+            "- Errors: $errors"
+            "- Skipped: $skipped"
+            "- Total: $total"
+          ) | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Encoding utf8 -Append
 
       - name: Stop app
         if: always()

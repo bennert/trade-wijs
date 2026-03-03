@@ -1,6 +1,8 @@
 param(
     [string]$BaseUrl = "http://127.0.0.1:3175",
     [string]$Spec = "tests/timeframe-buttons.spec.ts",
+    [string]$PlaywrightReporter = "list",
+    [string]$PlaywrightJunitOutputFile,
     [switch]$SkipPlaywright
 )
 
@@ -54,13 +56,36 @@ try {
     Write-Host "Playwright browsers installeren/controleren..."
     npx playwright install | Out-Host
 
+    $playwrightArgs = @("playwright", "test")
+    if ($PlaywrightReporter) {
+        $playwrightArgs += @("--reporter", $PlaywrightReporter)
+    }
+
+    if ($PlaywrightJunitOutputFile) {
+        $resolvedJunitOutputFile = if ([System.IO.Path]::IsPathRooted($PlaywrightJunitOutputFile)) {
+            $PlaywrightJunitOutputFile
+        }
+        else {
+            Join-Path $PSScriptRoot $PlaywrightJunitOutputFile
+        }
+
+        $junitDirectory = Split-Path -Path $resolvedJunitOutputFile -Parent
+        if ($junitDirectory) {
+            New-Item -ItemType Directory -Path $junitDirectory -Force | Out-Null
+        }
+
+        $env:PLAYWRIGHT_JUNIT_OUTPUT_FILE = $resolvedJunitOutputFile
+        Write-Host "JUnit output: $resolvedJunitOutputFile"
+    }
+
     $specPath = if ([System.IO.Path]::IsPathRooted($Spec)) { $Spec } else { Join-Path $PSScriptRoot $Spec }
     if (Test-Path $specPath) {
-        npx playwright test $Spec
+        $playwrightArgsWithSpec = $playwrightArgs + $Spec
+        & npx @playwrightArgsWithSpec
     }
     else {
         Write-Warning "Spec niet gevonden op '$specPath'. Alle Playwright tests worden uitgevoerd."
-        npx playwright test
+        & npx @playwrightArgs
     }
 }
 finally {
