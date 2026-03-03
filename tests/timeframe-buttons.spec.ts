@@ -2,7 +2,7 @@ import { expect, test } from '@playwright/test';
 
 const BASE_URL = process.env.BASE_URL ?? 'http://127.0.0.1:3175';
 
-test('timeframe knoppen worden getoond op de homepagina', async ({ page }) => {
+test('timeframe buttons are shown on the homepage', async ({ page }) => {
   const response = await page.goto(BASE_URL, { waitUntil: 'domcontentloaded' });
 
   expect(response).not.toBeNull();

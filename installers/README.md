@@ -2,7 +2,7 @@
 
 This folder contains installers that:
 
-1. Build and start the containers with `docker compose up -d --build`
+1. Build and start the containers with `docker compose up -d --build` (or `podman compose up -d --build` if Docker is unavailable)
 2. Configure automatic startup after reboot
 3. Ensure `.venv` exists and install/update Python packages from `requirements.txt` before startup
 
@@ -15,6 +15,7 @@ powershell -ExecutionPolicy Bypass -File .\installers\windows\install-trade-wijs
 ```
 
 Creates a Scheduled Task (`ONSTART`) to auto-start containers on system boot.
+Windows installer tries Docker first and falls back to Podman automatically.
 
 ## Linux
 

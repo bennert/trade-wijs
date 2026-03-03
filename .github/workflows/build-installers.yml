@@ -44,12 +44,12 @@ jobs:
           for ($attempt = 1; $attempt -le $maxAttempts; $attempt++) {
             try {
               Invoke-WebRequest -Uri "http://127.0.0.1:3175" -UseBasicParsing -TimeoutSec 5 | Out-Null
-              Write-Host "App is bereikbaar op http://127.0.0.1:3175"
+              Write-Host "App is reachable at http://127.0.0.1:3175"
               break
             }
             catch {
               if ($attempt -eq $maxAttempts) {
-                throw "App is niet gestart binnen de verwachte tijd."
+                throw "App did not start within the expected time."
               }
 
               Start-Sleep -Seconds 2
@@ -74,7 +74,7 @@ jobs:
         run: |
           $reportPath = Join-Path $PWD "test-results/playwright-junit.xml"
           if (-not (Test-Path $reportPath)) {
-            "### Test Results`nJUnit rapport niet gevonden op $reportPath" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Encoding utf8 -Append
+            "### Test Results`nJUnit report not found at $reportPath" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Encoding utf8 -Append
             exit 0
           }
 
@@ -89,7 +89,7 @@ jobs:
           }
 
           if (-not $suite) {
-            "### Test Results`nKon JUnit XML niet parsen." | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Encoding utf8 -Append
+            "### Test Results`nCould not parse JUnit XML." | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Encoding utf8 -Append
             exit 0
           }
 

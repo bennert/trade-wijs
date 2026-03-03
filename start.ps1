@@ -11,6 +11,7 @@ if (-not (Test-Path $helpersPath)) {
 . $helpersPath
 
 Add-UserPythonPath
+Write-Host "Selected container runtime: podman" -ForegroundColor Cyan
 
 if (-not (Ensure-VenvRequirements -ProjectRoot $PSScriptRoot)) {
     exit 1
