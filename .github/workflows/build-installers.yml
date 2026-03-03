@@ -130,6 +130,7 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Prepare package folder
+        if: matrix.os != 'windows-latest'
         shell: bash
         run: |
           mkdir -p dist/installers/linux dist/installers/macos dist/installers/windows
@@ -162,51 +163,11 @@ jobs:
           chmod +x dist/installers/macos/startup-trade-wijs.sh
           tar -czf trade-wijs-installer-macos.tar.gz -C dist .
 
-      - name: Package Windows installer
-        if: matrix.os == 'windows-latest'
-        shell: pwsh
-        run: |
-          New-Item -Path dist/installers/windows -ItemType Directory -Force | Out-Null
-          Copy-Item installers/windows/install-trade-wijs.ps1 dist/installers/windows/
-          Copy-Item installers/windows/startup-trade-wijs.ps1 dist/installers/windows/
-          Compress-Archive -Path dist/* -DestinationPath trade-wijs-installer-windows.zip -Force
-
       - name: Build Windows self-extracting installer
         if: matrix.os == 'windows-latest'
         shell: pwsh
         run: |
-          $sevenZip = Get-Command 7z.exe -ErrorAction SilentlyContinue
-          if (-not $sevenZip) {
-            choco install 7zip -y
-            $sevenZip = Get-Command 7z.exe -ErrorAction SilentlyContinue
-          }
-
-          if (-not $sevenZip) {
-            throw "7z.exe not found after installation attempt."
-          }
-
-          $sevenZipDir = Split-Path -Parent $sevenZip.Source
-          $sfxModulePath = Join-Path $sevenZipDir "7z.sfx"
-          if (-not (Test-Path $sfxModulePath)) {
-            throw "7z.sfx not found at $sfxModulePath"
-          }
-
-          & $sevenZip.Source a -t7z trade-wijs-installer-windows.7z .\dist\*
-
-          $sfxConfigPath = Join-Path $PWD "sfx-config.txt"
-          $sfxConfigLines = @(
-            ';!@Install@!UTF-8!'
-            'Title="Trade Wijs Installer"'
-            'RunProgram="powershell.exe -NoProfile -ExecutionPolicy Bypass -File installers\\windows\\install-trade-wijs.ps1"'
-            'GUIMode="2"'
-            ';!@InstallEnd@!'
-          )
-          $sfxConfigLines | Set-Content -Path $sfxConfigPath -Encoding UTF8
-
-          cmd /c "copy /b \"$sfxModulePath\" + \"$sfxConfigPath\" + \"$PWD\trade-wijs-installer-windows.7z\" \"$PWD\trade-wijs-installer-windows.exe\""
-
-          Remove-Item trade-wijs-installer-windows.7z -ErrorAction SilentlyContinue
-          Remove-Item $sfxConfigPath -ErrorAction SilentlyContinue
+          .\installers\windows\build-self-extracting-installer.ps1 -ProjectRoot . -DistPath .\dist -OutputDirectory .
 
       - name: Upload Linux artifact
         if: matrix.os == 'ubuntu-latest'
