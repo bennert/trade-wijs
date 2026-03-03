@@ -59,6 +59,9 @@ try {
         npm install -D @playwright/test @cucumber/cucumber | Out-Host
     }
 
+    Write-Host "Installing/checking Playwright browser binaries (chromium)..."
+    npx playwright install chromium | Out-Host
+
     $featurePath = if ([System.IO.Path]::IsPathRooted($Feature)) { $Feature } else { Join-Path $PSScriptRoot $Feature }
     $gherkinFeatureRoot = Join-Path $PSScriptRoot "tests/gherkin/features"
     $stepDefinitionsGlob = "tests/gherkin/steps/**/*.js"
