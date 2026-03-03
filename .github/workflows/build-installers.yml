@@ -132,38 +132,43 @@ jobs:
       - name: Prepare package folder
         shell: bash
         run: |
-          mkdir -p dist
+          mkdir -p dist/installers/linux dist/installers/macos dist/installers/windows
           cp docker-compose.yml dist/
+          cp Dockerfile dist/
+          cp requirements.txt dist/
+          cp app.py dist/
+          cp -r static dist/
+          cp -r templates dist/
+          cp ps-helpers.ps1 dist/
           cp installers/README.md dist/
 
       - name: Package Linux installer
         if: matrix.os == 'ubuntu-latest'
         shell: bash
         run: |
-          cp installers/linux/install-trade-wijs.sh dist/
-          chmod +x dist/install-trade-wijs.sh
+          cp installers/linux/install-trade-wijs.sh dist/installers/linux/
+          cp installers/linux/startup-trade-wijs.sh dist/installers/linux/
+          chmod +x dist/installers/linux/install-trade-wijs.sh
+          chmod +x dist/installers/linux/startup-trade-wijs.sh
           tar -czf trade-wijs-installer-linux.tar.gz -C dist .
 
       - name: Package macOS installer
         if: matrix.os == 'macos-latest'
         shell: bash
         run: |
-          cp installers/macos/install-trade-wijs.sh dist/
-          chmod +x dist/install-trade-wijs.sh
+          cp installers/macos/install-trade-wijs.sh dist/installers/macos/
+          cp installers/macos/startup-trade-wijs.sh dist/installers/macos/
+          chmod +x dist/installers/macos/install-trade-wijs.sh
+          chmod +x dist/installers/macos/startup-trade-wijs.sh
           tar -czf trade-wijs-installer-macos.tar.gz -C dist .
 
       - name: Package Windows installer
         if: matrix.os == 'windows-latest'
         shell: pwsh
         run: |
-          Copy-Item installers/windows/install-trade-wijs.ps1 dist/
-          Copy-Item installers/windows/startup-trade-wijs.ps1 dist/
-          Copy-Item ps-helpers.ps1 dist/
-          Copy-Item Dockerfile dist/
-          Copy-Item requirements.txt dist/
-          Copy-Item app.py dist/
-          Copy-Item static dist/static -Recurse
-          Copy-Item templates dist/templates -Recurse
+          New-Item -Path dist/installers/windows -ItemType Directory -Force | Out-Null
+          Copy-Item installers/windows/install-trade-wijs.ps1 dist/installers/windows/
+          Copy-Item installers/windows/startup-trade-wijs.ps1 dist/installers/windows/
           Compress-Archive -Path dist/* -DestinationPath trade-wijs-installer-windows.zip -Force
 
       - name: Upload Linux artifact
