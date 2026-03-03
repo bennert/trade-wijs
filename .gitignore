@@ -1,3 +1,5 @@
 .venv/
 node_modules/
 test-results/
+trade-wijs-installer-windows.*
+dist/
