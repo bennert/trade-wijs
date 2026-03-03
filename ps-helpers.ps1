@@ -77,14 +77,14 @@ function Ensure-VenvRequirements {
     }
 
     $venvPath = Join-Path $ProjectRoot ".venv"
-    $pythonLauncher = Get-PythonLauncher
-
-    if (-not $pythonLauncher) {
-        Write-Host "Python launcher not found (py/python/python3)." -ForegroundColor Red
-        return $false
-    }
 
     if (-not (Test-Path $venvPath)) {
+        $pythonLauncher = Get-PythonLauncher
+        if (-not $pythonLauncher) {
+            Write-Host "Python launcher not found (py/python/python3)." -ForegroundColor Red
+            return $false
+        }
+
         Write-Host "Creating virtual environment at $venvPath" -ForegroundColor Cyan
         & $pythonLauncher.Executable @($pythonLauncher.PrefixArgs) -m venv $venvPath
         if ($LASTEXITCODE -ne 0) {

@@ -39,6 +39,8 @@ py -m pip install --user podman-compose
 
 Or use the included PowerShell scripts (they apply PATH fixes automatically):
 
+- On Windows installer/startup scripts, Podman compose automatically falls back to `.venv` (`python -m podman_compose`) when no compose provider is found in PATH.
+
 - Ensure `.venv` exists and install/update packages from `requirements.txt` when it changes
 
 Windows:

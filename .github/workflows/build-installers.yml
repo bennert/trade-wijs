@@ -158,6 +158,12 @@ jobs:
         run: |
           Copy-Item installers/windows/install-trade-wijs.ps1 dist/
           Copy-Item installers/windows/startup-trade-wijs.ps1 dist/
+          Copy-Item ps-helpers.ps1 dist/
+          Copy-Item Dockerfile dist/
+          Copy-Item requirements.txt dist/
+          Copy-Item app.py dist/
+          Copy-Item static dist/static -Recurse
+          Copy-Item templates dist/templates -Recurse
           Compress-Archive -Path dist/* -DestinationPath trade-wijs-installer-windows.zip -Force
 
       - name: Upload Linux artifact

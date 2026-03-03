@@ -16,6 +16,7 @@ powershell -ExecutionPolicy Bypass -File .\installers\windows\install-trade-wijs
 
 Creates a Scheduled Task (`ONSTART`) to auto-start containers on system boot.
 Windows installer tries Docker first and falls back to Podman automatically.
+If Podman has no compose provider in PATH, installer/startup falls back to `.venv` via `python -m podman_compose`.
 
 ## Linux
 
