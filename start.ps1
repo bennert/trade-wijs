@@ -71,19 +71,19 @@ $deadline = (Get-Date).AddSeconds($timeoutSeconds)
 $isReady = $false
 
 while ((Get-Date) -lt $deadline) {
-    Receive-Job -Job $logJob -Keep -ErrorAction SilentlyContinue | ForEach-Object {
-        Write-Host $_
-    }
-
     if (Test-TcpPortOpen -HostName $appHost -Port $appPort) {
         $isReady = $true
         break
     }
 
+    Receive-Job -Job $logJob -ErrorAction SilentlyContinue | ForEach-Object {
+        Write-Host $_
+    }
+
     Start-Sleep -Milliseconds $pollIntervalMs
 }
 
-Receive-Job -Job $logJob -Keep -ErrorAction SilentlyContinue | ForEach-Object {
+Receive-Job -Job $logJob -ErrorAction SilentlyContinue | ForEach-Object {
     Write-Host $_
 }
 
