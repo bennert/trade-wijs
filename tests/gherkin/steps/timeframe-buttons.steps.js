@@ -69,6 +69,11 @@ When('I click the horizontal line button', async function () {
 });
 
 Then('the horizontal line button is active', async function () {
+  await this.page.waitForFunction(() => {
+    const button = document.querySelector('#horizontal-line-btn');
+    return Boolean(button && button.classList.contains('is-active'));
+  }, null, { timeout: 5000 });
+
   const className = await this.page.locator('#horizontal-line-btn').getAttribute('class');
   assert.match(className ?? '', /is-active/, 'Horizontal Line knop heeft geen actieve omlijning.');
 });
