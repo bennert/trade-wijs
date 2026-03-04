@@ -43,6 +43,8 @@ Or use the included PowerShell scripts (they apply PATH fixes automatically):
 
 - Ensure `.venv` exists and install/update packages from `requirements.txt` when it changes
 
+- `start.ps1`, `stop.ps1`, and `logs.ps1` suppress the external compose provider banner by setting `PODMAN_COMPOSE_WARNING_LOGS=false` for the script process.
+
 Windows:
 ```powershell
 .\start.ps1
