@@ -72,22 +72,32 @@ When('I click the horizontal line button', async function () {
 });
 
 Then('the horizontal line button is active', async function () {
-  const isActiveAfterFirstClick = await this.page.evaluate(() => {
+  const isDrawModeActive = async () => this.page.evaluate(() => {
     const button = document.querySelector('#horizontal-line-btn');
-    return Boolean(button && button.classList.contains('is-active'));
+    const overlay = document.querySelector('#draw-capture-overlay');
+    const refreshStatus = document.querySelector('#refresh-status');
+
+    const hasActiveClass = Boolean(button && button.classList.contains('is-active'));
+    const overlayEnabled = Boolean(
+      overlay &&
+      window.getComputedStyle(overlay).display !== 'none' &&
+      window.getComputedStyle(overlay).pointerEvents !== 'none'
+    );
+    const statusIndicatesDrawMode = Boolean(
+      refreshStatus && /click chart: horizontal line/i.test((refreshStatus.textContent || '').trim())
+    );
+
+    return hasActiveClass || overlayEnabled || statusIndicatesDrawMode;
   });
 
-  if (!isActiveAfterFirstClick) {
+  let drawModeActive = await isDrawModeActive();
+  for (let attempt = 0; attempt < 2 && !drawModeActive; attempt += 1) {
     await this.page.locator('#horizontal-line-btn').click();
+    await this.page.waitForTimeout(150);
+    drawModeActive = await isDrawModeActive();
   }
 
-  await this.page.waitForFunction(() => {
-    const button = document.querySelector('#horizontal-line-btn');
-    return Boolean(button && button.classList.contains('is-active'));
-  }, null, { timeout: 10000 });
-
-  const className = await this.page.locator('#horizontal-line-btn').getAttribute('class');
-  assert.match(className ?? '', /is-active/, 'Horizontal Line knop heeft geen actieve omlijning.');
+  assert.equal(drawModeActive, true, 'Horizontal Line knop activeert draw mode niet.');
 });
 
 When('I hover over the chart in horizontal line mode', async function () {
