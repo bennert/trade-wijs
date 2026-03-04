@@ -58,11 +58,11 @@ powershell -ExecutionPolicy Bypass -File .\installers\windows\install-trade-wijs
 Run the Gherkin feature test:
 
 ```powershell
-.\test.ps1 -Feature tests/gherkin/features/timeframe-buttons.feature
+.\tests.ps1 -Feature tests/gherkin/features/timeframe-buttons.feature
 ```
 
 Skip Gherkin and only run Python import smoke test:
 
 ```powershell
-.\test.ps1 -SkipGherkin
+.\tests.ps1 -SkipGherkin
 ```

@@ -1,6 +1,6 @@
 param(
     [string]$BaseUrl = "http://127.0.0.1:3175",
-    [string]$Feature = "tests/gherkin/features/timeframe-buttons.feature",
+    [string]$Feature = "tests/gherkin/features",
     [string]$GherkinReporter = "progress",
     [Alias("PlaywrightReporter")]
     [string]$LegacyReporter,

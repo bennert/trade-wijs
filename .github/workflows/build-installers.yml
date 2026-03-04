@@ -55,7 +55,7 @@ jobs:
 
       - name: Run test script
         shell: pwsh
-        run: .\test.ps1 -PlaywrightReporter "line,junit" -PlaywrightJunitOutputFile "test-results/playwright-junit.xml"
+        run: .\tests.ps1 -PlaywrightReporter "line,junit" -PlaywrightJunitOutputFile "test-results/playwright-junit.xml"
 
       - name: Upload Playwright test results
         if: always()

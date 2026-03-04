@@ -89,22 +89,22 @@ pwsh ./logs.ps1
 Run all checks:
 
 ```powershell
-.\test.ps1
+.\tests.ps1
 ```
 
 Only run the Python import smoke test:
 
 ```powershell
-.\test.ps1 -SkipGherkin
+.\tests.ps1 -SkipGherkin
 ```
 
 Run a specific Gherkin feature:
 
 ```powershell
-.\test.ps1 -Feature tests/gherkin/features/timeframe-buttons.feature
+.\tests.ps1 -Feature tests/gherkin/features/timeframe-buttons.feature
 ```
 
-`test.ps1` now bootstraps Cucumber automatically when needed:
+`tests.ps1` is the main test entrypoint and bootstraps Cucumber automatically when needed:
 
 - Creates `package.json` with `npm init -y` if missing
 - Installs `@cucumber/cucumber` and `@playwright/test` if not present
