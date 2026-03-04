@@ -7,6 +7,7 @@ if (-not (Test-Path $helpersPath)) {
 . $helpersPath
 
 Add-UserPythonPath
+$env:PODMAN_COMPOSE_WARNING_LOGS = "false"
 Write-Host "Selected container runtime: podman" -ForegroundColor Cyan
 
 if (-not (Test-PodmanAvailable)) {
