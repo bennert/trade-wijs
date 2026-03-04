@@ -120,11 +120,20 @@ CI note:
 
 - Topbar
 - Left watchlist
-- Middle chart area (placeholder)
+- Middle chart area with interactive chart
+- Horizontal Line drawing tool (single click on chart)
+- Undo for drawn horizontal lines
+- Maximum of 20 horizontal lines (oldest line is removed first)
 - Right order/position panels (placeholders)
 - Bottom tab bar
 
 There is no trading functionality in this version yet.
+
+### Gebruik: Horizontal Line
+
+- Klik op `Horizontal Line` in de chart toolbar
+- Klik in de chart om een horizontale lijn te plaatsen
+- Klik op `Undo` (of gebruik `Backspace`/`Delete`) om de laatste lijn te verwijderen
 
 ## Installer + auto-start (Windows, Linux, macOS)
 

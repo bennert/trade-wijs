@@ -178,6 +178,7 @@ body {
   margin-left: auto;
   display: flex;
   align-items: center;
+  gap: 6px;
 }
 
 .ohlc-display {
@@ -218,6 +219,11 @@ body {
 .draw-tool-btn.is-active {
   color: var(--text);
   border-color: var(--text);
+}
+
+.draw-tool-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
 }
 
 .timeframe-btn.is-active {

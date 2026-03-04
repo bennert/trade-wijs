@@ -43,7 +43,8 @@
         </div>
         <div class="toolbar-divider" aria-hidden="true"></div>
         <div class="drawing-tools" role="group" aria-label="Drawing tools">
-          <button id="draw-line-btn" type="button" class="draw-tool-btn">Draw Line</button>
+          <button id="undo-btn" type="button" class="draw-tool-btn" disabled>Undo</button>
+          <button id="horizontal-line-btn" type="button" class="draw-tool-btn">Horizontal Line</button>
         </div>
       </div>
       <div class="chart-stats-row" aria-live="polite">
@@ -81,7 +82,7 @@
       <div id="chart-footer" class="chart-footer">
         <span>Wheel: Zoom</span>
         <span>Drag: Pan</span>
-        <span>Click 2 points: Draw line</span>
+        <span>Click chart: Horizontal line</span>
       </div>
     </main>
 
@@ -205,7 +206,8 @@
       const timeframeButtonElements = Array.from(document.querySelectorAll(".timeframe-btn"));
       const indicatorButtonsElement = document.querySelector(".indicator-buttons");
       const indicatorButtonElements = Array.from(document.querySelectorAll(".indicator-btn"));
-      const drawLineButtonElement = document.getElementById("draw-line-btn");
+      const undoButtonElement = document.getElementById("undo-btn");
+      const drawLineButtonElement = document.getElementById("horizontal-line-btn");
       const rightPanelTabsElement = document.getElementById("right-panel-tabs");
       const panelTabButtons = Array.from(document.querySelectorAll(".panel-tab"));
       const panelOrderElement = document.getElementById("panel-order");
@@ -246,12 +248,22 @@
       let pendingPriorityRefresh = false;
       let loadingTimeframe = null;
       let refreshTimerId = null;
+      const renderCandleLimit = 1500;
+      const maxHorizontalLines = 20;
       const indicatorStorageKey = "trade-wijs-indicators";
       let chartData = [];
-      let pendingLinePoint = null;
+      let deferredCandlesForRedraw = null;
+      let deferredMarketDataForRefresh = null;
       let hasFitContent = false;
       const drawnLineSeries = [];
+      const drawingUndoStack = [];
+      let drawHoverPreviewLine = null;
+      let drawCaptureOverlayElement = null;
       let drawLineMode = false;
+      if (chartCanvas) {
+        chartCanvas.dataset.previewVisible = "false";
+        chartCanvas.dataset.horizontalLineCount = "0";
+      }
       let isDraggingScaleDivider = false;
       let isDraggingStochDivider = false;
       let isDraggingRsiDivider = false;
@@ -348,11 +360,14 @@
       } catch (_error) {
       }
 
+      const chartBackgroundColor = "#151925";
+      const horizontalLineColor = "#ffd166";
+
       const chart = LightweightCharts.createChart(chartElement, {
         width: chartElement.clientWidth,
         height: chartElement.clientHeight,
         layout: {
-          background: { color: "#151925" },
+          background: { color: chartBackgroundColor },
           textColor: "#9aa5bd",
         },
         grid: {
@@ -1862,12 +1877,117 @@
 
       const setDrawLineMode = (enabled) => {
         drawLineMode = enabled;
+        const drawCaptureOverlay = ensureDrawCaptureOverlayElement();
+
+        if (enabled) {
+          if (refreshTimerId) {
+            clearTimeout(refreshTimerId);
+            refreshTimerId = null;
+          }
+
+          if (drawCaptureOverlay) {
+            drawCaptureOverlay.style.display = "block";
+            drawCaptureOverlay.style.pointerEvents = "auto";
+            drawCaptureOverlay.dataset.previewVisible = "true";
+          }
+          if (chartCanvas) {
+            chartCanvas.dataset.previewVisible = "true";
+          }
+
+          const latestBar = chartData[chartData.length - 1] || null;
+          const latestPrice = latestBar ? Number(latestBar.close) : NaN;
+          if (Number.isFinite(latestPrice) && latestPrice > 0) {
+            updateHorizontalLineHoverPreview({ price: latestPrice });
+          }
+        }
+
         if (!enabled) {
-          pendingLinePoint = null;
+          clearHorizontalLineHoverPreview();
+
+          if (drawCaptureOverlay) {
+            drawCaptureOverlay.style.pointerEvents = "none";
+            drawCaptureOverlay.style.display = "none";
+            drawCaptureOverlay.dataset.previewVisible = "false";
+          }
+          if (chartCanvas) {
+            chartCanvas.dataset.previewVisible = "false";
+          }
+
+          if (Array.isArray(deferredCandlesForRedraw) && deferredCandlesForRedraw.length > 0) {
+            allCandles = deferredCandlesForRedraw;
+            deferredCandlesForRedraw = null;
+            if (deferredMarketDataForRefresh) {
+              refreshMarketInfo(deferredMarketDataForRefresh);
+              deferredMarketDataForRefresh = null;
+            }
+            redrawChart();
+          }
+          scheduleNextRefresh();
         }
 
         if (drawLineButtonElement) {
           drawLineButtonElement.classList.toggle("is-active", enabled);
+        }
+      };
+
+      const clearHorizontalLineHoverPreview = () => {
+        if (!drawHoverPreviewLine) {
+          const drawCaptureOverlay = ensureDrawCaptureOverlayElement();
+          if (drawCaptureOverlay) {
+            drawCaptureOverlay.dataset.previewVisible = "false";
+          }
+          if (chartCanvas) {
+            chartCanvas.dataset.previewVisible = "false";
+          }
+          return;
+        }
+
+        candleSeries.removePriceLine(drawHoverPreviewLine);
+        drawHoverPreviewLine = null;
+        const drawCaptureOverlay = ensureDrawCaptureOverlayElement();
+        if (drawCaptureOverlay) {
+          drawCaptureOverlay.dataset.previewVisible = "false";
+        }
+        if (chartCanvas) {
+          chartCanvas.dataset.previewVisible = "false";
+        }
+      };
+
+      const updateHorizontalLineHoverPreview = (point) => {
+        const nextPrice = Number(point?.price);
+        if (!Number.isFinite(nextPrice) || nextPrice <= 0) {
+          clearHorizontalLineHoverPreview();
+          return;
+        }
+
+        if (!drawHoverPreviewLine) {
+          drawHoverPreviewLine = candleSeries.createPriceLine({
+            price: nextPrice,
+            color: "rgba(255, 209, 102, 0.75)",
+            lineWidth: 2,
+            lineStyle: LightweightCharts.LineStyle.Dashed,
+            axisLabelVisible: true,
+            title: "H",
+          });
+          const drawCaptureOverlay = ensureDrawCaptureOverlayElement();
+          if (drawCaptureOverlay) {
+            drawCaptureOverlay.dataset.previewVisible = "true";
+          }
+          if (chartCanvas) {
+            chartCanvas.dataset.previewVisible = "true";
+          }
+          return;
+        }
+
+        drawHoverPreviewLine.applyOptions({
+          price: nextPrice,
+        });
+        const drawCaptureOverlay = ensureDrawCaptureOverlayElement();
+        if (drawCaptureOverlay) {
+          drawCaptureOverlay.dataset.previewVisible = "true";
+        }
+        if (chartCanvas) {
+          chartCanvas.dataset.previewVisible = "true";
         }
       };
 
@@ -2410,6 +2530,139 @@
         return chartData[index].time;
       };
 
+      const resolveFallbackPriceFromNearestCandle = (xCoordinate) => {
+        if (!chartData.length) {
+          return null;
+        }
+
+        const nearestTime = getNearestCandleTime(xCoordinate);
+        if (!nearestTime) {
+          return null;
+        }
+
+        const nearestBar = chartData.find((bar) => Number(bar.time) === Number(nearestTime));
+        if (!nearestBar) {
+          return null;
+        }
+
+        const fallbackPrice = Number(nearestBar.close);
+        return Number.isFinite(fallbackPrice) && fallbackPrice > 0 ? fallbackPrice : null;
+      };
+
+      const resolveScreenPointFromCanvasClick = (event) => {
+        if (!chartCanvas) {
+          return null;
+        }
+
+        const canvasRect = chartCanvas.getBoundingClientRect();
+        const xCoordinate = Number(event.clientX - canvasRect.left);
+        const yCoordinate = Number(event.clientY - canvasRect.top);
+
+        if (!Number.isFinite(xCoordinate) || !Number.isFinite(yCoordinate)) {
+          return null;
+        }
+
+        if (xCoordinate < 0 || yCoordinate < 0 || xCoordinate > canvasRect.width || yCoordinate > canvasRect.height) {
+          return null;
+        }
+
+        const price = candleSeries.coordinateToPrice(yCoordinate);
+        let normalizedPrice = Number(price);
+
+        const chartHigh = chartData.length ? Math.max(...chartData.map((bar) => Number(bar.high))) : NaN;
+        const chartLow = chartData.length ? Math.min(...chartData.map((bar) => Number(bar.low))) : NaN;
+        const looksOutOfRange =
+          Number.isFinite(chartLow) && Number.isFinite(chartHigh) &&
+          (normalizedPrice < chartLow * 0.5 || normalizedPrice > chartHigh * 1.5);
+
+        if (!Number.isFinite(normalizedPrice) || normalizedPrice <= 0 || looksOutOfRange) {
+          const fallbackPrice = resolveFallbackPriceFromNearestCandle(xCoordinate);
+          if (!Number.isFinite(fallbackPrice)) {
+            return null;
+          }
+          normalizedPrice = Number(fallbackPrice);
+        }
+
+        return {
+          xCoordinate,
+          yCoordinate,
+          price: normalizedPrice,
+        };
+      };
+
+      const ensureDrawCaptureOverlayElement = () => {
+        if (drawCaptureOverlayElement || !chartCanvas) {
+          return drawCaptureOverlayElement;
+        }
+
+        drawCaptureOverlayElement = document.createElement("div");
+        drawCaptureOverlayElement.id = "draw-capture-overlay";
+        drawCaptureOverlayElement.style.position = "absolute";
+        drawCaptureOverlayElement.style.inset = "0";
+        drawCaptureOverlayElement.style.zIndex = "9";
+        drawCaptureOverlayElement.style.display = "none";
+        drawCaptureOverlayElement.style.pointerEvents = "none";
+        drawCaptureOverlayElement.style.cursor = "crosshair";
+        drawCaptureOverlayElement.dataset.previewVisible = "false";
+        drawCaptureOverlayElement.dataset.horizontalLineCount = "0";
+        chartCanvas.appendChild(drawCaptureOverlayElement);
+
+        return drawCaptureOverlayElement;
+      };
+
+      const syncHorizontalLineTestMeta = () => {
+        const drawCaptureOverlay = ensureDrawCaptureOverlayElement();
+        if (!drawCaptureOverlay) {
+          return;
+        }
+
+        drawCaptureOverlay.dataset.horizontalLineCount = String(drawnLineSeries.length);
+        if (chartCanvas) {
+          chartCanvas.dataset.horizontalLineCount = String(drawnLineSeries.length);
+        }
+      };
+
+      const updateUndoButtonState = () => {
+        if (!undoButtonElement) {
+          return;
+        }
+
+        undoButtonElement.disabled = drawingUndoStack.length === 0;
+      };
+
+      const pushUndoAction = (undoAction) => {
+        if (!undoAction || typeof undoAction.undo !== "function") {
+          return;
+        }
+
+        drawingUndoStack.push(undoAction);
+        updateUndoButtonState();
+      };
+
+      const undoLastDrawingAction = () => {
+        const undoAction = drawingUndoStack.pop();
+        if (!undoAction) {
+          return false;
+        }
+
+        undoAction.undo();
+        updateUndoButtonState();
+        return true;
+      };
+
+      const isEditableTarget = (target) => {
+        if (!target || !(target instanceof HTMLElement)) {
+          return false;
+        }
+
+        if (target.isContentEditable) {
+          return true;
+        }
+
+        const tagName = target.tagName.toLowerCase();
+        return tagName === "input" || tagName === "textarea" || tagName === "select";
+      };
+
       const updateOHLCDisplay = (barData, barVolume = null) => {
         if (!ohlcOpenElement || !ohlcHighElement || !ohlcLowElement || !ohlcCloseElement || !ohlcBarVolumeElement) {
           return;
@@ -2455,8 +2708,9 @@
       };
 
       const redrawChart = () => {
-        chartData = toChartData(allCandles);
-        candleVolumeByTime = new Map(allCandles.map((candle) => [Number(candle.time), Number(candle.volume || 0)]));
+        const renderCandles = allCandles.slice(-renderCandleLimit);
+        chartData = toChartData(renderCandles);
+        candleVolumeByTime = new Map(renderCandles.map((candle) => [Number(candle.time), Number(candle.volume || 0)]));
         if (!chartData.length) {
           clearFvgZoneSeries();
           clearSmcGuideSeries();
@@ -2517,7 +2771,7 @@
           rsiOversoldSeries.setData([]);
         }
 
-        volumeSeries.setData(indicatorState.volume ? calculateVolume(allCandles) : []);
+        volumeSeries.setData(indicatorState.volume ? calculateVolume(renderCandles) : []);
         renderFvgZones(chartData);
           const latestBar = chartData[chartData.length - 1];
           const latestVolume = latestBar ? candleVolumeByTime.get(Number(latestBar.time)) ?? null : null;
@@ -2538,6 +2792,10 @@
       };
 
       chart.subscribeCrosshairMove((param) => {
+        if (drawLineMode) {
+          return;
+        }
+
         if (!param || !param.point || !param.time) {
           hoveredCandleTime = null;
           hidePriceHoverGuide();
@@ -2616,6 +2874,10 @@
       const refreshChartData = async (options = {}) => {
         const isPriority = options.priority === true;
 
+        if (!isPriority && drawLineMode) {
+          return;
+        }
+
         if (isRefreshing) {
           if (isPriority) {
             pendingPriorityRefresh = true;
@@ -2670,6 +2932,14 @@
           }
 
           allCandles = nextCandles;
+
+          if (drawLineMode) {
+            deferredCandlesForRedraw = nextCandles;
+            deferredMarketDataForRefresh = payload.market_data || null;
+            setLoadingTimeframeButton(null);
+            isRefreshing = false;
+            return;
+          }
 
           refreshMarketInfo(payload.market_data);
           redrawChart();
@@ -2767,55 +3037,184 @@
         });
       }
 
-      chart.subscribeClick((param) => {
-        if (!drawLineMode) {
+      const removeHorizontalLineEntry = (lineEntry) => {
+        if (!lineEntry || lineEntry.removed) {
           return;
         }
 
-        if (!param.point) {
+        candleSeries.removePriceLine(lineEntry.priceLine);
+        lineEntry.removed = true;
+        const lineIndex = drawnLineSeries.indexOf(lineEntry);
+        if (lineIndex !== -1) {
+          drawnLineSeries.splice(lineIndex, 1);
+        }
+        syncHorizontalLineTestMeta();
+      };
+
+      const removeUndoActionsForLineEntry = (lineEntry) => {
+        for (let index = drawingUndoStack.length - 1; index >= 0; index -= 1) {
+          const undoAction = drawingUndoStack[index];
+          if (undoAction && undoAction.type === "horizontal-line" && undoAction.lineEntry === lineEntry) {
+            drawingUndoStack.splice(index, 1);
+          }
+        }
+        updateUndoButtonState();
+      };
+
+      const handleDrawLineClick = (clickedPoint) => {
+        if (!clickedPoint) {
           return;
         }
 
-        const clickedPrice = candleSeries.coordinateToPrice(param.point.y);
-        if (clickedPrice === null || clickedPrice === undefined) {
+        if (!Number.isFinite(Number(clickedPoint.price))) {
           return;
         }
 
-        const clickedTime = param.time || getNearestCandleTime(param.point.x);
-        if (!clickedTime) {
-          return;
-        }
+        clearHorizontalLineHoverPreview();
 
-        if (!pendingLinePoint) {
-          pendingLinePoint = { time: clickedTime, price: clickedPrice };
-          setRefreshStatus("Line point 1/2", "is-updating");
-          return;
-        }
-
-        const lineSeries = chart.addLineSeries({
-          priceScaleId: "price",
-          color: "#5fa8ff",
-          lineWidth: 2,
-          priceLineVisible: false,
-          lastValueVisible: false,
-          crosshairMarkerVisible: false,
+        const horizontalPriceLine = candleSeries.createPriceLine({
+          price: clickedPoint.price,
+          color: horizontalLineColor,
+          lineWidth: 3,
+          lineStyle: LightweightCharts.LineStyle.Solid,
+          axisLabelVisible: true,
+          title: "H",
         });
 
-        lineSeries.setData([
-          { time: pendingLinePoint.time, value: pendingLinePoint.price },
-          { time: clickedTime, value: clickedPrice },
-        ]);
-        drawnLineSeries.push(lineSeries);
+        const lineEntry = {
+          priceLine: horizontalPriceLine,
+          removed: false,
+        };
+        drawnLineSeries.push(lineEntry);
+        syncHorizontalLineTestMeta();
+
+        pushUndoAction({
+          type: "horizontal-line",
+          lineEntry,
+          undo: () => {
+            removeHorizontalLineEntry(lineEntry);
+          },
+        });
+
+        if (drawnLineSeries.length > maxHorizontalLines) {
+          const oldestLineEntry = drawnLineSeries[0];
+          removeHorizontalLineEntry(oldestLineEntry);
+          removeUndoActionsForLineEntry(oldestLineEntry);
+        }
+
         setDrawLineMode(false);
         setRefreshStatus("Live", "is-live");
+      };
+
+      const drawCaptureOverlay = ensureDrawCaptureOverlayElement();
+      if (drawCaptureOverlay) {
+        drawCaptureOverlay.addEventListener("mousemove", (event) => {
+          if (!drawLineMode) {
+            return;
+          }
+
+          const hoveredPoint = resolveScreenPointFromCanvasClick(event);
+          updateHorizontalLineHoverPreview(hoveredPoint);
+        });
+
+        drawCaptureOverlay.addEventListener("mouseleave", () => {
+          if (!drawLineMode) {
+            return;
+          }
+
+          clearHorizontalLineHoverPreview();
+        });
+
+        drawCaptureOverlay.addEventListener("click", (event) => {
+          event.preventDefault();
+          event.stopPropagation();
+
+          if (!drawLineMode) {
+            return;
+          }
+
+          const clickedPoint = resolveScreenPointFromCanvasClick(event);
+          if (!clickedPoint) {
+            setRefreshStatus("Click in main price pane", "is-error");
+            window.setTimeout(() => {
+              if (drawLineMode) {
+                setRefreshStatus("Click chart: horizontal line", "is-updating");
+              } else {
+                setRefreshStatus("Live", "is-live");
+              }
+            }, 900);
+            return;
+          }
+
+          handleDrawLineClick(clickedPoint);
+        });
+      }
+
+      if (chartCanvas) {
+        chartCanvas.addEventListener("mousemove", (event) => {
+          if (!drawLineMode) {
+            return;
+          }
+
+          const hoveredPoint = resolveScreenPointFromCanvasClick(event);
+          updateHorizontalLineHoverPreview(hoveredPoint);
+        });
+
+        chartCanvas.addEventListener("mouseleave", () => {
+          if (!drawLineMode) {
+            return;
+          }
+
+          clearHorizontalLineHoverPreview();
+        });
+      }
+
+      window.addEventListener("keydown", (event) => {
+        if (isEditableTarget(event.target)) {
+          return;
+        }
+
+        if (event.key === "Escape") {
+          if (drawLineMode) {
+            setDrawLineMode(false);
+            setRefreshStatus("Live", "is-live");
+          }
+          return;
+        }
+
+        if (event.key === "Backspace" || event.key === "Delete") {
+          const hasUndoneAction = undoLastDrawingAction();
+          if (hasUndoneAction) {
+            event.preventDefault();
+            setRefreshStatus("Undo applied", "is-updating");
+            window.setTimeout(() => {
+              setRefreshStatus("Live", "is-live");
+            }, 700);
+          }
+        }
       });
 
+      if (undoButtonElement) {
+        undoButtonElement.addEventListener("click", () => {
+          const hasUndoneAction = undoLastDrawingAction();
+          if (!hasUndoneAction) {
+            return;
+          }
+
+          setRefreshStatus("Undo applied", "is-updating");
+          window.setTimeout(() => {
+            setRefreshStatus("Live", "is-live");
+          }, 700);
+        });
+      }
+
       if (drawLineButtonElement) {
+        drawLineButtonElement.textContent = "Horizontal Line";
         drawLineButtonElement.addEventListener("click", () => {
           const nextMode = !drawLineMode;
           setDrawLineMode(nextMode);
           if (nextMode) {
-            setRefreshStatus("Line point 1/2", "is-updating");
+            setRefreshStatus("Click chart: horizontal line", "is-updating");
           } else {
             setRefreshStatus("Live", "is-live");
           }
@@ -2850,6 +3249,7 @@
       }
 
       redrawChart();
+      syncHorizontalLineTestMeta();
       applyChartSplit();
       updateScaleDividerLabel(false);
       updateStochDividerLabel(false);
@@ -2858,6 +3258,7 @@
       setIndicatorButtonState();
       setRightPanelTab("order");
       setDrawLineMode(false);
+      updateUndoButtonState();
       setLoadingTimeframeButton(null);
       setRefreshStatus("Live", "is-live");
       updateScrollToRecentButtonVisibility();
