@@ -28,7 +28,11 @@ When('I open the homepage', async function () {
     timeout: 20000,
   });
   await this.page.locator('#tv-chart').waitFor({ state: 'visible', timeout: 20000 });
-  await this.page.locator('#refresh-status.is-live').waitFor({ state: 'visible', timeout: 20000 });
+  await this.page.locator('#refresh-status').waitFor({ state: 'visible', timeout: 20000 });
+  await this.page.waitForFunction(() => {
+    const chartCanvas = document.querySelector('.chart-canvas');
+    return Boolean(chartCanvas && chartCanvas.dataset && typeof chartCanvas.dataset.previewVisible === 'string');
+  }, null, { timeout: 20000 });
 });
 
 Then('the page title is visible', async function () {
