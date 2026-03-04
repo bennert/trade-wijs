@@ -93,7 +93,8 @@ try {
             New-Item -ItemType Directory -Path $junitDirectory -Force | Out-Null
         }
 
-        $cucumberBaseArgs += @("--format", "junit:$resolvedJunitPath")
+        $junitFormatArgument = '"junit":"{0}"' -f $resolvedJunitPath
+        $cucumberBaseArgs += @("--format", $junitFormatArgument)
         Write-Host "JUnit output: $resolvedJunitPath"
     }
 

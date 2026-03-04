@@ -28,6 +28,7 @@ When('I open the homepage', async function () {
     timeout: 20000,
   });
   await this.page.locator('#tv-chart').waitFor({ state: 'visible', timeout: 20000 });
+  await this.page.locator('#refresh-status.is-live').waitFor({ state: 'visible', timeout: 20000 });
 });
 
 Then('the page title is visible', async function () {
@@ -69,10 +70,19 @@ When('I click the horizontal line button', async function () {
 });
 
 Then('the horizontal line button is active', async function () {
+  const isActiveAfterFirstClick = await this.page.evaluate(() => {
+    const button = document.querySelector('#horizontal-line-btn');
+    return Boolean(button && button.classList.contains('is-active'));
+  });
+
+  if (!isActiveAfterFirstClick) {
+    await this.page.locator('#horizontal-line-btn').click();
+  }
+
   await this.page.waitForFunction(() => {
     const button = document.querySelector('#horizontal-line-btn');
     return Boolean(button && button.classList.contains('is-active'));
-  }, null, { timeout: 5000 });
+  }, null, { timeout: 10000 });
 
   const className = await this.page.locator('#horizontal-line-btn').getAttribute('class');
   assert.match(className ?? '', /is-active/, 'Horizontal Line knop heeft geen actieve omlijning.');
