@@ -158,15 +158,18 @@ function Invoke-PodmanCommand {
         [string[]]$Arguments
     )
 
-    $commandOutput = & podman @Arguments 2>&1
-    $commandExitCode = $LASTEXITCODE
+    $outputLines = New-Object System.Collections.Generic.List[string]
 
-    if ($commandOutput) {
-        $commandOutput | ForEach-Object { Write-Host $_ }
+    & podman @Arguments 2>&1 | ForEach-Object {
+        $line = $_.ToString()
+        $outputLines.Add($line) | Out-Null
+        Write-Host $line
     }
 
+    $commandExitCode = $LASTEXITCODE
+
     if ($commandExitCode -ne 0) {
-        $combinedOutput = ($commandOutput | ForEach-Object { $_.ToString() }) -join "`n"
+        $combinedOutput = $outputLines -join "`n"
         if ($combinedOutput -match "podman-compose|compose provider|compose was not found|unknown command.+compose") {
             Show-ComposeProviderInstallHint
         }

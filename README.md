@@ -54,18 +54,7 @@ Linux/macOS (PowerShell 7+):
 pwsh ./start.ps1
 ```
 
-To start in detached mode:
-
-Windows:
-```powershell
-.\start.ps1 -Detach
-```
-
-Linux/macOS:
-
-```bash
-pwsh ./start.ps1 -Detach
-```
+`start.ps1` always runs in detached mode, streams startup logs while waiting, and reports whether the app is reachable at `http://localhost:3175`.
 
 Stop:
 
