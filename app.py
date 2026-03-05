@@ -1,5 +1,6 @@
 """ Trade wijs web app main module. """
 from datetime import datetime, timezone
+import math
 import re
 import subprocess
 import time
@@ -13,6 +14,69 @@ MAX_CANDLES = 5000
 CACHE_TTL_SECONDS = 20
 _ohlcv_cache = {}
 SUPPORTED_TIMEFRAMES = ("1m", "3m", "5m", "15m", "1h", "4h", "1d", "1w", "1M")
+
+
+def _timeframe_to_seconds(timeframe):
+    units = {
+        "m": 60,
+        "h": 3600,
+        "d": 86400,
+        "w": 604800,
+        "M": 2592000,
+    }
+    if not timeframe or len(timeframe) < 2:
+        return 60
+
+    number = timeframe[:-1]
+    unit = timeframe[-1]
+    if not number.isdigit() or unit not in units:
+        return 60
+
+    return int(number) * units[unit]
+
+
+def _build_fallback_candles(timeframe, count=600):
+    safe_count = max(50, min(int(count), MAX_CANDLES))
+    timeframe_seconds = _timeframe_to_seconds(timeframe)
+    now_seconds = int(time.time())
+    aligned_now = now_seconds - (now_seconds % timeframe_seconds)
+    base_price = 100_000.0
+    candles = []
+    previous_close = base_price
+
+    for bar_index in range(safe_count):
+        bar_time = aligned_now - ((safe_count - bar_index - 1) * timeframe_seconds)
+        wave_fast = math.sin(bar_index / 8) * 35
+        wave_slow = math.sin(bar_index / 27) * 120
+        drift = (bar_index / safe_count) * 60
+        open_price = previous_close
+        close_price = max(1.0, base_price + wave_fast + wave_slow + drift)
+        high_price = max(open_price, close_price) + 18
+        low_price = min(open_price, close_price) - 18
+        volume = 200 + abs(math.sin(bar_index / 5) * 140)
+
+        candles.append(
+            {
+                "x": round(3 + ((bar_index + 1) / (safe_count + 1)) * 94, 2),
+                "time": bar_time,
+                "wick_top": 0,
+                "wick_height": 0,
+                "body_top": 0,
+                "body_height": 0,
+                "open": round(open_price, 4),
+                "high": round(high_price, 4),
+                "low": round(low_price, 4),
+                "close": round(close_price, 4),
+                "volume": round(volume, 4),
+                "direction": "up" if close_price >= open_price else "down",
+                "timestamp": datetime.fromtimestamp(
+                    bar_time, tz=timezone.utc
+                ).strftime("%H:%M"),
+            }
+        )
+        previous_close = close_price
+
+    return candles
 
 
 def _normalize_timeframe(value):
@@ -220,6 +284,7 @@ def _fetch_chart_payload(timeframe=None):
         OSError,
     ) as error:
         market_data["error"] = str(error)
+        candles = _build_fallback_candles(market_data["timeframe"], count=600)
 
     return {
         "market_data": market_data,
