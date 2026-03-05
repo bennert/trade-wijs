@@ -256,6 +256,7 @@
       let deferredMarketDataForRefresh = null;
       let hasFitContent = false;
       const drawnLineSeries = [];
+      const dynamicPriceScaleLines = [];
       const drawingUndoStack = [];
       let drawHoverPreviewLine = null;
       let drawCaptureOverlayElement = null;
@@ -395,6 +396,7 @@
         wickUpColor: "#8794b6",
         wickDownColor: "#8794b6",
         borderVisible: false,
+        lastValueVisible: false,
       });
 
       const bbUpperSeries = chart.addLineSeries({
@@ -423,10 +425,12 @@
         autoScale: true,
         borderColor: "#2b3345",
         ticksVisible: true,
+        alignLabels: false,
+        entireTextOnly: false,
         minimumWidth: 64,
         scaleMargins: {
-          top: 0,
-          bottom: 0.25,
+          top: 0.02,
+          bottom: 0.02,
         },
       });
 
@@ -859,7 +863,15 @@
           return Math.max(paneMinTopPx, Math.min(paneMaxTopPx, adjustedTop));
         };
 
-        const addLabel = (text, yPositionPx, paneTopPx, paneBottomPx, className = "pane-scale-label") => {
+        const addLabel = (
+          text,
+          yPositionPx,
+          paneTopPx,
+          paneBottomPx,
+          className = "pane-scale-label",
+          options = {},
+        ) => {
+          const { avoidDividerCollision = true } = options;
           const label = document.createElement("div");
           label.className = className;
           label.textContent = text;
@@ -868,38 +880,153 @@
             paneMinTopPx,
             Math.min(maxLabelTopPx, paneBottomPx - labelHeightPx),
           );
-          label.style.top = `${resolveDividerCollision(yPositionPx, paneMinTopPx, paneMaxTopPx)}px`;
+          const resolvedTop = avoidDividerCollision
+            ? resolveDividerCollision(yPositionPx, paneMinTopPx, paneMaxTopPx)
+            : Math.max(paneMinTopPx, Math.min(paneMaxTopPx, yPositionPx));
+          label.style.top = `${resolvedTop}px`;
           paneScaleOverlayElement.appendChild(label);
         };
 
-        const formatPriceScaleValue = (value) => {
+        const addPriorityPriceLabel = (text, price, className) => {
+          const numericPrice = Number(price);
+          if (!Number.isFinite(numericPrice)) {
+            return;
+          }
+
+          const yCoordinate = candleSeries.priceToCoordinate(numericPrice);
+          if (!Number.isFinite(Number(yCoordinate))) {
+            return;
+          }
+
+          addLabel(
+            text,
+            Number(yCoordinate) - 7,
+            candleSegment.top,
+            candleSegment.top + candleSegment.height,
+            `pane-scale-label pane-scale-label--priority ${className}`,
+            { avoidDividerCollision: false },
+          );
+        };
+
+        const formatPriceScaleValue = (value, options = {}) => {
+          const { precision = null } = options;
           const numericValue = Number(value);
           if (!Number.isFinite(numericValue)) {
             return "-";
           }
 
-          if (Math.abs(numericValue) >= 1000) {
-            return numericValue.toFixed(0);
+          if (Number.isInteger(precision) && precision >= 0) {
+            return numericValue.toFixed(precision);
           }
 
-          return numericValue.toFixed(2);
+          const absolute = Math.abs(numericValue);
+          if (absolute >= 1) {
+            return numericValue.toFixed(2);
+          }
+
+          return numericValue.toFixed(4);
+        };
+
+        const getNiceTickStep = (range, targetTickCount) => {
+          if (!Number.isFinite(range) || range <= 0) {
+            return 1;
+          }
+
+          const safeTarget = Math.max(2, Number(targetTickCount) || 2);
+          const roughStep = range / safeTarget;
+          const exponent = Math.floor(Math.log10(roughStep));
+          const magnitude = 10 ** exponent;
+          const normalized = roughStep / magnitude;
+          const candidates = [1, 1.5, 2, 2.5, 5, 10];
+          const selected = candidates.find((candidate) => normalized <= candidate) || 10;
+          return selected * magnitude;
+        };
+
+        const buildPriceScaleTicks = (minValue, maxValue, targetTickCount) => {
+          const lower = Number(minValue);
+          const upper = Number(maxValue);
+
+          if (!Number.isFinite(lower) || !Number.isFinite(upper)) {
+            return [];
+          }
+
+          const min = Math.min(lower, upper);
+          const max = Math.max(lower, upper);
+          const range = max - min;
+          if (!Number.isFinite(range) || range <= 0) {
+            return [min];
+          }
+
+          const step = getNiceTickStep(range, targetTickCount);
+          if (!Number.isFinite(step) || step <= 0) {
+            return [min, max];
+          }
+
+          const firstTick = Math.ceil(min / step) * step;
+          const ticks = [];
+          const epsilon = step * 0.001;
+
+          for (let value = firstTick; value <= max + epsilon; value += step) {
+            ticks.push(Number(value.toPrecision(12)));
+          }
+
+          if (ticks.length < 2) {
+            ticks.unshift(min);
+            ticks.push(max);
+          }
+
+          return ticks;
         };
 
         const candleSegment = mapPaneSegment(paneLayout.candle);
         if (candleSegment && candleSegment.height > 0 && chartData.length > 0) {
           const topPx = candleSegment.top;
           const segmentHeight = candleSegment.height;
-          const highs = chartData.map((point) => Number(point.high));
-          const lows = chartData.map((point) => Number(point.low));
-          const maxPrice = highs.length ? Math.max(...highs) : null;
-          const minPrice = lows.length ? Math.min(...lows) : null;
+          const labelCount = 7;
 
-          if (maxPrice !== null && minPrice !== null) {
-            const midPrice = (maxPrice + minPrice) / 2;
-            addLabel(formatPriceScaleValue(maxPrice), topPx - 7, topPx, topPx + segmentHeight);
-            addLabel(formatPriceScaleValue(midPrice), topPx + segmentHeight / 2 - 7, topPx, topPx + segmentHeight);
-            addLabel(formatPriceScaleValue(minPrice), topPx + segmentHeight - 7, topPx, topPx + segmentHeight);
+          for (let index = 0; index < labelCount; index += 1) {
+            const ratio = labelCount === 1 ? 0 : index / (labelCount - 1);
+            const yCoordinate = topPx + (ratio * segmentHeight);
+            const priceValue = candleSeries.coordinateToPrice(yCoordinate);
+            if (!Number.isFinite(Number(priceValue))) {
+              continue;
+            }
+
+            addLabel(
+              formatPriceScaleValue(priceValue, { precision: 2 }),
+              yCoordinate - 7,
+              topPx,
+              topPx + segmentHeight,
+              "pane-scale-label pane-scale-label--price-scale",
+              { avoidDividerCollision: false },
+            );
           }
+
+          const latestCandle = chartData[chartData.length - 1] || null;
+          if (latestCandle && Number.isFinite(Number(latestCandle.close))) {
+            addPriorityPriceLabel(
+              formatPriceScaleValue(latestCandle.close, { precision: 2 }),
+              latestCandle.close,
+              "pane-scale-label--price-current",
+            );
+          }
+
+          drawnLineSeries.forEach((lineEntry) => {
+            if (!lineEntry || lineEntry.removed) {
+              return;
+            }
+
+            const linePrice = Number(lineEntry.price);
+            if (!Number.isFinite(linePrice)) {
+              return;
+            }
+
+            addPriorityPriceLabel(
+              `H ${formatPriceScaleValue(linePrice, { precision: 2 })}`,
+              linePrice,
+              "pane-scale-label--horizontal-current",
+            );
+          });
         }
 
         const stochSegment = mapPaneSegment(paneLayout.stoch);
@@ -1732,15 +1859,44 @@
         applyChartSplit();
         renderFvgOverlay();
         renderSmcOverlay();
+        renderDynamicPriceScaleLines();
         renderPaneScaleOverlay();
         updateScrollToRecentButtonVisibility();
       });
       chartResizeObserver.observe(chartElement);
 
+      let paneScaleOverlayRafId = null;
+      const schedulePaneScaleOverlayRender = () => {
+        if (paneScaleOverlayRafId !== null) {
+          return;
+        }
+
+        paneScaleOverlayRafId = window.requestAnimationFrame(() => {
+          paneScaleOverlayRafId = null;
+          renderDynamicPriceScaleLines();
+          renderPaneScaleOverlay();
+        });
+      };
+
+      chartElement.addEventListener("wheel", () => {
+        schedulePaneScaleOverlayRender();
+      }, { passive: true });
+
+      chartElement.addEventListener("pointermove", (event) => {
+        if (event.buttons !== 0) {
+          schedulePaneScaleOverlayRender();
+        }
+      });
+
+      chartElement.addEventListener("pointerup", () => {
+        schedulePaneScaleOverlayRender();
+      });
+
       chart.timeScale().subscribeVisibleTimeRangeChange(() => {
         renderFvgOverlay();
         renderSmcOverlay();
-        renderPaneScaleOverlay();
+        renderDynamicPriceScaleLines();
+        schedulePaneScaleOverlayRender();
         updateScrollToRecentButtonVisibility();
       });
 
@@ -1966,7 +2122,7 @@
             color: "rgba(255, 209, 102, 0.75)",
             lineWidth: 2,
             lineStyle: LightweightCharts.LineStyle.Dashed,
-            axisLabelVisible: true,
+            axisLabelVisible: false,
             title: "H",
           });
           const drawCaptureOverlay = ensureDrawCaptureOverlayElement();
@@ -1989,6 +2145,26 @@
         if (chartCanvas) {
           chartCanvas.dataset.previewVisible = "true";
         }
+      };
+
+      const clearDynamicPriceScaleLines = () => {
+        while (dynamicPriceScaleLines.length > 0) {
+          const line = dynamicPriceScaleLines.pop();
+          if (!line) {
+            continue;
+          }
+
+          try {
+            candleSeries.removePriceLine(line);
+          } catch (_error) {
+          }
+        }
+      };
+
+      const renderDynamicPriceScaleLines = () => {
+        clearDynamicPriceScaleLines();
+        // Helper candle price-scale labels disabled.
+        // Only native (light gray) price scale labels should remain visible.
       };
 
       const setIndicatorButtonState = () => {
@@ -2712,6 +2888,7 @@
         chartData = toChartData(renderCandles);
         candleVolumeByTime = new Map(renderCandles.map((candle) => [Number(candle.time), Number(candle.volume || 0)]));
         if (!chartData.length) {
+          clearDynamicPriceScaleLines();
           clearFvgZoneSeries();
           clearSmcGuideSeries();
           clearSmcOverlay();
@@ -2776,6 +2953,7 @@
           const latestBar = chartData[chartData.length - 1];
           const latestVolume = latestBar ? candleVolumeByTime.get(Number(latestBar.time)) ?? null : null;
           updateOHLCDisplay(latestBar, latestVolume);
+        renderDynamicPriceScaleLines();
 
         if (!hasFitContent) {
           if (pendingRestoreLogicalRange) {
@@ -3049,6 +3227,7 @@
           drawnLineSeries.splice(lineIndex, 1);
         }
         syncHorizontalLineTestMeta();
+        renderPaneScaleOverlay();
       };
 
       const removeUndoActionsForLineEntry = (lineEntry) => {
@@ -3077,16 +3256,18 @@
           color: horizontalLineColor,
           lineWidth: 3,
           lineStyle: LightweightCharts.LineStyle.Solid,
-          axisLabelVisible: true,
+          axisLabelVisible: false,
           title: "H",
         });
 
         const lineEntry = {
           priceLine: horizontalPriceLine,
+          price: Number(clickedPoint.price),
           removed: false,
         };
         drawnLineSeries.push(lineEntry);
         syncHorizontalLineTestMeta();
+        renderPaneScaleOverlay();
 
         pushUndoAction({
           type: "horizontal-line",

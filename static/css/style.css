@@ -428,6 +428,31 @@ body {
   font-weight: 700;
 }
 
+.pane-scale-label--price-scale {
+  color: rgba(154, 165, 189, 0.95);
+  background: rgba(21, 25, 37, 0.9);
+  z-index: 1;
+}
+
+.pane-scale-label--price-current {
+  color: #ffffff;
+  font-weight: 700;
+  border: 1px solid rgba(16, 117, 81, 0.9);
+  background: rgba(41, 179, 125, 0.95);
+}
+
+.pane-scale-label--priority {
+  right: 6px;
+  z-index: 6;
+}
+
+.pane-scale-label--horizontal-current {
+  color: #151925;
+  font-weight: 700;
+  border: 1px solid rgba(196, 142, 34, 0.95);
+  background: rgba(255, 209, 102, 0.95);
+}
+
 .pane-reorder-overlay {
   position: absolute;
   inset: 0;
