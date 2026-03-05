@@ -6,6 +6,18 @@ This folder contains installers that:
 2. Configure automatic startup after reboot
 3. Ensure `.venv` exists and install/update Python packages from `requirements.txt` before startup
 
+## App version format
+
+The Trade Wijs app header displays version as:
+
+- `<semver>+<short-commit-id>` (example: `1.2.3+abc1234`)
+
+Resolution rules:
+
+- Semver comes from the latest git tag matching `X.Y.Z`
+- Commit id comes from `git rev-parse --short HEAD`
+- If git metadata is unavailable, only semver is shown
+
 ## Windows
 
 Run as Administrator:

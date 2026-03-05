@@ -101,6 +101,9 @@ def _format_compact_volume(value):
 
 def _get_git_version():
     default_version = "0.0.0"
+    default_commit = "unknown"
+    resolved_version = default_version
+    resolved_commit = default_commit
 
     try:
         result = subprocess.run(
@@ -110,14 +113,32 @@ def _get_git_version():
             text=True,
         )
     except (subprocess.CalledProcessError, FileNotFoundError, OSError):
-        return default_version
+        pass
+    else:
+        for raw_tag in result.stdout.splitlines():
+            match = re.search(r"(\d+\.\d+\.\d+)", raw_tag)
+            if match:
+                resolved_version = match.group(1)
+                break
 
-    for raw_tag in result.stdout.splitlines():
-        match = re.search(r"(\d+\.\d+\.\d+)", raw_tag)
-        if match:
-            return match.group(1)
+    try:
+        commit_result = subprocess.run(
+            ["git", "rev-parse", "--short", "HEAD"],
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+    except (subprocess.CalledProcessError, FileNotFoundError, OSError):
+        pass
+    else:
+        commit_candidate = (commit_result.stdout or "").strip()
+        if commit_candidate:
+            resolved_commit = commit_candidate
 
-    return default_version
+    if resolved_commit == default_commit:
+        return resolved_version
+
+    return f"{resolved_version}+{resolved_commit}"
 
 
 def _build_candle_view(ohlcv_rows):

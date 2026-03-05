@@ -129,6 +129,18 @@ CI note:
 
 There is no trading functionality in this version yet.
 
+## Version format
+
+The app header shows the version as:
+
+- `<semver>+<short-commit-id>` (for example: `1.2.3+abc1234`)
+
+Behavior:
+
+- Semver is resolved from the latest git tag that matches `X.Y.Z`
+- Commit id is resolved from `git rev-parse --short HEAD`
+- If git metadata is unavailable, the app falls back to semver only
+
 ### Gebruik: Horizontal Line
 
 - Klik op `Horizontal Line` in de chart toolbar
