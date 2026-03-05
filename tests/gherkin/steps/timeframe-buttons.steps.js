@@ -61,6 +61,16 @@ Then('the {word} button is visible', async function (timeframe) {
   assert.equal(isVisible, true, `Knop ${timeframe} is niet zichtbaar.`);
 });
 
+When('I click the {word} button', async function (timeframe) {
+  await this.page.locator(`#timeframe-buttons .timeframe-btn[data-timeframe="${timeframe}"]`).click();
+});
+
+Then('the {word} button is active', async function (timeframe) {
+  const button = this.page.locator(`#timeframe-buttons .timeframe-btn[data-timeframe="${timeframe}"]`);
+  const hasActiveClass = await button.evaluate((element) => element.classList.contains('is-active'));
+  assert.equal(hasActiveClass, true, `Knop ${timeframe} is niet actief (geen zichtbare actieve rechthoek).`);
+});
+
 Then('the horizontal line button is visible', async function () {
   const button = this.page.locator('#horizontal-line-btn');
   const isVisible = await button.isVisible();
