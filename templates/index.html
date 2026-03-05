@@ -250,6 +250,7 @@
       let refreshTimerId = null;
       const renderCandleLimit = 5000;
       const maxHorizontalLines = 20;
+      const horizontalLineStorageKey = "trade-wijs-horizontal-lines:{{ market_data.display_symbol|replace(' ', '_') }}";
       const indicatorStorageKey = "trade-wijs-indicators";
       let chartData = [];
       let deferredCandlesForRedraw = null;
@@ -2798,6 +2799,60 @@
         }
       };
 
+      const persistHorizontalLines = () => {
+        try {
+          const persistedPrices = drawnLineSeries
+            .filter((lineEntry) => lineEntry && !lineEntry.removed)
+            .map((lineEntry) => Number(lineEntry.price))
+            .filter((price) => Number.isFinite(price) && price > 0)
+            .slice(-maxHorizontalLines);
+          localStorage.setItem(horizontalLineStorageKey, JSON.stringify(persistedPrices));
+        } catch (_error) {
+        }
+      };
+
+      const restoreHorizontalLines = () => {
+        let storedLines = [];
+
+        try {
+          const savedValue = JSON.parse(localStorage.getItem(horizontalLineStorageKey) || "[]");
+          if (Array.isArray(savedValue)) {
+            storedLines = savedValue;
+          }
+        } catch (_error) {
+          storedLines = [];
+        }
+
+        if (!storedLines.length) {
+          return;
+        }
+
+        storedLines.slice(-maxHorizontalLines).forEach((storedPrice) => {
+          const linePrice = Number(storedPrice);
+          if (!Number.isFinite(linePrice) || linePrice <= 0) {
+            return;
+          }
+
+          const horizontalPriceLine = candleSeries.createPriceLine({
+            price: linePrice,
+            color: horizontalLineColor,
+            lineWidth: 3,
+            lineStyle: LightweightCharts.LineStyle.Solid,
+            axisLabelVisible: false,
+            title: "H",
+          });
+
+          drawnLineSeries.push({
+            priceLine: horizontalPriceLine,
+            price: linePrice,
+            removed: false,
+          });
+        });
+
+        syncHorizontalLineTestMeta();
+        renderPaneScaleOverlay();
+      };
+
       const updateUndoButtonState = () => {
         if (!undoButtonElement) {
           return;
@@ -3227,6 +3282,7 @@
           drawnLineSeries.splice(lineIndex, 1);
         }
         syncHorizontalLineTestMeta();
+        persistHorizontalLines();
         renderPaneScaleOverlay();
       };
 
@@ -3267,6 +3323,7 @@
         };
         drawnLineSeries.push(lineEntry);
         syncHorizontalLineTestMeta();
+        persistHorizontalLines();
         renderPaneScaleOverlay();
 
         pushUndoAction({
@@ -3430,6 +3487,7 @@
       }
 
       redrawChart();
+      restoreHorizontalLines();
       syncHorizontalLineTestMeta();
       applyChartSplit();
       updateScaleDividerLabel(false);
