@@ -140,6 +140,7 @@ Behavior:
 - Semver is resolved from the latest git tag that matches `X.Y.Z`
 - Commit id is resolved from `git rev-parse --short HEAD`
 - If git metadata is unavailable, the app falls back to semver only
+- In Docker/Podman, you can set `APP_VERSION` to override version resolution (the bundled `start.ps1` sets this automatically)
 
 ### Gebruik: Horizontal Line
 

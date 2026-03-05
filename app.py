@@ -1,6 +1,7 @@
 """ Trade wijs web app main module. """
 from datetime import datetime, timezone
 import math
+import os
 import re
 import subprocess
 import time
@@ -100,6 +101,10 @@ def _format_compact_volume(value):
 
 
 def _get_git_version():
+    env_version = (os.getenv("APP_VERSION") or "").strip()
+    if env_version:
+        return env_version
+
     default_version = "0.0.0"
     default_commit = "unknown"
     resolved_version = default_version

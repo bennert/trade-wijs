@@ -17,6 +17,7 @@ Resolution rules:
 - Semver comes from the latest git tag matching `X.Y.Z`
 - Commit id comes from `git rev-parse --short HEAD`
 - If git metadata is unavailable, only semver is shown
+- In container runs, set `APP_VERSION` to override resolution when `.git` is not available
 
 ## Windows
 

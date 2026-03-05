@@ -2,6 +2,8 @@ services:
   trade-wijs:
     build: .
     container_name: trade-wijs
+    environment:
+      APP_VERSION: ${APP_VERSION:-}
     ports:
       - "3175:3175"
     restart: unless-stopped

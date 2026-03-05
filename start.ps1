@@ -44,6 +44,29 @@ if (-not (Test-PodmanAvailable)) {
     exit 1
 }
 
+if (-not $env:APP_VERSION) {
+    $venvPython = if (Test-IsWindows) {
+        Join-Path $PSScriptRoot ".venv\Scripts\python.exe"
+    }
+    else {
+        Join-Path $PSScriptRoot ".venv/bin/python"
+    }
+
+    if (Test-Path $venvPython) {
+        $resolvedVersion = (& $venvPython -c "import app; print(app._get_git_version())" 2>$null | Select-Object -First 1)
+        if ($resolvedVersion) {
+            $resolvedVersion = $resolvedVersion.ToString().Trim()
+            if ($resolvedVersion) {
+                $env:APP_VERSION = $resolvedVersion
+            }
+        }
+    }
+}
+
+if ($env:APP_VERSION) {
+    Write-Host "Using APP_VERSION=$($env:APP_VERSION)" -ForegroundColor DarkGray
+}
+
 $composeArgs = @("compose", "up", "--build", "-d")
 
 $appHost = "localhost"
