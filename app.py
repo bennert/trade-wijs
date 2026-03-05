@@ -310,7 +310,10 @@ def _fetch_chart_payload(timeframe=None):
         OSError,
     ) as error:
         market_data["error"] = str(error)
-        candles = _build_fallback_candles(market_data["timeframe"], count=600)
+        candles = _build_fallback_candles(
+            market_data["timeframe"],
+            count=market_data["max_candles"],
+        )
 
     return {
         "market_data": market_data,
