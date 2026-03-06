@@ -1,5 +1,9 @@
 # Trade Wijs Release Process
 
+## Changelog
+
+- Use [CHANGELOG.md](CHANGELOG.md) to keep a per-release commit overview.
+
 ## Version format
 
 - Work version (features/fixes): `v<x>.<y>.<z>+<commitID>`
