@@ -528,10 +528,27 @@ body {
 }
 
 .pane-scale-label--price-current {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 1px;
   color: #ffffff;
   font-weight: 700;
   border: 1px solid rgba(16, 117, 81, 0.9);
   background: rgba(41, 179, 125, 0.95);
+}
+
+.pane-scale-label-main {
+  display: block;
+  line-height: 1.05;
+}
+
+.pane-scale-label-sub {
+  display: block;
+  font-size: 9px;
+  font-weight: 600;
+  line-height: 1.05;
+  color: rgba(255, 255, 255, 0.92);
 }
 
 .pane-scale-label--priority {

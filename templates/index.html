@@ -204,7 +204,7 @@
               <span id="value-volume" class="info-value">{{ market_data.quote_volume_compact }}</span>
             </div>
           </div>
-          <div id="market-updated" class="market-updated">Updated: {{ market_data.timestamp if market_data.timestamp else 'Unknown' }}</div>
+          <div id="market-updated" class="market-updated" data-timestamp-unix="{{ market_data.timestamp_unix if market_data.timestamp_unix is not none else '' }}">Updated: {{ market_data.timestamp if market_data.timestamp else 'Unknown' }}</div>
         {% endif %}
       </section>
     </aside>
@@ -291,6 +291,8 @@
       }
 
       let currentTimeframe = "{{ market_data.timeframe }}";
+      let latestServerTimestampSeconds = Number(marketUpdatedElement?.dataset.timestampUnix);
+      let latestServerTimestampSetAtMs = Date.now();
       let currentSymbol = "{{ market_data.symbol }}";
       let currentDisplaySymbol = "{{ market_data.display_symbol }}";
       let currentExchangeKey = "{{ market_data.exchange_key }}";
@@ -326,6 +328,12 @@
       let drawHoverPreviewLine = null;
       let drawCaptureOverlayElement = null;
       let drawLineMode = false;
+      let currentPriceCountdownIntervalId = null;
+      let liveQuotePollIntervalId = null;
+      let liveQuoteRequestInFlight = false;
+      let lastObservedCurrentPrice = Number(valueLastElement?.textContent || "");
+      let countdownAnchorCandleTime = null;
+      let countdownAnchorSetAtMs = Date.now();
       let selectedHorizontalLineEntry = null;
       let draggedHorizontalLineEntry = null;
       let isDraggingHorizontalLine = false;
@@ -374,6 +382,87 @@
       let lastRsiHeightRatio = rsiHeightRatio;
 
       const clamp = (value, min, max) => Math.max(min, Math.min(max, value));
+
+      const getChartViewKey = (
+        timeframe = currentTimeframe,
+        exchangeKey = currentExchangeKey,
+        symbol = currentSymbol,
+      ) => `${timeframe}|${exchangeKey}|${symbol}`;
+
+      const getTimeframeDurationSeconds = (timeframe) => {
+        const timeframeSecondsMap = {
+          "1m": 60,
+          "3m": 180,
+          "5m": 300,
+          "15m": 900,
+          "1h": 3600,
+          "4h": 14400,
+          "1d": 86400,
+          "1w": 604800,
+          "1M": 2592000,
+        };
+
+        return timeframeSecondsMap[timeframe] || 60;
+      };
+
+      const getEstimatedServerNowSeconds = () => {
+        if (!Number.isFinite(latestServerTimestampSeconds)) {
+          return Math.floor(Date.now() / 1000);
+        }
+
+        const elapsedSeconds = Math.max(0, Math.floor((Date.now() - latestServerTimestampSetAtMs) / 1000));
+        return latestServerTimestampSeconds + elapsedSeconds;
+      };
+
+      const updateCountdownAnchor = () => {
+        if (!Array.isArray(chartData) || chartData.length === 0) {
+          return;
+        }
+
+        const latestCandle = chartData[chartData.length - 1];
+        const latestCandleTime = Number(latestCandle?.time);
+        if (!Number.isFinite(latestCandleTime)) {
+          return;
+        }
+
+        if (countdownAnchorCandleTime !== latestCandleTime) {
+          countdownAnchorCandleTime = latestCandleTime;
+          countdownAnchorSetAtMs = Date.now();
+        }
+      };
+
+      const formatCandleCountdown = (secondsRemaining) => {
+        const totalSeconds = Math.max(0, Math.floor(Number(secondsRemaining) || 0));
+        const hours = Math.floor(totalSeconds / 3600);
+        const minutes = Math.floor((totalSeconds % 3600) / 60);
+        const seconds = totalSeconds % 60;
+
+        if (hours > 0) {
+          return `${String(hours).padStart(2, "0")}:${String(minutes).padStart(2, "0")}:${String(seconds).padStart(2, "0")}`;
+        }
+
+        return `${String(minutes).padStart(2, "0")}:${String(seconds).padStart(2, "0")}`;
+      };
+
+      const getCurrentCandleCountdownText = () => {
+        if (!Array.isArray(chartData) || chartData.length === 0) {
+          return "--:--";
+        }
+
+        if (!Number.isFinite(Number(countdownAnchorCandleTime))) {
+          updateCountdownAnchor();
+        }
+
+        if (!Number.isFinite(Number(countdownAnchorCandleTime))) {
+          return "--:--";
+        }
+
+        const timeframeSeconds = getTimeframeDurationSeconds(currentTimeframe);
+        const elapsedSeconds = Math.max(0, Math.floor((Date.now() - countdownAnchorSetAtMs) / 1000));
+        const remainingSeconds = Math.max(0, timeframeSeconds - elapsedSeconds);
+
+        return formatCandleCountdown(remainingSeconds);
+      };
 
       const setPreferenceCookie = (key, value) => {
         const safeValue = encodeURIComponent(String(value || ""));
@@ -445,7 +534,7 @@
         const savedChartView = JSON.parse(localStorage.getItem(chartViewStorageKey) || "{}");
         if (savedChartView && typeof savedChartView === "object") {
           savedChartViewByTimeframe = savedChartView;
-          const timeframeView = savedChartViewByTimeframe[currentTimeframe];
+          const timeframeView = savedChartViewByTimeframe[getChartViewKey()] || savedChartViewByTimeframe[currentTimeframe];
           if (
             timeframeView &&
             Number.isFinite(Number(timeframeView.from)) &&
@@ -970,14 +1059,33 @@
           className = "pane-scale-label",
           options = {},
         ) => {
-          const { avoidDividerCollision = true } = options;
+          const {
+            avoidDividerCollision = true,
+            labelHeightPx: customLabelHeightPx = null,
+            subText = null,
+          } = options;
           const label = document.createElement("div");
           label.className = className;
-          label.textContent = text;
+          if (subText === null || subText === undefined) {
+            label.textContent = text;
+          } else {
+            const mainSpan = document.createElement("span");
+            mainSpan.className = "pane-scale-label-main";
+            mainSpan.textContent = text;
+            const subSpan = document.createElement("span");
+            subSpan.className = "pane-scale-label-sub";
+            subSpan.textContent = subText;
+            label.appendChild(mainSpan);
+            label.appendChild(subSpan);
+          }
+
+          const effectiveLabelHeightPx = Number.isFinite(Number(customLabelHeightPx))
+            ? Number(customLabelHeightPx)
+            : labelHeightPx;
           const paneMinTopPx = Math.max(0, paneTopPx);
           const paneMaxTopPx = Math.max(
             paneMinTopPx,
-            Math.min(maxLabelTopPx, paneBottomPx - labelHeightPx),
+            Math.min(maxLabelTopPx, paneBottomPx - effectiveLabelHeightPx),
           );
           const resolvedTop = avoidDividerCollision
             ? resolveDividerCollision(yPositionPx, paneMinTopPx, paneMaxTopPx)
@@ -986,7 +1094,12 @@
           paneScaleOverlayElement.appendChild(label);
         };
 
-        const addPriorityPriceLabel = (text, price, className) => {
+        const addPriorityPriceLabel = (text, price, className, options = {}) => {
+          const {
+            subText = null,
+            labelHeightPx: priorityLabelHeightPx = null,
+            yOffsetPx = 7,
+          } = options;
           const numericPrice = Number(price);
           if (!Number.isFinite(numericPrice)) {
             return;
@@ -999,11 +1112,15 @@
 
           addLabel(
             text,
-            Number(yCoordinate) - 7,
+            Number(yCoordinate) - Number(yOffsetPx),
             candleSegment.top,
             candleSegment.top + candleSegment.height,
             `pane-scale-label pane-scale-label--priority ${className}`,
-            { avoidDividerCollision: false },
+            {
+              avoidDividerCollision: false,
+              labelHeightPx: priorityLabelHeightPx,
+              subText,
+            },
           );
         };
 
@@ -1107,6 +1224,11 @@
               formatPriceScaleValue(latestCandle.close, { precision: 2 }),
               latestCandle.close,
               "pane-scale-label--price-current",
+              {
+                subText: getCurrentCandleCountdownText(),
+                labelHeightPx: 24,
+                yOffsetPx: 12,
+              },
             );
           }
 
@@ -2009,7 +2131,7 @@
           return;
         }
 
-        savedChartViewByTimeframe[currentTimeframe] = {
+        savedChartViewByTimeframe[getChartViewKey()] = {
           from: Number(range.from),
           to: Number(range.to),
         };
@@ -3385,6 +3507,145 @@
         setOhlcValueTone(valueTone);
       };
 
+      const applyLiveCurrentPriceToLatestCandle = (nextPrice) => {
+        const normalizedPrice = Number(nextPrice);
+        if (!Number.isFinite(normalizedPrice) || normalizedPrice <= 0 || chartData.length === 0 || allCandles.length === 0) {
+          return;
+        }
+
+        const timeframeSeconds = getTimeframeDurationSeconds(currentTimeframe);
+        const estimatedServerNow = getEstimatedServerNowSeconds();
+        const currentBucketOpenTime = Math.floor(estimatedServerNow / timeframeSeconds) * timeframeSeconds;
+
+        const latestChartBar = chartData[chartData.length - 1];
+        if (!latestChartBar) {
+          return;
+        }
+
+        const latestBarTime = Number(latestChartBar.time);
+        if (Number.isFinite(latestBarTime) && Number.isFinite(currentBucketOpenTime) && currentBucketOpenTime > latestBarTime) {
+          const previousClose = Number(latestChartBar.close);
+          const newOpen = Number.isFinite(previousClose) ? previousClose : normalizedPrice;
+          const newLiveBar = {
+            time: currentBucketOpenTime,
+            open: newOpen,
+            high: Math.max(newOpen, normalizedPrice),
+            low: Math.min(newOpen, normalizedPrice),
+            close: normalizedPrice,
+          };
+
+          chartData.push(newLiveBar);
+          candleSeries.update(newLiveBar);
+
+          const previousRawClose = Number(allCandles[allCandles.length - 1]?.close);
+          const rawOpen = Number.isFinite(previousRawClose) ? previousRawClose : normalizedPrice;
+          allCandles.push({
+            time: currentBucketOpenTime,
+            open: rawOpen,
+            high: Math.max(rawOpen, normalizedPrice),
+            low: Math.min(rawOpen, normalizedPrice),
+            close: normalizedPrice,
+            volume: 0,
+            direction: normalizedPrice >= rawOpen ? "up" : "down",
+          });
+
+          candleVolumeByTime.set(currentBucketOpenTime, 0);
+
+          if (allCandles.length > (renderCandleLimit * 2)) {
+            allCandles = allCandles.slice(-renderCandleLimit);
+          }
+
+          updateCountdownAnchor();
+          renderPaneScaleOverlay();
+          return;
+        }
+
+        const updatedChartBar = {
+          ...latestChartBar,
+          close: normalizedPrice,
+          high: Math.max(Number(latestChartBar.high), normalizedPrice),
+          low: Math.min(Number(latestChartBar.low), normalizedPrice),
+        };
+
+        chartData[chartData.length - 1] = updatedChartBar;
+        candleSeries.update(updatedChartBar);
+
+        const latestRawCandle = allCandles[allCandles.length - 1];
+        if (latestRawCandle) {
+          latestRawCandle.close = updatedChartBar.close;
+          latestRawCandle.high = updatedChartBar.high;
+          latestRawCandle.low = updatedChartBar.low;
+          latestRawCandle.direction = updatedChartBar.close >= Number(latestRawCandle.open) ? "up" : "down";
+        }
+
+        const isHoveringLatest = hoveredCandleTime === null || hoveredCandleTime === Number(updatedChartBar.time);
+        if (isHoveringLatest) {
+          const latestVolume = candleVolumeByTime.get(Number(updatedChartBar.time)) ?? null;
+          updateOHLCDisplay(updatedChartBar, latestVolume);
+        }
+
+        renderPaneScaleOverlay();
+      };
+
+      const getLatestDisplayedClosePrice = () => {
+        if (!Array.isArray(chartData) || chartData.length === 0) {
+          return NaN;
+        }
+
+        return Number(chartData[chartData.length - 1]?.close);
+      };
+
+      const refreshLiveQuote = async () => {
+        if (liveQuoteRequestInFlight || drawLineMode) {
+          return;
+        }
+
+        liveQuoteRequestInFlight = true;
+        try {
+          const query = new URLSearchParams({
+            timeframe: currentTimeframe,
+            symbol: currentSymbol,
+            exchange: currentExchangeKey,
+          });
+          const response = await fetch(`/api/market-quote?${query.toString()}`, { cache: "no-store" });
+          if (!response.ok) {
+            return;
+          }
+
+          const payload = await response.json();
+          const marketData = payload?.market_data;
+          if (!marketData || marketData.error) {
+            return;
+          }
+
+          const nextCurrentPrice = Number.isFinite(Number(marketData.last))
+            ? Number(marketData.last)
+            : Number(marketData.ask);
+
+          if (!Number.isFinite(nextCurrentPrice) || nextCurrentPrice <= 0) {
+            refreshMarketInfo(marketData);
+            return;
+          }
+
+          const previousDisplayedClose = getLatestDisplayedClosePrice();
+
+          refreshMarketInfo(marketData);
+
+          if (
+            !Number.isFinite(previousDisplayedClose)
+            || Math.abs(nextCurrentPrice - previousDisplayedClose) > 1e-9
+            || !Number.isFinite(lastObservedCurrentPrice)
+            || Math.abs(nextCurrentPrice - lastObservedCurrentPrice) > 1e-9
+          ) {
+            lastObservedCurrentPrice = nextCurrentPrice;
+            applyLiveCurrentPriceToLatestCandle(nextCurrentPrice);
+          }
+        } catch (_error) {
+        } finally {
+          liveQuoteRequestInFlight = false;
+        }
+      };
+
       const redrawChart = () => {
         const renderCandles = allCandles.slice(-renderCandleLimit);
         chartData = toChartData(renderCandles);
@@ -3452,6 +3713,7 @@
 
         volumeSeries.setData(indicatorState.volume ? calculateVolume(renderCandles) : []);
         renderFvgZones(chartData);
+        updateCountdownAnchor();
           const latestBar = chartData[chartData.length - 1];
           const latestVolume = latestBar ? candleVolumeByTime.get(Number(latestBar.time)) ?? null : null;
           updateOHLCDisplay(latestBar, latestVolume);
@@ -3511,6 +3773,12 @@
           return;
         }
 
+        const timestampUnix = Number(marketData.timestamp_unix);
+        if (Number.isFinite(timestampUnix)) {
+          latestServerTimestampSeconds = timestampUnix;
+          latestServerTimestampSetAtMs = Date.now();
+        }
+
         currentSymbol = marketData.symbol || currentSymbol;
         currentDisplaySymbol = marketData.display_symbol || currentDisplaySymbol;
         currentExchangeKey = marketData.exchange_key || currentExchangeKey;
@@ -3556,6 +3824,8 @@
         if (marketUpdatedElement) {
           marketUpdatedElement.style.display = "block";
           marketUpdatedElement.textContent = `Updated: ${marketData.timestamp || "Unknown"}`;
+          const timestampUnix = Number(marketData.timestamp_unix);
+          marketUpdatedElement.dataset.timestampUnix = Number.isFinite(timestampUnix) ? String(timestampUnix) : "";
         }
 
         if (valueLastElement) valueLastElement.textContent = formatValue(marketData.last);
@@ -3565,10 +3835,18 @@
         if (valueLowElement) valueLowElement.textContent = formatValue(marketData.low);
         if (valueVolumeElement) valueVolumeElement.textContent = formatCompactVolume(marketData.quote_volume);
         if (ohlcVol24Element) ohlcVol24Element.textContent = formatCompactVolume(marketData.quote_volume);
+
+        const currentPriceValue = Number.isFinite(Number(marketData.last))
+          ? Number(marketData.last)
+          : Number(marketData.ask);
+        if (Number.isFinite(currentPriceValue) && currentPriceValue > 0) {
+          lastObservedCurrentPrice = currentPriceValue;
+        }
       };
 
       const refreshChartData = async (options = {}) => {
         const isPriority = options.priority === true;
+        const showUpdatingStatus = options.showUpdatingStatus === true;
 
         if (!isPriority && drawLineMode) {
           return;
@@ -3586,7 +3864,9 @@
         const requestId = ++refreshRequestCounter;
         const requestedTimeframe = currentTimeframe;
         setLoadingTimeframeButton(requestedTimeframe);
-        setRefreshStatus("Updating...", "is-updating");
+        if (showUpdatingStatus) {
+          setRefreshStatus("Updating...", "is-updating");
+        }
 
         try {
           const query = new URLSearchParams({
@@ -3644,6 +3924,12 @@
 
           refreshMarketInfo(payload.market_data);
           redrawChart();
+          const refreshedCurrentPrice = Number.isFinite(Number(payload.market_data?.last))
+            ? Number(payload.market_data.last)
+            : Number(payload.market_data?.ask);
+          if (Number.isFinite(refreshedCurrentPrice) && refreshedCurrentPrice > 0) {
+            applyLiveCurrentPriceToLatestCandle(refreshedCurrentPrice);
+          }
           setRefreshStatus("Live", "is-live");
           setLoadingTimeframeButton(null);
         } catch (_error) {
@@ -3674,7 +3960,9 @@
           localStorage.setItem(timeframeStorageKey, currentTimeframe);
           setPreferenceCookie("trade_wijs_timeframe", currentTimeframe);
           pendingRestoreLogicalRange = null;
-          const timeframeView = savedChartViewByTimeframe[currentTimeframe];
+          const timeframeView =
+            savedChartViewByTimeframe[getChartViewKey(currentTimeframe)] ||
+            savedChartViewByTimeframe[currentTimeframe];
           if (
             timeframeView &&
             Number.isFinite(Number(timeframeView.from)) &&
@@ -3688,7 +3976,7 @@
           hasFitContent = false;
           setActiveTimeframeButton(currentTimeframe);
           setLoadingTimeframeButton(currentTimeframe);
-          refreshChartData({ priority: true });
+          refreshChartData({ priority: true, showUpdatingStatus: true });
           scheduleNextRefresh();
         });
       }
@@ -3729,10 +4017,12 @@
           if (pairSelectorButtonElement) {
             pairSelectorButtonElement.textContent = nextSymbol.replace("/", "");
           }
+          pendingRestoreLogicalRange = null;
+          hasFitContent = false;
 
           hideSelectorMenus();
           setLoadingTimeframeButton(currentTimeframe);
-          refreshChartData({ priority: true });
+          refreshChartData({ priority: true, showUpdatingStatus: true });
           scheduleNextRefresh();
         });
       }
@@ -3757,10 +4047,12 @@
           if (exchangeSelectorButtonElement) {
             exchangeSelectorButtonElement.textContent = (button.textContent || "").trim();
           }
+          pendingRestoreLogicalRange = null;
+          hasFitContent = false;
 
           hideSelectorMenus();
           setLoadingTimeframeButton(currentTimeframe);
-          refreshChartData({ priority: true });
+          refreshChartData({ priority: true, showUpdatingStatus: true });
           scheduleNextRefresh();
         });
       }
@@ -4180,6 +4472,30 @@
       if (chartFooterElement) {
         chartFooterElement.style.justifyContent = "space-between";
       }
+
+      if (currentPriceCountdownIntervalId === null) {
+        currentPriceCountdownIntervalId = window.setInterval(() => {
+          renderPaneScaleOverlay();
+        }, 1000);
+      }
+
+      if (liveQuotePollIntervalId === null) {
+        liveQuotePollIntervalId = window.setInterval(() => {
+          refreshLiveQuote();
+        }, 1000);
+      }
+
+      window.addEventListener("beforeunload", () => {
+        if (currentPriceCountdownIntervalId !== null) {
+          window.clearInterval(currentPriceCountdownIntervalId);
+          currentPriceCountdownIntervalId = null;
+        }
+
+        if (liveQuotePollIntervalId !== null) {
+          window.clearInterval(liveQuotePollIntervalId);
+          liveQuotePollIntervalId = null;
+        }
+      });
 
       redrawChart();
       restoreHorizontalLines();

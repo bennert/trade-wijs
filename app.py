@@ -237,7 +237,7 @@ def _build_candle_view(ohlcv_rows):
 
 def _fetch_ohlcv_window(exchange, symbol, timeframe, target_limit):
     timeframe_ms = exchange.parse_timeframe(timeframe) * 1000
-    since = exchange.milliseconds() - ((target_limit + 50) * timeframe_ms)
+    since = exchange.milliseconds() - (target_limit * timeframe_ms)
     rows_by_timestamp = {}
 
     while len(rows_by_timestamp) < target_limit:
@@ -312,6 +312,7 @@ def _fetch_chart_payload(timeframe=None, exchange_key=None, symbol=None):
         "quote_volume": None,
         "quote_volume_compact": "-",
         "timestamp": None,
+        "timestamp_unix": None,
         "error": None,
     }
     candles = []
@@ -346,6 +347,7 @@ def _fetch_chart_payload(timeframe=None, exchange_key=None, symbol=None):
             updated_at = datetime.now(tz=timezone.utc)
 
         market_data["timestamp"] = updated_at.strftime("%Y-%m-%d %H:%M:%S UTC")
+        market_data["timestamp_unix"] = int(updated_at.timestamp())
     except (
         ccxt.RequestTimeout,
         ccxt.NetworkError,
@@ -355,6 +357,7 @@ def _fetch_chart_payload(timeframe=None, exchange_key=None, symbol=None):
         OSError,
     ) as error:
         market_data["error"] = str(error)
+        market_data["timestamp_unix"] = int(datetime.now(tz=timezone.utc).timestamp())
         candles = _build_fallback_candles(
             market_data["timeframe"],
             count=market_data["max_candles"],
@@ -365,6 +368,66 @@ def _fetch_chart_payload(timeframe=None, exchange_key=None, symbol=None):
         "candles": candles,
         "axis_levels": axis_levels,
         "footer_points": footer_points,
+    }
+
+
+def _fetch_market_quote_payload(exchange_key=None, symbol=None, timeframe=None):
+    selected_exchange_key = _normalize_exchange(exchange_key)
+    selected_symbol = _normalize_symbol(symbol)
+    selected_timeframe = _normalize_timeframe(timeframe)
+    selected_exchange = SUPPORTED_EXCHANGES[selected_exchange_key]
+
+    market_data = {
+        "symbol": selected_symbol,
+        "display_symbol": selected_symbol.replace("/", ""),
+        "exchange_key": selected_exchange_key,
+        "exchange": selected_exchange["label"],
+        "timeframe": selected_timeframe,
+        "last": None,
+        "bid": None,
+        "ask": None,
+        "high": None,
+        "low": None,
+        "quote_volume": None,
+        "quote_volume_compact": "-",
+        "timestamp": None,
+        "timestamp_unix": int(datetime.now(tz=timezone.utc).timestamp()),
+        "error": None,
+    }
+
+    try:
+        exchange_class = getattr(ccxt, selected_exchange["ccxt_id"])
+        exchange = exchange_class({"enableRateLimit": True})
+        ticker = exchange.fetch_ticker(market_data["symbol"])
+
+        market_data["last"] = ticker.get("last")
+        market_data["bid"] = ticker.get("bid")
+        market_data["ask"] = ticker.get("ask")
+        market_data["high"] = ticker.get("high")
+        market_data["low"] = ticker.get("low")
+        market_data["quote_volume"] = ticker.get("quoteVolume")
+        market_data["quote_volume_compact"] = _format_compact_volume(market_data["quote_volume"])
+
+        timestamp = ticker.get("timestamp")
+        if timestamp:
+            updated_at = datetime.fromtimestamp(timestamp / 1000, tz=timezone.utc)
+        else:
+            updated_at = datetime.now(tz=timezone.utc)
+
+        market_data["timestamp"] = updated_at.strftime("%Y-%m-%d %H:%M:%S UTC")
+        market_data["timestamp_unix"] = int(updated_at.timestamp())
+    except (
+        ccxt.RequestTimeout,
+        ccxt.NetworkError,
+        ccxt.ExchangeNotAvailable,
+        ccxt.BadSymbol,
+        ccxt.ExchangeError,
+        OSError,
+    ) as error:
+        market_data["error"] = str(error)
+
+    return {
+        "market_data": market_data,
     }
 
 
@@ -404,6 +467,18 @@ def chart_data():
             _decode_request_value(request.args.get("timeframe")),
             _decode_request_value(request.args.get("exchange")),
             _decode_request_value(request.args.get("symbol")),
+        )
+    )
+
+
+@app.route("/api/market-quote")
+def market_quote():
+    """ API route for fetching lightweight market quote updates as JSON. """
+    return jsonify(
+        _fetch_market_quote_payload(
+            _decode_request_value(request.args.get("exchange")),
+            _decode_request_value(request.args.get("symbol")),
+            _decode_request_value(request.args.get("timeframe")),
         )
     )
 

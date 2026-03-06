@@ -19,3 +19,16 @@ Feature: Market selector buttons
     When I select a different pair option
     Then the pair selector button reflects the selected pair
     And there is exactly 1 active pair option
+
+  Scenario Outline: Refresh status shows updating during manual selector changes
+    Given the Trade Wijs homepage
+    When I open the homepage
+    Then the refresh status shows Live
+    When I trigger a manual market refresh via <selector>
+    Then the refresh status transitions through Updating to Live
+
+    Examples:
+      | selector |
+      | timeframe |
+      | pair      |
+      | exchange  |
