@@ -308,6 +308,25 @@
             <input type="radio" name="order-type" id="type-oco" />
             <label for="type-oco">OCO</label>
           </div>
+          <div class="order-inputs" aria-label="Order inputs">
+            <label class="order-input-field order-input-field--full" for="order-price-input">
+              <span>Price</span>
+              <input id="order-price-input" type="number" inputmode="decimal" step="any" placeholder="Order price" />
+            </label>
+            <div class="order-price-fill-actions" role="group" aria-label="Fill price from market values">
+              <button type="button" class="order-fill-btn" data-order-fill-source="bid">Bid</button>
+              <button type="button" class="order-fill-btn" data-order-fill-source="ask">Ask</button>
+              <button type="button" class="order-fill-btn" data-order-fill-source="last">Last</button>
+            </div>
+            <label class="order-input-field" for="order-amount-input">
+              <span>Amount</span>
+              <input id="order-amount-input" type="number" inputmode="decimal" step="any" placeholder="Amount" />
+            </label>
+            <label class="order-input-field" for="order-total-input">
+              <span>Total</span>
+              <input id="order-total-input" type="number" inputmode="decimal" step="any" placeholder="Total" />
+            </label>
+          </div>
         </div>
 
         <div id="panel-watchlist" class="tab-panel" role="tabpanel">
@@ -457,6 +476,8 @@
       const valueHighElement = document.getElementById("value-high");
       const valueLowElement = document.getElementById("value-low");
       const valueVolumeElement = document.getElementById("value-volume");
+      const orderPriceInputElement = document.getElementById("order-price-input");
+      const orderFillButtonElements = Array.from(document.querySelectorAll("[data-order-fill-source]"));
 
       if (!chartElement || !chartCanvas || !dataElement || !window.LightweightCharts) {
         return;
@@ -5393,6 +5414,45 @@
           }
 
           setRightPanelTab(panelName);
+        });
+      }
+
+      if (orderPriceInputElement && orderFillButtonElements.length > 0) {
+        const marketValueBySource = {
+          bid: valueBidElement,
+          ask: valueAskElement,
+          last: valueLastElement,
+        };
+
+        const parseMarketPriceValue = (rawValue) => {
+          if (typeof rawValue !== "string") {
+            return Number.NaN;
+          }
+
+          const normalizedValue = rawValue.replace(/,/g, "").trim();
+          if (!normalizedValue || normalizedValue === "-") {
+            return Number.NaN;
+          }
+
+          return Number.parseFloat(normalizedValue);
+        };
+
+        orderFillButtonElements.forEach((button) => {
+          button.addEventListener("click", () => {
+            const source = button.dataset.orderFillSource;
+            if (!source) {
+              return;
+            }
+
+            const sourceElement = marketValueBySource[source];
+            const parsedValue = parseMarketPriceValue(sourceElement?.textContent || "");
+            if (!Number.isFinite(parsedValue)) {
+              return;
+            }
+
+            orderPriceInputElement.value = String(parsedValue);
+            orderPriceInputElement.dispatchEvent(new Event("input", { bubbles: true }));
+          });
         });
       }
 
