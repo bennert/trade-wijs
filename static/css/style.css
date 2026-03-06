@@ -207,13 +207,25 @@ body {
   border: 1px solid var(--border);
   background: var(--panel-2);
   color: var(--muted);
-  font-size: 11px;
-  font-weight: 600;
+  width: 30px;
+  height: 30px;
   line-height: 1;
-  padding: 6px 8px;
+  padding: 0;
   border-radius: 4px;
   cursor: pointer;
-  white-space: nowrap;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.tool-btn-icon-svg {
+  width: 14px;
+  height: 14px;
+  stroke: currentColor;
+  stroke-width: 1.8;
+  fill: none;
+  stroke-linecap: round;
+  stroke-linejoin: round;
 }
 
 .draw-tool-btn.is-active {

@@ -43,8 +43,19 @@
         </div>
         <div class="toolbar-divider" aria-hidden="true"></div>
         <div class="drawing-tools" role="group" aria-label="Drawing tools">
-          <button id="undo-btn" type="button" class="draw-tool-btn" disabled>Undo</button>
-          <button id="horizontal-line-btn" type="button" class="draw-tool-btn">Horizontal Line</button>
+          <button id="undo-btn" type="button" class="draw-tool-btn" aria-label="Undo" title="Undo" disabled>
+            <svg class="tool-btn-icon-svg" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+              <path d="M8 7H4v4"></path>
+              <path d="M4 11c1.8-3.7 5.1-6 9-6 5.5 0 10 4.5 10 10"></path>
+            </svg>
+          </button>
+          <button id="horizontal-line-btn" type="button" class="draw-tool-btn" aria-label="Horizontal Line" title="Horizontal Line">
+            <svg class="tool-btn-icon-svg" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+              <path d="M4 12h16"></path>
+              <circle cx="7" cy="12" r="1.5"></circle>
+              <circle cx="17" cy="12" r="1.5"></circle>
+            </svg>
+          </button>
         </div>
       </div>
       <div class="chart-stats-row" aria-live="polite">
@@ -3893,7 +3904,6 @@
       }
 
       if (drawLineButtonElement) {
-        drawLineButtonElement.textContent = "Horizontal Line";
         drawLineButtonElement.addEventListener("click", () => {
           const nextMode = !drawLineMode;
           setDrawLineMode(nextMode);
