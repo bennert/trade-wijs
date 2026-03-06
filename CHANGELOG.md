@@ -6,7 +6,16 @@ All notable changes to this project are documented in this file.
 
 ### Commit overview
 
-- _No commits listed yet for the next release cycle._
+- `62dbbb6` `test: align timeframe minimum and add settings exchange controls coverage`
+
+### Highlights
+
+- Timeframe feature expectation changed to at least 1 button instead of a fixed count.
+- Added new Gherkin coverage for exchange enable/disable behavior in Settings.
+
+### Verification
+
+- [x] CI-relevant tests passed locally (`17 scenarios`, `137 steps`).
 
 ---
 
