@@ -252,6 +252,13 @@
               <circle cx="17" cy="12" r="1.5"></circle>
             </svg>
           </button>
+          <button id="trend-line-btn" type="button" class="draw-tool-btn" aria-label="Trend Line" title="Trend Line">
+            <svg class="tool-btn-icon-svg" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+              <path d="M5 16L19 8"></path>
+              <circle cx="5" cy="16" r="1.5"></circle>
+              <circle cx="19" cy="8" r="1.5"></circle>
+            </svg>
+          </button>
         </div>
       </div>
       <div class="chart-stats-row" aria-live="polite">
@@ -274,6 +281,8 @@
           <span id="price-hover-guide-value">-</span>
         </div>
         <div id="horizontal-line-selection-handle" class="horizontal-line-selection-handle" aria-hidden="true"></div>
+        <div id="trend-line-start-handle" class="trend-line-endpoint-handle" data-endpoint="start" aria-hidden="true"></div>
+        <div id="trend-line-end-handle" class="trend-line-endpoint-handle" data-endpoint="end" aria-hidden="true"></div>
         <div id="pane-scale-overlay" class="pane-scale-overlay" aria-hidden="true"></div>
         <div id="pane-reorder-overlay" class="pane-reorder-overlay" aria-hidden="true"></div>
         <button id="scroll-to-recent-btn" type="button" class="scroll-to-recent-btn" aria-label="Scroll to most recent bar">↦ Latest</button>
@@ -414,6 +423,8 @@
       const priceHoverGuideLabelElement = document.getElementById("price-hover-guide-label");
       const priceHoverGuideValueElement = document.getElementById("price-hover-guide-value");
       const horizontalLineSelectionHandleElement = document.getElementById("horizontal-line-selection-handle");
+      const trendLineStartHandleElement = document.getElementById("trend-line-start-handle");
+      const trendLineEndHandleElement = document.getElementById("trend-line-end-handle");
       const paneScaleOverlayElement = document.getElementById("pane-scale-overlay");
       const paneReorderOverlayElement = document.getElementById("pane-reorder-overlay");
       const stochDividerElement = document.getElementById("stoch-divider");
@@ -441,6 +452,7 @@
       const indicatorSettingsButtonElement = document.getElementById("indicator-settings-btn");
       const undoButtonElement = document.getElementById("undo-btn");
       const drawLineButtonElement = document.getElementById("horizontal-line-btn");
+      const trendLineButtonElement = document.getElementById("trend-line-btn");
       const leftMenuButtonElements = Array.from(document.querySelectorAll(".left-menu-btn"));
       const leftMenuTradeButtonElement = document.getElementById("left-menu-trade-btn");
       const leftMenuSettingsButtonElement = document.getElementById("left-menu-settings-btn");
@@ -542,6 +554,8 @@
       const renderCandleLimit = 5000;
       const maxHorizontalLines = 20;
       const horizontalLineStorageKey = "trade-wijs-horizontal-lines:{{ market_data.display_symbol|replace(' ', '_') }}";
+      const maxTrendLines = 20;
+      const trendLineStorageKey = "trade-wijs-trend-lines:{{ market_data.display_symbol|replace(' ', '_') }}";
       const indicatorStorageKey = "trade-wijs-indicators";
       const marketInfoCollapseStorageKey = "trade-wijs-market-info-collapsed";
       let chartData = [];
@@ -549,11 +563,15 @@
       let deferredMarketDataForRefresh = null;
       let hasFitContent = false;
       const drawnLineSeries = [];
+      const drawnTrendLineSeries = [];
       const dynamicPriceScaleLines = [];
       const drawingUndoStack = [];
       let drawHoverPreviewLine = null;
+      let drawTrendPreviewSeries = null;
+      let trendDrawAnchorPoint = null;
       let drawCaptureOverlayElement = null;
       let drawLineMode = false;
+      let activeDrawTool = null;
       let currentAppViewMode = "trade";
       let isRightPanelCollapsed = false;
       let isMarketInfoCollapsed = false;
@@ -582,10 +600,20 @@
       let didDragHorizontalLine = false;
       let horizontalLineContextMenuElement = null;
       let contextMenuHorizontalLineEntry = null;
+      let trendLineContextMenuElement = null;
+      let contextMenuTrendLineEntry = null;
       const horizontalLineSelectionTolerancePx = 10;
+      let selectedTrendLineEntry = null;
+      const trendLineSelectionTolerancePx = 10;
+      let draggedTrendLineEndpoint = null;
+      let didDragTrendLineEndpoint = false;
+      let draggedTrendLineEntry = null;
+      let draggedTrendLineState = null;
+      let didDragTrendLine = false;
       if (chartCanvas) {
         chartCanvas.dataset.previewVisible = "false";
         chartCanvas.dataset.horizontalLineCount = "0";
+        chartCanvas.dataset.trendLineCount = "0";
       }
       let isDraggingScaleDivider = false;
       let isDraggingStochDivider = false;
@@ -2492,6 +2520,7 @@
         renderDynamicPriceScaleLines();
         renderPaneScaleOverlay();
         renderSelectedHorizontalLineHandle();
+        renderSelectedTrendLineHandles();
         updateScrollToRecentButtonVisibility();
       });
       chartResizeObserver.observe(chartElement);
@@ -2510,6 +2539,7 @@
           renderDynamicPriceScaleLines();
           renderPaneScaleOverlay();
           renderSelectedHorizontalLineHandle();
+          renderSelectedTrendLineHandles();
         });
       };
 
@@ -2648,6 +2678,127 @@
         horizontalLineSelectionHandleElement.classList.add("is-visible");
       };
 
+      const renderSelectedTrendLineHandles = () => {
+        if (!trendLineStartHandleElement || !trendLineEndHandleElement || !chartCanvas) {
+          return;
+        }
+
+        const hideHandles = () => {
+          trendLineStartHandleElement.classList.remove("is-visible");
+          trendLineEndHandleElement.classList.remove("is-visible");
+        };
+
+        if (!selectedTrendLineEntry || selectedTrendLineEntry.removed || drawLineMode) {
+          hideHandles();
+          return;
+        }
+
+        const startX = chart.timeScale().timeToCoordinate(Number(selectedTrendLineEntry.startTime));
+        const endX = chart.timeScale().timeToCoordinate(Number(selectedTrendLineEntry.endTime));
+        const startY = candleSeries.priceToCoordinate(Number(selectedTrendLineEntry.startPrice));
+        const endY = candleSeries.priceToCoordinate(Number(selectedTrendLineEntry.endPrice));
+
+        if (![startX, endX, startY, endY].every((value) => Number.isFinite(Number(value)))) {
+          hideHandles();
+          return;
+        }
+
+        if (!isYCoordinateInCandlePane(Number(startY)) || !isYCoordinateInCandlePane(Number(endY))) {
+          hideHandles();
+          return;
+        }
+
+        trendLineStartHandleElement.style.left = `${Number(startX)}px`;
+        trendLineStartHandleElement.style.top = `${Number(startY)}px`;
+        trendLineEndHandleElement.style.left = `${Number(endX)}px`;
+        trendLineEndHandleElement.style.top = `${Number(endY)}px`;
+        trendLineStartHandleElement.classList.add("is-visible");
+        trendLineEndHandleElement.classList.add("is-visible");
+      };
+
+      const updateTrendLineEntryEndpoint = (lineEntry, endpoint, point) => {
+        if (!lineEntry || lineEntry.removed || !point) {
+          return false;
+        }
+
+        const nextTime = Number(point.time);
+        const nextPrice = Number(point.price);
+        if (!Number.isFinite(nextTime) || !Number.isFinite(nextPrice) || nextPrice <= 0) {
+          return false;
+        }
+
+        if (endpoint === "start") {
+          lineEntry.startTime = nextTime;
+          lineEntry.startPrice = nextPrice;
+        } else if (endpoint === "end") {
+          lineEntry.endTime = nextTime;
+          lineEntry.endPrice = nextPrice;
+        } else {
+          return false;
+        }
+
+        lineEntry.series.setData([
+          { time: Number(lineEntry.startTime), value: Number(lineEntry.startPrice) },
+          { time: Number(lineEntry.endTime), value: Number(lineEntry.endPrice) },
+        ]);
+        applyTrendLineVisualState(lineEntry);
+        renderSelectedTrendLineHandles();
+        return true;
+      };
+
+      const updateTrendLineEntryByDrag = (lineEntry, state, pointerX, pointerY) => {
+        if (!lineEntry || lineEntry.removed || !state) {
+          return false;
+        }
+
+        const nextPointerX = Number(pointerX);
+        const nextPointerY = Number(pointerY);
+        if (!Number.isFinite(nextPointerX) || !Number.isFinite(nextPointerY)) {
+          return false;
+        }
+
+        const dx = nextPointerX - Number(state.pointerX);
+        const dy = nextPointerY - Number(state.pointerY);
+
+        const candlePaneBounds = resolveCandlePaneBoundsPx();
+        if (!candlePaneBounds) {
+          return false;
+        }
+
+        const clampYToPane = (value) => clamp(Number(value), candlePaneBounds.top, candlePaneBounds.bottom);
+
+        const nextStartX = Number(state.startX) + dx;
+        const nextEndX = Number(state.endX) + dx;
+        const nextStartY = clampYToPane(Number(state.startY) + dy);
+        const nextEndY = clampYToPane(Number(state.endY) + dy);
+
+        const nextStartTime = resolveTimeFromXCoordinate(nextStartX);
+        const nextEndTime = resolveTimeFromXCoordinate(nextEndX);
+        const nextStartPrice = Number(candleSeries.coordinateToPrice(nextStartY));
+        const nextEndPrice = Number(candleSeries.coordinateToPrice(nextEndY));
+
+        if (!Number.isFinite(nextStartTime) || !Number.isFinite(nextEndTime)) {
+          return false;
+        }
+
+        if (!Number.isFinite(nextStartPrice) || !Number.isFinite(nextEndPrice) || nextStartPrice <= 0 || nextEndPrice <= 0) {
+          return false;
+        }
+
+        lineEntry.startTime = nextStartTime;
+        lineEntry.endTime = nextEndTime;
+        lineEntry.startPrice = nextStartPrice;
+        lineEntry.endPrice = nextEndPrice;
+        lineEntry.series.setData([
+          { time: Number(lineEntry.startTime), value: Number(lineEntry.startPrice) },
+          { time: Number(lineEntry.endTime), value: Number(lineEntry.endPrice) },
+        ]);
+
+        applyTrendLineVisualState(lineEntry);
+        renderSelectedTrendLineHandles();
+        return true;
+      };
+
       const updatePriceHoverGuide = (param) => {
         if (!priceHoverGuideLineElement || !priceHoverGuideLabelElement || !priceHoverGuideValueElement || !chartCanvas) {
           return;
@@ -2772,13 +2923,16 @@
         });
       };
 
-      const setDrawLineMode = (enabled) => {
+      const setDrawLineMode = (enabled, tool = "horizontal") => {
         drawLineMode = enabled;
+        activeDrawTool = enabled ? (tool === "trend" ? "trend" : "horizontal") : null;
         const drawCaptureOverlay = ensureDrawCaptureOverlayElement();
 
         if (enabled) {
           hideHorizontalLineContextMenu();
+          hideTrendLineContextMenu();
           setSelectedHorizontalLine(null);
+          setSelectedTrendLine(null);
           if (refreshTimerId) {
             clearTimeout(refreshTimerId);
             refreshTimerId = null;
@@ -2793,16 +2947,24 @@
             chartCanvas.dataset.previewVisible = "true";
           }
 
-          const latestBar = chartData[chartData.length - 1] || null;
-          const latestPrice = latestBar ? Number(latestBar.close) : NaN;
-          if (Number.isFinite(latestPrice) && latestPrice > 0) {
-            updateHorizontalLineHoverPreview({ price: latestPrice });
+          if (activeDrawTool === "horizontal") {
+            clearTrendLineHoverPreview();
+            const latestBar = chartData[chartData.length - 1] || null;
+            const latestPrice = latestBar ? Number(latestBar.close) : NaN;
+            if (Number.isFinite(latestPrice) && latestPrice > 0) {
+              updateHorizontalLineHoverPreview({ price: latestPrice });
+            }
+          } else {
+            clearHorizontalLineHoverPreview();
+            trendDrawAnchorPoint = null;
           }
         }
 
         if (!enabled) {
           hideHorizontalLineContextMenu();
+          hideTrendLineContextMenu();
           clearHorizontalLineHoverPreview();
+          clearTrendLineHoverPreview();
 
           if (drawCaptureOverlay) {
             drawCaptureOverlay.style.pointerEvents = "none";
@@ -2826,10 +2988,15 @@
         }
 
         if (drawLineButtonElement) {
-          drawLineButtonElement.classList.toggle("is-active", enabled);
+          drawLineButtonElement.classList.toggle("is-active", enabled && activeDrawTool === "horizontal");
+        }
+
+        if (trendLineButtonElement) {
+          trendLineButtonElement.classList.toggle("is-active", enabled && activeDrawTool === "trend");
         }
 
         renderSelectedHorizontalLineHandle();
+        renderSelectedTrendLineHandles();
       };
 
       const clearHorizontalLineHoverPreview = () => {
@@ -2957,6 +3124,7 @@
           renderDynamicPriceScaleLines();
           renderPaneScaleOverlay();
           renderSelectedHorizontalLineHandle();
+          renderSelectedTrendLineHandles();
           updateScrollToRecentButtonVisibility();
         });
       };
@@ -4101,6 +4269,7 @@
         drawCaptureOverlayElement.style.cursor = "crosshair";
         drawCaptureOverlayElement.dataset.previewVisible = "false";
         drawCaptureOverlayElement.dataset.horizontalLineCount = "0";
+        drawCaptureOverlayElement.dataset.trendLineCount = "0";
         chartCanvas.appendChild(drawCaptureOverlayElement);
 
         return drawCaptureOverlayElement;
@@ -4115,6 +4284,18 @@
         drawCaptureOverlay.dataset.horizontalLineCount = String(drawnLineSeries.length);
         if (chartCanvas) {
           chartCanvas.dataset.horizontalLineCount = String(drawnLineSeries.length);
+        }
+      };
+
+      const syncTrendLineTestMeta = () => {
+        const drawCaptureOverlay = ensureDrawCaptureOverlayElement();
+        if (!drawCaptureOverlay) {
+          return;
+        }
+
+        drawCaptureOverlay.dataset.trendLineCount = String(drawnTrendLineSeries.length);
+        if (chartCanvas) {
+          chartCanvas.dataset.trendLineCount = String(drawnTrendLineSeries.length);
         }
       };
 
@@ -4219,6 +4400,107 @@
         contextMenuHorizontalLineEntry = lineEntry;
       };
 
+      const hideTrendLineContextMenu = () => {
+        contextMenuTrendLineEntry = null;
+        if (!trendLineContextMenuElement) {
+          return;
+        }
+
+        trendLineContextMenuElement.classList.remove("is-visible");
+      };
+
+      const ensureTrendLineContextMenuElement = () => {
+        if (trendLineContextMenuElement || !chartCanvas) {
+          return trendLineContextMenuElement;
+        }
+
+        const menuElement = document.createElement("div");
+        menuElement.className = "horizontal-line-context-menu";
+        menuElement.setAttribute("role", "menu");
+
+        const duplicateButton = document.createElement("button");
+        duplicateButton.type = "button";
+        duplicateButton.className = "horizontal-line-context-menu__item";
+        duplicateButton.dataset.action = "duplicate";
+        duplicateButton.textContent = "Duplicate line";
+
+        const deleteButton = document.createElement("button");
+        deleteButton.type = "button";
+        deleteButton.className = "horizontal-line-context-menu__item horizontal-line-context-menu__item--danger";
+        deleteButton.dataset.action = "delete";
+        deleteButton.textContent = "Delete line";
+
+        menuElement.appendChild(duplicateButton);
+        menuElement.appendChild(deleteButton);
+        chartCanvas.appendChild(menuElement);
+        trendLineContextMenuElement = menuElement;
+
+        menuElement.addEventListener("mousedown", (event) => {
+          event.stopPropagation();
+        });
+
+        menuElement.addEventListener("click", (event) => {
+          const actionButton = event.target.closest(".horizontal-line-context-menu__item");
+          if (!actionButton || !contextMenuTrendLineEntry || contextMenuTrendLineEntry.removed) {
+            hideTrendLineContextMenu();
+            return;
+          }
+
+          if (actionButton.dataset.action === "duplicate") {
+            setSelectedTrendLine(contextMenuTrendLineEntry);
+            if (duplicateSelectedTrendLine()) {
+              setRefreshStatus("Trend line duplicated", "is-updating");
+              window.setTimeout(() => {
+                setRefreshStatus("Live", "is-live");
+              }, 700);
+            }
+          }
+
+          if (actionButton.dataset.action === "delete") {
+            const lineToRemove = contextMenuTrendLineEntry;
+            removeTrendLineEntry(lineToRemove);
+            removeUndoActionsForTrendLineEntry(lineToRemove);
+            setRefreshStatus("Trend line removed", "is-updating");
+            window.setTimeout(() => {
+              setRefreshStatus("Live", "is-live");
+            }, 700);
+          }
+
+          hideTrendLineContextMenu();
+        });
+
+        return trendLineContextMenuElement;
+      };
+
+      const showTrendLineContextMenu = (lineEntry, event) => {
+        if (!lineEntry || lineEntry.removed || !chartCanvas) {
+          hideTrendLineContextMenu();
+          return;
+        }
+
+        const menuElement = ensureTrendLineContextMenuElement();
+        if (!menuElement) {
+          return;
+        }
+
+        const canvasRect = chartCanvas.getBoundingClientRect();
+        const relativeX = event.clientX - canvasRect.left;
+        const relativeY = event.clientY - canvasRect.top;
+
+        menuElement.classList.add("is-visible");
+        const menuWidth = menuElement.offsetWidth || 156;
+        const menuHeight = menuElement.offsetHeight || 76;
+        const maxLeft = Math.max(8, canvasRect.width - menuWidth - 8);
+        const maxTop = Math.max(8, canvasRect.height - menuHeight - 8);
+
+        const left = clamp(relativeX, 8, maxLeft);
+        const top = clamp(relativeY, 8, maxTop);
+
+        menuElement.style.left = `${left}px`;
+        menuElement.style.top = `${top}px`;
+        contextMenuTrendLineEntry = lineEntry;
+      };
+
       const applyHorizontalLineVisualState = (lineEntry) => {
         if (!lineEntry || lineEntry.removed || !lineEntry.priceLine) {
           return;
@@ -4251,6 +4533,273 @@
 
         renderPaneScaleOverlay();
         renderSelectedHorizontalLineHandle();
+      };
+
+      const applyTrendLineVisualState = (lineEntry) => {
+        if (!lineEntry || lineEntry.removed || !lineEntry.series) {
+          return;
+        }
+
+        const isSelected = selectedTrendLineEntry === lineEntry;
+        lineEntry.series.applyOptions({
+          color: isSelected ? "#ffe08a" : horizontalLineColor,
+          lineWidth: isSelected ? 4 : 3,
+          lineStyle: LightweightCharts.LineStyle.Solid,
+        });
+      };
+
+      const setSelectedTrendLine = (lineEntry) => {
+        if (selectedTrendLineEntry === lineEntry) {
+          return;
+        }
+
+        const previousSelection = selectedTrendLineEntry;
+        selectedTrendLineEntry = lineEntry || null;
+
+        if (previousSelection) {
+          applyTrendLineVisualState(previousSelection);
+        }
+        if (selectedTrendLineEntry) {
+          applyTrendLineVisualState(selectedTrendLineEntry);
+        }
+
+        renderSelectedTrendLineHandles();
+      };
+
+      const createTrendLineEntry = (startPoint, endPoint) => {
+        const startTime = Number(startPoint?.time);
+        const endTime = Number(endPoint?.time);
+        const startPrice = Number(startPoint?.price);
+        const endPrice = Number(endPoint?.price);
+
+        if (!Number.isFinite(startTime) || !Number.isFinite(endTime) || !Number.isFinite(startPrice) || !Number.isFinite(endPrice)) {
+          return null;
+        }
+
+        const trendSeries = chart.addLineSeries({
+          priceScaleId: "price",
+          color: horizontalLineColor,
+          lineWidth: 3,
+          lineStyle: LightweightCharts.LineStyle.Solid,
+          priceLineVisible: false,
+          lastValueVisible: false,
+          crosshairMarkerVisible: false,
+        });
+
+        trendSeries.setData([
+          { time: startTime, value: startPrice },
+          { time: endTime, value: endPrice },
+        ]);
+
+        return {
+          series: trendSeries,
+          startTime,
+          startPrice,
+          endTime,
+          endPrice,
+          removed: false,
+        };
+      };
+
+      const persistTrendLines = () => {
+        try {
+          const persistedLines = drawnTrendLineSeries
+            .filter((lineEntry) => lineEntry && !lineEntry.removed)
+            .map((lineEntry) => ({
+              startTime: Number(lineEntry.startTime),
+              startPrice: Number(lineEntry.startPrice),
+              endTime: Number(lineEntry.endTime),
+              endPrice: Number(lineEntry.endPrice),
+            }))
+            .filter((lineEntry) => (
+              Number.isFinite(lineEntry.startTime)
+              && Number.isFinite(lineEntry.endTime)
+              && Number.isFinite(lineEntry.startPrice)
+              && Number.isFinite(lineEntry.endPrice)
+            ))
+            .slice(-maxTrendLines);
+          localStorage.setItem(trendLineStorageKey, JSON.stringify(persistedLines));
+        } catch (_error) {
+        }
+      };
+
+      const restoreTrendLines = () => {
+        let storedLines = [];
+
+        try {
+          const savedValue = JSON.parse(localStorage.getItem(trendLineStorageKey) || "[]");
+          if (Array.isArray(savedValue)) {
+            storedLines = savedValue;
+          }
+        } catch (_error) {
+          storedLines = [];
+        }
+
+        if (!storedLines.length) {
+          return;
+        }
+
+        storedLines.slice(-maxTrendLines).forEach((storedLine) => {
+          const restoredEntry = createTrendLineEntry(
+            { time: Number(storedLine?.startTime), price: Number(storedLine?.startPrice) },
+            { time: Number(storedLine?.endTime), price: Number(storedLine?.endPrice) },
+          );
+          if (restoredEntry) {
+            drawnTrendLineSeries.push(restoredEntry);
+          }
+        });
+
+        drawnTrendLineSeries.forEach((lineEntry) => {
+          applyTrendLineVisualState(lineEntry);
+        });
+
+        syncTrendLineTestMeta();
+      };
+
+      const clearTrendLineHoverPreview = () => {
+        trendDrawAnchorPoint = null;
+        if (!drawTrendPreviewSeries) {
+          return;
+        }
+
+        chart.removeSeries(drawTrendPreviewSeries);
+        drawTrendPreviewSeries = null;
+      };
+
+      const updateTrendLineHoverPreview = (startPoint, endPoint) => {
+        const startTime = Number(startPoint?.time);
+        const startPrice = Number(startPoint?.price);
+        const endTime = Number(endPoint?.time);
+        const endPrice = Number(endPoint?.price);
+
+        if (!Number.isFinite(startTime) || !Number.isFinite(startPrice) || !Number.isFinite(endTime) || !Number.isFinite(endPrice)) {
+          return;
+        }
+
+        if (!drawTrendPreviewSeries) {
+          drawTrendPreviewSeries = chart.addLineSeries({
+            priceScaleId: "price",
+            color: "rgba(255, 209, 102, 0.75)",
+            lineWidth: 2,
+            lineStyle: LightweightCharts.LineStyle.Dashed,
+            priceLineVisible: false,
+            lastValueVisible: false,
+            crosshairMarkerVisible: false,
+          });
+        }
+
+        drawTrendPreviewSeries.setData([
+          { time: startTime, value: startPrice },
+          { time: endTime, value: endPrice },
+        ]);
+      };
+
+      const resolveTimeFromXCoordinate = (xCoordinate) => {
+        const numericCoordinate = Number(xCoordinate);
+        if (!Number.isFinite(numericCoordinate) || !Array.isArray(chartData) || chartData.length === 0) {
+          return Number.NaN;
+        }
+
+        const logical = chart.timeScale().coordinateToLogical(numericCoordinate);
+        const logicalIndex = Math.round(Number(logical));
+        if (Number.isFinite(logicalIndex)) {
+          const safeIndex = Math.max(0, Math.min(chartData.length - 1, logicalIndex));
+          const resolvedTime = Number(chartData[safeIndex]?.time);
+          if (Number.isFinite(resolvedTime)) {
+            return resolvedTime;
+          }
+        }
+
+        const fallbackTime = Number(chartData[chartData.length - 1]?.time);
+        return Number.isFinite(fallbackTime) ? fallbackTime : Number.NaN;
+      };
+
+      const resolveTrendPointFromCanvasClick = (event) => {
+        const point = resolveScreenPointFromCanvasClick(event);
+        if (!point) {
+          return null;
+        }
+
+        const resolvedTime = resolveTimeFromXCoordinate(point.xCoordinate);
+        if (!Number.isFinite(resolvedTime)) {
+          return null;
+        }
+
+        return {
+          ...point,
+          time: resolvedTime,
+        };
+      };
+
+      const getPointToSegmentDistancePx = (point, startPoint, endPoint) => {
+        const px = Number(point?.x);
+        const py = Number(point?.y);
+        const x1 = Number(startPoint?.x);
+        const y1 = Number(startPoint?.y);
+        const x2 = Number(endPoint?.x);
+        const y2 = Number(endPoint?.y);
+
+        if (![px, py, x1, y1, x2, y2].every((value) => Number.isFinite(value))) {
+          return Number.POSITIVE_INFINITY;
+        }
+
+        const dx = x2 - x1;
+        const dy = y2 - y1;
+        const lengthSquared = (dx * dx) + (dy * dy);
+
+        if (lengthSquared <= 0) {
+          return Math.hypot(px - x1, py - y1);
+        }
+
+        const t = clamp((((px - x1) * dx) + ((py - y1) * dy)) / lengthSquared, 0, 1);
+        const closestX = x1 + (t * dx);
+        const closestY = y1 + (t * dy);
+        return Math.hypot(px - closestX, py - closestY);
+      };
+
+      const findNearestTrendLineEntry = (clickedPoint) => {
+        if (!clickedPoint || !chartCanvas) {
+          return null;
+        }
+
+        const targetX = Number(clickedPoint.xCoordinate);
+        const targetY = Number(clickedPoint.yCoordinate);
+        if (!Number.isFinite(targetX) || !Number.isFinite(targetY)) {
+          return null;
+        }
+
+        let nearestLine = null;
+        let nearestDistance = Number.POSITIVE_INFINITY;
+
+        drawnTrendLineSeries.forEach((lineEntry) => {
+          if (!lineEntry || lineEntry.removed) {
+            return;
+          }
+
+          const startX = chart.timeScale().timeToCoordinate(Number(lineEntry.startTime));
+          const endX = chart.timeScale().timeToCoordinate(Number(lineEntry.endTime));
+          const startY = candleSeries.priceToCoordinate(Number(lineEntry.startPrice));
+          const endY = candleSeries.priceToCoordinate(Number(lineEntry.endPrice));
+
+          if (![startX, endX, startY, endY].every((value) => Number.isFinite(Number(value)))) {
+            return;
+          }
+
+          const distance = getPointToSegmentDistancePx(
+            { x: targetX, y: targetY },
+            { x: Number(startX), y: Number(startY) },
+            { x: Number(endX), y: Number(endY) },
+          );
+
+          if (distance > trendLineSelectionTolerancePx || distance >= nearestDistance) {
+            return;
+          }
+
+          nearestDistance = distance;
+          nearestLine = lineEntry;
+        });
+
+        return nearestLine;
       };
 
       const getHorizontalLineSelectionTolerance = (linePrice) => {
@@ -4421,6 +4970,57 @@
           const oldestLineEntry = drawnLineSeries[0];
           removeHorizontalLineEntry(oldestLineEntry);
           removeUndoActionsForLineEntry(oldestLineEntry);
+        }
+
+        return true;
+      };
+
+      const duplicateSelectedTrendLine = () => {
+        if (!selectedTrendLineEntry || selectedTrendLineEntry.removed) {
+          return false;
+        }
+
+        const startY = candleSeries.priceToCoordinate(Number(selectedTrendLineEntry.startPrice));
+        const endY = candleSeries.priceToCoordinate(Number(selectedTrendLineEntry.endPrice));
+
+        const shiftedStartPrice = candleSeries.coordinateToPrice(Number(startY) - 20);
+        const shiftedEndPrice = candleSeries.coordinateToPrice(Number(endY) - 20);
+
+        let duplicateStartPrice = Number(shiftedStartPrice);
+        let duplicateEndPrice = Number(shiftedEndPrice);
+
+        if (!Number.isFinite(duplicateStartPrice) || duplicateStartPrice <= 0) {
+          duplicateStartPrice = Number(selectedTrendLineEntry.startPrice) * 1.001;
+        }
+        if (!Number.isFinite(duplicateEndPrice) || duplicateEndPrice <= 0) {
+          duplicateEndPrice = Number(selectedTrendLineEntry.endPrice) * 1.001;
+        }
+
+        const duplicateEntry = createTrendLineEntry(
+          { time: Number(selectedTrendLineEntry.startTime), price: duplicateStartPrice },
+          { time: Number(selectedTrendLineEntry.endTime), price: duplicateEndPrice },
+        );
+        if (!duplicateEntry) {
+          return false;
+        }
+
+        drawnTrendLineSeries.push(duplicateEntry);
+        setSelectedTrendLine(duplicateEntry);
+        syncTrendLineTestMeta();
+        persistTrendLines();
+
+        pushUndoAction({
+          type: "trend-line",
+          lineEntry: duplicateEntry,
+          undo: () => {
+            removeTrendLineEntry(duplicateEntry);
+          },
+        });
+
+        if (drawnTrendLineSeries.length > maxTrendLines) {
+          const oldestLineEntry = drawnTrendLineSeries[0];
+          removeTrendLineEntry(oldestLineEntry);
+          removeUndoActionsForTrendLineEntry(oldestLineEntry);
         }
 
         return true;
@@ -4736,6 +5336,7 @@
         renderSmcOverlay();
         renderPaneScaleOverlay();
         renderSelectedHorizontalLineHandle();
+        renderSelectedTrendLineHandles();
       };
 
       chart.subscribeCrosshairMove((param) => {
@@ -5154,6 +5755,41 @@
         updateUndoButtonState();
       };
 
+      const removeTrendLineEntry = (lineEntry) => {
+        if (!lineEntry || lineEntry.removed) {
+          return;
+        }
+
+        if (contextMenuTrendLineEntry === lineEntry) {
+          hideTrendLineContextMenu();
+        }
+
+        if (selectedTrendLineEntry === lineEntry) {
+          setSelectedTrendLine(null);
+        }
+
+        chart.removeSeries(lineEntry.series);
+        lineEntry.removed = true;
+        const lineIndex = drawnTrendLineSeries.indexOf(lineEntry);
+        if (lineIndex !== -1) {
+          drawnTrendLineSeries.splice(lineIndex, 1);
+        }
+
+        syncTrendLineTestMeta();
+        persistTrendLines();
+        renderSelectedTrendLineHandles();
+      };
+
+      const removeUndoActionsForTrendLineEntry = (lineEntry) => {
+        for (let index = drawingUndoStack.length - 1; index >= 0; index -= 1) {
+          const undoAction = drawingUndoStack[index];
+          if (undoAction && undoAction.type === "trend-line" && undoAction.lineEntry === lineEntry) {
+            drawingUndoStack.splice(index, 1);
+          }
+        }
+        updateUndoButtonState();
+      };
+
       const handleDrawLineClick = (clickedPoint) => {
         if (!clickedPoint) {
           return;
@@ -5192,16 +5828,68 @@
         setRefreshStatus("Live", "is-live");
       };
 
+      const handleTrendLineClick = (clickedPoint) => {
+        if (!clickedPoint) {
+          return;
+        }
+
+        if (!trendDrawAnchorPoint) {
+          trendDrawAnchorPoint = clickedPoint;
+          updateTrendLineHoverPreview(trendDrawAnchorPoint, clickedPoint);
+          setRefreshStatus("Click second point for trend line", "is-updating");
+          return;
+        }
+
+        const trendLineEntry = createTrendLineEntry(trendDrawAnchorPoint, clickedPoint);
+        if (!trendLineEntry) {
+          return;
+        }
+
+        drawnTrendLineSeries.push(trendLineEntry);
+        setSelectedTrendLine(trendLineEntry);
+        syncTrendLineTestMeta();
+        persistTrendLines();
+
+        pushUndoAction({
+          type: "trend-line",
+          lineEntry: trendLineEntry,
+          undo: () => {
+            removeTrendLineEntry(trendLineEntry);
+          },
+        });
+
+        if (drawnTrendLineSeries.length > maxTrendLines) {
+          const oldestLineEntry = drawnTrendLineSeries[0];
+          removeTrendLineEntry(oldestLineEntry);
+          removeUndoActionsForTrendLineEntry(oldestLineEntry);
+        }
+
+        clearTrendLineHoverPreview();
+        setDrawLineMode(false);
+        setRefreshStatus("Live", "is-live");
+      };
+
       const drawCaptureOverlay = ensureDrawCaptureOverlayElement();
       ensureHorizontalLineContextMenuElement();
+  ensureTrendLineContextMenuElement();
       if (drawCaptureOverlay) {
         drawCaptureOverlay.addEventListener("mousemove", (event) => {
           if (!drawLineMode) {
             return;
           }
 
-          const hoveredPoint = resolveScreenPointFromCanvasClick(event);
-          updateHorizontalLineHoverPreview(hoveredPoint);
+          if (activeDrawTool === "horizontal") {
+            const hoveredPoint = resolveScreenPointFromCanvasClick(event);
+            updateHorizontalLineHoverPreview(hoveredPoint);
+            return;
+          }
+
+          if (activeDrawTool === "trend" && trendDrawAnchorPoint) {
+            const hoveredPoint = resolveTrendPointFromCanvasClick(event);
+            if (hoveredPoint) {
+              updateTrendLineHoverPreview(trendDrawAnchorPoint, hoveredPoint);
+            }
+          }
         });
 
         drawCaptureOverlay.addEventListener("mouseleave", () => {
@@ -5209,7 +5897,14 @@
             return;
           }
 
-          clearHorizontalLineHoverPreview();
+          if (activeDrawTool === "horizontal") {
+            clearHorizontalLineHoverPreview();
+            return;
+          }
+
+          if (activeDrawTool === "trend" && trendDrawAnchorPoint) {
+            updateTrendLineHoverPreview(trendDrawAnchorPoint, trendDrawAnchorPoint);
+          }
         });
 
         drawCaptureOverlay.addEventListener("click", (event) => {
@@ -5220,20 +5915,40 @@
             return;
           }
 
-          const clickedPoint = resolveScreenPointFromCanvasClick(event);
-          if (!clickedPoint) {
-            setRefreshStatus("Click in main price pane", "is-error");
-            window.setTimeout(() => {
-              if (drawLineMode) {
-                setRefreshStatus("Click chart: horizontal line", "is-updating");
-              } else {
-                setRefreshStatus("Live", "is-live");
-              }
-            }, 900);
+          if (activeDrawTool === "horizontal") {
+            const clickedPoint = resolveScreenPointFromCanvasClick(event);
+            if (!clickedPoint) {
+              setRefreshStatus("Click in main price pane", "is-error");
+              window.setTimeout(() => {
+                if (drawLineMode && activeDrawTool === "horizontal") {
+                  setRefreshStatus("Click chart: horizontal line", "is-updating");
+                } else {
+                  setRefreshStatus("Live", "is-live");
+                }
+              }, 900);
+              return;
+            }
+
+            handleDrawLineClick(clickedPoint);
             return;
           }
 
-          handleDrawLineClick(clickedPoint);
+          if (activeDrawTool === "trend") {
+            const clickedPoint = resolveTrendPointFromCanvasClick(event);
+            if (!clickedPoint) {
+              setRefreshStatus("Click in main price pane", "is-error");
+              window.setTimeout(() => {
+                if (drawLineMode && activeDrawTool === "trend") {
+                  setRefreshStatus("Click chart: trend line", "is-updating");
+                } else {
+                  setRefreshStatus("Live", "is-live");
+                }
+              }, 900);
+              return;
+            }
+
+            handleTrendLineClick(clickedPoint);
+          }
         });
       }
 
@@ -5241,6 +5956,20 @@
         chartCanvas.addEventListener("mousedown", (event) => {
           if (drawLineMode || event.button !== 0) {
             return;
+          }
+
+          const trendEndpointHandle = event.target instanceof HTMLElement
+            ? event.target.closest(".trend-line-endpoint-handle")
+            : null;
+          if (trendEndpointHandle && selectedTrendLineEntry && !selectedTrendLineEntry.removed) {
+            const endpoint = trendEndpointHandle.getAttribute("data-endpoint");
+            if (endpoint === "start" || endpoint === "end") {
+              draggedTrendLineEndpoint = endpoint;
+              didDragTrendLineEndpoint = false;
+              event.preventDefault();
+              event.stopPropagation();
+              return;
+            }
           }
 
           if (
@@ -5251,29 +5980,101 @@
             return;
           }
 
+          if (
+            trendLineContextMenuElement
+            && event.target instanceof Node
+            && trendLineContextMenuElement.contains(event.target)
+          ) {
+            return;
+          }
+
           hideHorizontalLineContextMenu();
+          hideTrendLineContextMenu();
 
           const clickedPoint = resolveScreenPointFromCanvasClick(event);
           if (!clickedPoint) {
             setSelectedHorizontalLine(null);
+            setSelectedTrendLine(null);
             return;
           }
 
           const nearestLineEntry = findNearestHorizontalLineEntry(clickedPoint.price);
-          if (!nearestLineEntry) {
-            setSelectedHorizontalLine(null);
+          if (nearestLineEntry) {
+            setSelectedTrendLine(null);
+            setSelectedHorizontalLine(nearestLineEntry);
+            draggedHorizontalLineEntry = nearestLineEntry;
+            isDraggingHorizontalLine = true;
+            didDragHorizontalLine = false;
+            event.preventDefault();
+            event.stopPropagation();
             return;
           }
 
-          setSelectedHorizontalLine(nearestLineEntry);
-          draggedHorizontalLineEntry = nearestLineEntry;
-          isDraggingHorizontalLine = true;
-          didDragHorizontalLine = false;
+          const nearestTrendLineEntry = findNearestTrendLineEntry(clickedPoint);
+          if (!nearestTrendLineEntry) {
+            setSelectedHorizontalLine(null);
+            setSelectedTrendLine(null);
+            return;
+          }
+
+          setSelectedHorizontalLine(null);
+          setSelectedTrendLine(nearestTrendLineEntry);
+          const startX = chart.timeScale().timeToCoordinate(Number(nearestTrendLineEntry.startTime));
+          const endX = chart.timeScale().timeToCoordinate(Number(nearestTrendLineEntry.endTime));
+          const startY = candleSeries.priceToCoordinate(Number(nearestTrendLineEntry.startPrice));
+          const endY = candleSeries.priceToCoordinate(Number(nearestTrendLineEntry.endPrice));
+          if ([startX, endX, startY, endY].every((value) => Number.isFinite(Number(value)))) {
+            draggedTrendLineEntry = nearestTrendLineEntry;
+            draggedTrendLineState = {
+              pointerX: Number(clickedPoint.xCoordinate),
+              pointerY: Number(clickedPoint.yCoordinate),
+              startX: Number(startX),
+              startY: Number(startY),
+              endX: Number(endX),
+              endY: Number(endY),
+            };
+            didDragTrendLine = false;
+          }
           event.preventDefault();
           event.stopPropagation();
         });
 
         chartCanvas.addEventListener("mousemove", (event) => {
+          if (draggedTrendLineEndpoint && selectedTrendLineEntry && !drawLineMode) {
+            const hoveredPoint = resolveTrendPointFromCanvasClick(event);
+            if (!hoveredPoint) {
+              return;
+            }
+
+            const didUpdate = updateTrendLineEntryEndpoint(selectedTrendLineEntry, draggedTrendLineEndpoint, hoveredPoint);
+            if (didUpdate) {
+              didDragTrendLineEndpoint = true;
+              event.preventDefault();
+              event.stopPropagation();
+            }
+            return;
+          }
+
+          if (draggedTrendLineEntry && draggedTrendLineState && !drawLineMode) {
+            const hoveredPoint = resolveScreenPointFromCanvasClick(event);
+            if (!hoveredPoint) {
+              return;
+            }
+
+            const didUpdate = updateTrendLineEntryByDrag(
+              draggedTrendLineEntry,
+              draggedTrendLineState,
+              Number(hoveredPoint.xCoordinate),
+              Number(hoveredPoint.yCoordinate),
+            );
+            if (didUpdate) {
+              didDragTrendLine = true;
+              event.preventDefault();
+              event.stopPropagation();
+            }
+            return;
+          }
+
           if (isDraggingHorizontalLine && draggedHorizontalLineEntry && !drawLineMode) {
             const hoveredPoint = resolveScreenPointFromCanvasClick(event);
             if (!hoveredPoint || !Number.isFinite(Number(hoveredPoint.price))) {
@@ -5298,8 +6099,18 @@
             return;
           }
 
-          const hoveredPoint = resolveScreenPointFromCanvasClick(event);
-          updateHorizontalLineHoverPreview(hoveredPoint);
+          if (activeDrawTool === "horizontal") {
+            const hoveredPoint = resolveScreenPointFromCanvasClick(event);
+            updateHorizontalLineHoverPreview(hoveredPoint);
+            return;
+          }
+
+          if (activeDrawTool === "trend" && trendDrawAnchorPoint) {
+            const hoveredPoint = resolveTrendPointFromCanvasClick(event);
+            if (hoveredPoint) {
+              updateTrendLineHoverPreview(trendDrawAnchorPoint, hoveredPoint);
+            }
+          }
         });
 
         chartCanvas.addEventListener("mouseleave", () => {
@@ -5307,7 +6118,14 @@
             return;
           }
 
-          clearHorizontalLineHoverPreview();
+          if (activeDrawTool === "horizontal") {
+            clearHorizontalLineHoverPreview();
+            return;
+          }
+
+          if (activeDrawTool === "trend" && trendDrawAnchorPoint) {
+            updateTrendLineHoverPreview(trendDrawAnchorPoint, trendDrawAnchorPoint);
+          }
         });
 
         chartCanvas.addEventListener("contextmenu", (event) => {
@@ -5318,19 +6136,34 @@
           const clickedPoint = resolveScreenPointFromCanvasClick(event);
           if (!clickedPoint) {
             hideHorizontalLineContextMenu();
+            hideTrendLineContextMenu();
             return;
           }
 
           const nearestLineEntry = findNearestHorizontalLineEntry(clickedPoint.price);
-          if (!nearestLineEntry) {
-            hideHorizontalLineContextMenu();
+          if (nearestLineEntry) {
+            event.preventDefault();
+            event.stopPropagation();
+            setSelectedTrendLine(null);
+            setSelectedHorizontalLine(nearestLineEntry);
+            hideTrendLineContextMenu();
+            showHorizontalLineContextMenu(nearestLineEntry, event);
             return;
           }
 
-          event.preventDefault();
-          event.stopPropagation();
-          setSelectedHorizontalLine(nearestLineEntry);
-          showHorizontalLineContextMenu(nearestLineEntry, event);
+          const nearestTrendLineEntry = findNearestTrendLineEntry(clickedPoint);
+          if (nearestTrendLineEntry) {
+            event.preventDefault();
+            event.stopPropagation();
+            setSelectedHorizontalLine(null);
+            setSelectedTrendLine(nearestTrendLineEntry);
+            hideHorizontalLineContextMenu();
+            showTrendLineContextMenu(nearestTrendLineEntry, event);
+            return;
+          }
+
+          hideHorizontalLineContextMenu();
+          hideTrendLineContextMenu();
         });
       }
 
@@ -5348,18 +6181,57 @@
           }
         }
 
-        if (!horizontalLineContextMenuElement || !horizontalLineContextMenuElement.classList.contains("is-visible")) {
+        const isHorizontalMenuVisible = Boolean(
+          horizontalLineContextMenuElement && horizontalLineContextMenuElement.classList.contains("is-visible"),
+        );
+        const isTrendMenuVisible = Boolean(
+          trendLineContextMenuElement && trendLineContextMenuElement.classList.contains("is-visible"),
+        );
+
+        if (!isHorizontalMenuVisible && !isTrendMenuVisible) {
           return;
         }
 
-        if (clickTarget instanceof Node && horizontalLineContextMenuElement.contains(clickTarget)) {
+        if (isHorizontalMenuVisible && clickTarget instanceof Node && horizontalLineContextMenuElement.contains(clickTarget)) {
+          return;
+        }
+
+        if (isTrendMenuVisible && clickTarget instanceof Node && trendLineContextMenuElement.contains(clickTarget)) {
           return;
         }
 
         hideHorizontalLineContextMenu();
+        hideTrendLineContextMenu();
       });
 
       window.addEventListener("mouseup", () => {
+        if (draggedTrendLineEndpoint) {
+          draggedTrendLineEndpoint = null;
+          if (didDragTrendLineEndpoint) {
+            didDragTrendLineEndpoint = false;
+            persistTrendLines();
+            renderSelectedTrendLineHandles();
+            setRefreshStatus("Trend line updated", "is-updating");
+            window.setTimeout(() => {
+              setRefreshStatus("Live", "is-live");
+            }, 700);
+          }
+        }
+
+        if (draggedTrendLineEntry) {
+          draggedTrendLineEntry = null;
+          draggedTrendLineState = null;
+          if (didDragTrendLine) {
+            didDragTrendLine = false;
+            persistTrendLines();
+            renderSelectedTrendLineHandles();
+            setRefreshStatus("Trend line moved", "is-updating");
+            window.setTimeout(() => {
+              setRefreshStatus("Live", "is-live");
+            }, 700);
+          }
+        }
+
         if (!isDraggingHorizontalLine) {
           return;
         }
@@ -5389,6 +6261,15 @@
             window.setTimeout(() => {
               setRefreshStatus("Live", "is-live");
             }, 700);
+            return;
+          }
+
+          if (duplicateSelectedTrendLine()) {
+            event.preventDefault();
+            setRefreshStatus("Trend line duplicated", "is-updating");
+            window.setTimeout(() => {
+              setRefreshStatus("Live", "is-live");
+            }, 700);
           }
           return;
         }
@@ -5408,8 +6289,15 @@
             hideHorizontalLineContextMenu();
           }
 
+          if (trendLineContextMenuElement?.classList.contains("is-visible")) {
+            hideTrendLineContextMenu();
+          }
+
           if (selectedHorizontalLineEntry) {
             setSelectedHorizontalLine(null);
+          }
+          if (selectedTrendLineEntry) {
+            setSelectedTrendLine(null);
           }
           return;
         }
@@ -5421,6 +6309,18 @@
             removeUndoActionsForLineEntry(lineToRemove);
             event.preventDefault();
             setRefreshStatus("Horizontal line removed", "is-updating");
+            window.setTimeout(() => {
+              setRefreshStatus("Live", "is-live");
+            }, 700);
+            return;
+          }
+
+          if (selectedTrendLineEntry) {
+            const lineToRemove = selectedTrendLineEntry;
+            removeTrendLineEntry(lineToRemove);
+            removeUndoActionsForTrendLineEntry(lineToRemove);
+            event.preventDefault();
+            setRefreshStatus("Trend line removed", "is-updating");
             window.setTimeout(() => {
               setRefreshStatus("Live", "is-live");
             }, 700);
@@ -5454,10 +6354,22 @@
 
       if (drawLineButtonElement) {
         drawLineButtonElement.addEventListener("click", () => {
-          const nextMode = !drawLineMode;
-          setDrawLineMode(nextMode);
+          const nextMode = !(drawLineMode && activeDrawTool === "horizontal");
+          setDrawLineMode(nextMode, "horizontal");
           if (nextMode) {
             setRefreshStatus("Click chart: horizontal line", "is-updating");
+          } else {
+            setRefreshStatus("Live", "is-live");
+          }
+        });
+      }
+
+      if (trendLineButtonElement) {
+        trendLineButtonElement.addEventListener("click", () => {
+          const nextMode = !(drawLineMode && activeDrawTool === "trend");
+          setDrawLineMode(nextMode, "trend");
+          if (nextMode) {
+            setRefreshStatus("Click chart: trend line", "is-updating");
           } else {
             setRefreshStatus("Live", "is-live");
           }
@@ -5709,8 +6621,11 @@
 
       redrawChart();
       restoreHorizontalLines();
+      restoreTrendLines();
       setSelectedHorizontalLine(null);
+      setSelectedTrendLine(null);
       syncHorizontalLineTestMeta();
+      syncTrendLineTestMeta();
       applyChartSplit();
       updateScaleDividerLabel(false);
       updateStochDividerLabel(false);

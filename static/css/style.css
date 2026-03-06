@@ -1038,6 +1038,27 @@ body {
   opacity: 1;
 }
 
+.trend-line-endpoint-handle {
+  position: absolute;
+  left: 0;
+  width: 12px;
+  height: 12px;
+  transform: translate(-50%, -50%);
+  border-radius: 50%;
+  border: 2px solid rgba(255, 224, 138, 1);
+  background: transparent;
+  box-shadow: 0 0 0 1px rgba(255, 224, 138, 0.35);
+  pointer-events: none;
+  opacity: 0;
+  z-index: 11;
+  cursor: pointer;
+}
+
+.trend-line-endpoint-handle.is-visible {
+  pointer-events: auto;
+  opacity: 1;
+}
+
 .pane-reorder-overlay {
   position: absolute;
   inset: 0;
