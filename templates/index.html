@@ -1581,6 +1581,10 @@
               return;
             }
 
+            if (!isHorizontalLineInCandlePane(lineEntry)) {
+              return;
+            }
+
             const linePrice = Number(lineEntry.price);
             if (!Number.isFinite(linePrice)) {
               return;
@@ -2442,6 +2446,9 @@
 
         paneScaleOverlayRafId = window.requestAnimationFrame(() => {
           paneScaleOverlayRafId = null;
+          drawnLineSeries.forEach((lineEntry) => {
+            applyHorizontalLineVisualState(lineEntry);
+          });
           renderDynamicPriceScaleLines();
           renderPaneScaleOverlay();
           renderSelectedHorizontalLineHandle();
@@ -2534,7 +2541,7 @@
       };
 
       const renderSelectedHorizontalLineHandle = () => {
-        if (!horizontalLineSelectionHandleElement || !chartCanvas || !paneLayout.candle) {
+        if (!horizontalLineSelectionHandleElement || !chartCanvas) {
           return;
         }
 
@@ -2555,6 +2562,11 @@
           return;
         }
 
+        if (!isYCoordinateInCandlePane(yCoordinate)) {
+          horizontalLineSelectionHandleElement.classList.remove("is-visible");
+          return;
+        }
+
         const canvasHeight = chartCanvas.clientHeight;
         const canvasWidth = chartCanvas.clientWidth;
         if (canvasHeight <= 0 || canvasWidth <= 0) {
@@ -2562,17 +2574,19 @@
           return;
         }
 
-        const timeAxisSafeZonePx = 22;
-        const usableBottomPx = Math.max(0, canvasHeight - timeAxisSafeZonePx);
-        const candleTopPx = paneLayout.candle.top * usableBottomPx;
-        const candleBottomPx = paneLayout.candle.bottom * usableBottomPx;
+        const candlePaneBounds = resolveCandlePaneBoundsPx();
+        if (!candlePaneBounds) {
+          horizontalLineSelectionHandleElement.classList.remove("is-visible");
+          return;
+        }
+
         const rightScaleReservePx = 66;
         const maxDrawableRightPx = Math.max(0, canvasWidth - rightScaleReservePx);
         const handleX = Math.max(10, maxDrawableRightPx / 2);
-        const clampedY = clamp(Number(yCoordinate), candleTopPx, candleBottomPx);
+        const handleY = Number(yCoordinate);
 
         horizontalLineSelectionHandleElement.style.left = `${handleX}px`;
-        horizontalLineSelectionHandleElement.style.top = `${clampedY}px`;
+        horizontalLineSelectionHandleElement.style.top = `${handleY}px`;
         horizontalLineSelectionHandleElement.classList.add("is-visible");
       };
 
@@ -2581,7 +2595,7 @@
           return;
         }
 
-        if (!param || !param.point || !param.time || !paneLayout.candle) {
+        if (!param || !param.point || !param.time) {
           hidePriceHoverGuide();
           return;
         }
@@ -2599,10 +2613,14 @@
           return;
         }
 
-        const timeAxisSafeZonePx = 22;
-        const usableBottomPx = Math.max(0, canvasHeight - timeAxisSafeZonePx);
-        const candleTopPx = paneLayout.candle.top * usableBottomPx;
-        const candleBottomPx = paneLayout.candle.bottom * usableBottomPx;
+        const candlePaneBounds = resolveCandlePaneBoundsPx();
+        if (!candlePaneBounds) {
+          hidePriceHoverGuide();
+          return;
+        }
+
+        const candleTopPx = candlePaneBounds.top;
+        const candleBottomPx = candlePaneBounds.bottom;
 
         if (yCoordinate < candleTopPx || yCoordinate > candleBottomPx) {
           hidePriceHoverGuide();
@@ -3864,6 +3882,68 @@
         return Number.isFinite(fallbackPrice) && fallbackPrice > 0 ? fallbackPrice : null;
       };
 
+      const resolveCandlePaneBoundsPx = () => {
+        if (!chartCanvas) {
+          return null;
+        }
+
+        const candleSegment = renderedPaneLayout.candle || paneLayout.candle;
+        if (!candleSegment) {
+          return null;
+        }
+
+        const canvasHeight = Number(chartCanvas.clientHeight || 0);
+        if (!Number.isFinite(canvasHeight) || canvasHeight <= 0) {
+          return null;
+        }
+
+        const timeScaleApi = chart.timeScale();
+        const timeScaleHeightPx =
+          timeScaleApi && typeof timeScaleApi.height === "function"
+            ? Math.max(0, Number(timeScaleApi.height()) || 0)
+            : 0;
+        const drawableHeightPx = Math.max(0, canvasHeight - timeScaleHeightPx);
+        const topPx = Number(candleSegment.top) * drawableHeightPx;
+        const bottomPx = Number(candleSegment.bottom) * drawableHeightPx;
+
+        if (!Number.isFinite(topPx) || !Number.isFinite(bottomPx) || bottomPx <= topPx) {
+          return null;
+        }
+
+        return {
+          top: topPx,
+          bottom: bottomPx,
+        };
+      };
+
+      const isYCoordinateInCandlePane = (yCoordinate) => {
+        const numericY = Number(yCoordinate);
+        if (!Number.isFinite(numericY)) {
+          return false;
+        }
+
+        const candlePaneBounds = resolveCandlePaneBoundsPx();
+        if (!candlePaneBounds) {
+          return true;
+        }
+
+        return numericY >= candlePaneBounds.top && numericY <= candlePaneBounds.bottom;
+      };
+
+      const isHorizontalLineInCandlePane = (lineEntry) => {
+        if (!lineEntry || lineEntry.removed) {
+          return false;
+        }
+
+        const linePrice = Number(lineEntry.price);
+        if (!Number.isFinite(linePrice) || linePrice <= 0) {
+          return false;
+        }
+
+        const yCoordinate = candleSeries.priceToCoordinate(linePrice);
+        return isYCoordinateInCandlePane(yCoordinate);
+      };
+
       const resolveScreenPointFromCanvasClick = (event) => {
         if (!chartCanvas) {
           return null;
@@ -3878,6 +3958,10 @@
         }
 
         if (xCoordinate < 0 || yCoordinate < 0 || xCoordinate > canvasRect.width || yCoordinate > canvasRect.height) {
+          return null;
+        }
+
+        if (!isYCoordinateInCandlePane(yCoordinate)) {
           return null;
         }
 
@@ -4044,10 +4128,12 @@
         }
 
         const isSelected = selectedHorizontalLineEntry === lineEntry;
+        const isVisibleInCandlePane = isHorizontalLineInCandlePane(lineEntry);
         lineEntry.priceLine.applyOptions({
           color: isSelected ? "#ffe08a" : horizontalLineColor,
           lineWidth: isSelected ? 4 : 3,
           lineStyle: LightweightCharts.LineStyle.Solid,
+          lineVisible: isVisibleInCandlePane,
         });
       };
 
@@ -4102,6 +4188,10 @@
 
         drawnLineSeries.forEach((lineEntry) => {
           if (!lineEntry || lineEntry.removed) {
+            return;
+          }
+
+          if (!isHorizontalLineInCandlePane(lineEntry)) {
             return;
           }
 
@@ -4183,6 +4273,10 @@
           if (restoredEntry) {
             drawnLineSeries.push(restoredEntry);
           }
+        });
+
+        drawnLineSeries.forEach((lineEntry) => {
+          applyHorizontalLineVisualState(lineEntry);
         });
 
         syncHorizontalLineTestMeta();
