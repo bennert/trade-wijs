@@ -10,7 +10,10 @@
 <body>
   <div class="app-shell">
     <header class="topbar">
-      <div class="brand">Trade Wijs v{{ app_version }}</div>
+      <div class="brand">
+        <span class="brand-title">Trade Wijs</span>
+        <span class="brand-version">v{{ app_version }}</span>
+      </div>
       <div class="market-selectors">
         <button id="exchange-selector-btn" type="button" class="market-selector-btn" aria-haspopup="true" aria-expanded="false">
           {{ market_data.exchange }}
