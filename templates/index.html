@@ -102,6 +102,13 @@
           <h3 class="settings-tabs-title">Exchanges</h3>
           {% for item in market_data.supported_exchanges %}
             <div class="settings-exchange-row" data-settings-exchange-row="{{ item.key }}">
+              <input
+                id="settings-enabled-exchange-{{ item.key }}"
+                type="checkbox"
+                data-settings-enabled-exchange="{{ item.key }}"
+                checked
+                aria-label="Enable {{ item.label }}"
+              />
               <button
                 type="button"
                 class="settings-tab{% if item.key == market_data.exchange_key %} is-active{% endif %}"
@@ -109,15 +116,6 @@
               >
                 {{ item.label }}
               </button>
-              <label class="settings-exchange-option settings-exchange-option--inline" for="settings-enabled-exchange-{{ item.key }}">
-                <input
-                  id="settings-enabled-exchange-{{ item.key }}"
-                  type="checkbox"
-                  data-settings-enabled-exchange="{{ item.key }}"
-                  checked
-                />
-                <span>Enabled</span>
-              </label>
             </div>
           {% endfor %}
         </aside>
@@ -2948,10 +2946,35 @@
         }
 
         applyEnabledTimeframesToUI();
+        applySettingsExchangeEditableState();
 
         try {
           localStorage.setItem(settingsExchangeStorageKey, activeSettingsExchangeKey);
         } catch (_error) {
+        }
+      };
+
+      const applySettingsExchangeEditableState = () => {
+        const isSettingsExchangeEnabled = enabledExchangeKeys.has(activeSettingsExchangeKey);
+
+        if (settingsApiKeyElement) {
+          settingsApiKeyElement.disabled = !isSettingsExchangeEnabled;
+        }
+        if (settingsApiSecretElement) {
+          settingsApiSecretElement.disabled = !isSettingsExchangeEnabled;
+        }
+        if (settingsApiPassphraseElement) {
+          settingsApiPassphraseElement.disabled = !isSettingsExchangeEnabled;
+        }
+        if (settingsSaveButtonElement) {
+          settingsSaveButtonElement.disabled = !isSettingsExchangeEnabled;
+        }
+
+        if (settingsActionsElement) {
+          settingsActionsElement.setAttribute("aria-disabled", isSettingsExchangeEnabled ? "false" : "true");
+        }
+        if (settingsExchangeTimeframesPanelElement) {
+          settingsExchangeTimeframesPanelElement.setAttribute("aria-disabled", isSettingsExchangeEnabled ? "false" : "true");
         }
       };
 
@@ -2996,14 +3019,15 @@
 
         if (currentExchangeKey !== previousExchangeKey) {
           enabledTimeframes = getEnabledTimeframesForExchange(currentExchangeKey);
-          applyEnabledTimeframesToUI();
-          syncSettingsExchangeWithCurrentExchange();
         }
+
+        applyEnabledTimeframesToUI();
 
         if (exchangeSelectorButtonElement) {
           exchangeSelectorButtonElement.textContent = getExchangeLabelByKey(currentExchangeKey);
         }
         setActiveSelectorMenuItem(exchangeSelectorMenuElement, "data-exchange", currentExchangeKey);
+        applySettingsExchangeEditableState();
       };
 
       const setEnabledExchanges = (exchangeKeys, options = {}) => {
@@ -3048,12 +3072,13 @@
         });
 
         const activeSettingsTimeframes = getEnabledTimeframesForExchange(activeSettingsExchangeKey);
+        const isSettingsExchangeEnabled = enabledExchangeKeys.has(activeSettingsExchangeKey);
         const enabledTimeframeCount = activeSettingsTimeframes.size;
         settingsTimeframeToggleElements.forEach((checkbox) => {
           const timeframe = checkbox.dataset.settingsEnabledTimeframe;
           const isEnabled = activeSettingsTimeframes.has(timeframe);
           checkbox.checked = isEnabled;
-          checkbox.disabled = isEnabled && enabledTimeframeCount === 1;
+          checkbox.disabled = !isSettingsExchangeEnabled || (isEnabled && enabledTimeframeCount === 1);
         });
 
         if (!enabledTimeframes.has(currentTimeframe)) {

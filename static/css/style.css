@@ -317,7 +317,7 @@ body {
   padding: 6px;
   background: rgba(15, 17, 22, 0.25);
   display: grid;
-  grid-template-columns: 1fr auto;
+  grid-template-columns: auto 1fr;
   align-items: center;
   gap: 8px;
 }
@@ -461,6 +461,11 @@ body {
   font-size: 12px;
   font-weight: 600;
   cursor: pointer;
+}
+
+.settings-save-btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
 }
 
 .settings-save-status {
