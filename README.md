@@ -116,6 +116,10 @@ CI note:
 - Runner needs Node.js + npm for Cucumber/Playwright bootstrap
 - Keep Python `.venv` available because the script always runs the Python import smoke test first
 
+## Recent updates
+
+- Undo history for drawing tools is now persisted in local storage and restored after a page reload.
+
 ## What's included in v1?
 
 - Topbar
