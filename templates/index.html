@@ -2908,6 +2908,11 @@
 
         if (currentAppViewMode === "trade") {
           renderChartViewport();
+          return;
+        }
+
+        if (activeSettingsCategory === "exchanges") {
+          syncSettingsExchangeWithCurrentExchange();
         }
       };
 
@@ -2950,6 +2955,14 @@
         }
       };
 
+      const syncSettingsExchangeWithCurrentExchange = () => {
+        if (!validExchangeKeys.has(currentExchangeKey)) {
+          return;
+        }
+
+        setSettingsExchangeTab(currentExchangeKey);
+      };
+
       const persistEnabledExchanges = () => {
         try {
           localStorage.setItem(enabledExchangesStorageKey, JSON.stringify(Array.from(enabledExchangeKeys)));
@@ -2984,6 +2997,7 @@
         if (currentExchangeKey !== previousExchangeKey) {
           enabledTimeframes = getEnabledTimeframesForExchange(currentExchangeKey);
           applyEnabledTimeframesToUI();
+          syncSettingsExchangeWithCurrentExchange();
         }
 
         if (exchangeSelectorButtonElement) {
@@ -4807,6 +4821,7 @@
           currentExchangeKey = nextExchange;
           enabledTimeframes = getEnabledTimeframesForExchange(currentExchangeKey);
           applyEnabledTimeframesToUI();
+          syncSettingsExchangeWithCurrentExchange();
           localStorage.setItem(exchangeStorageKey, currentExchangeKey);
           setPreferenceCookie("trade_wijs_exchange", currentExchangeKey);
           setActiveSelectorMenuItem(exchangeSelectorMenuElement, "data-exchange", currentExchangeKey);
