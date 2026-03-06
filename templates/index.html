@@ -26,6 +26,7 @@
               type="button"
               class="market-selector-menu-item{% if item.key == market_data.exchange_key %} is-active{% endif %}"
               data-exchange="{{ item.key }}"
+              data-exchange-label="{{ item.label }}"
               role="menuitem"
             >
               {{ item.label }}
@@ -57,7 +58,7 @@
     </header>
 
     <aside class="left-panel" aria-label="Main menu">
-      <button type="button" class="left-menu-btn is-active" aria-label="Trade panel">
+      <button id="left-menu-trade-btn" type="button" class="left-menu-btn is-active" aria-label="Trade panel" aria-pressed="true" data-view="trade">
         <svg class="left-menu-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
           <path d="M6 18V10"></path>
           <path d="M12 18V6"></path>
@@ -68,7 +69,7 @@
         </svg>
         <span>Trade panel</span>
       </button>
-      <button type="button" class="left-menu-btn" aria-label="Settings">
+      <button id="left-menu-settings-btn" type="button" class="left-menu-btn" aria-label="Settings" aria-pressed="false" data-view="settings">
         <svg class="left-menu-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
           <circle cx="12" cy="12" r="3"></circle>
           <path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 0 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 0 1-4 0v-.2a1.7 1.7 0 0 0-1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 0 1 0-4h.2a1.7 1.7 0 0 0 1.5-1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 0 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3h.1a1.7 1.7 0 0 0 1-1.5V3a2 2 0 0 1 4 0v.2a1.7 1.7 0 0 0 1 1.5h.1a1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 0 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8v.1a1.7 1.7 0 0 0 1.5 1H21a2 2 0 0 1 0 4h-.2a1.7 1.7 0 0 0-1.5 1Z"></path>
@@ -77,20 +78,135 @@
       </button>
     </aside>
 
+    <section id="settings-panel" class="settings-panel" aria-label="Settings panel">
+      <div class="settings-shell">
+        <aside class="settings-categories" aria-label="Settings categories">
+          <button type="button" class="settings-category-tab" data-settings-category="general">
+            <svg class="settings-category-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+              <circle cx="12" cy="12" r="3"></circle>
+              <path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 0 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 0 1-4 0v-.2a1.7 1.7 0 0 0-1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 0 1 0-4h.2a1.7 1.7 0 0 0 1.5-1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 0 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3h.1a1.7 1.7 0 0 0 1-1.5V3a2 2 0 0 1 4 0v.2a1.7 1.7 0 0 0 1 1.5h.1a1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 0 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8v.1a1.7 1.7 0 0 0 1.5 1H21a2 2 0 0 1 0 4h-.2a1.7 1.7 0 0 0-1.5 1Z"></path>
+            </svg>
+            <span>General</span>
+          </button>
+          <button type="button" class="settings-category-tab is-active" aria-current="page" data-settings-category="exchanges">
+            <svg class="settings-category-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+              <rect x="4" y="6" width="16" height="5" rx="1"></rect>
+              <rect x="4" y="13" width="16" height="5" rx="1"></rect>
+              <circle cx="9" cy="8.5" r="1"></circle>
+              <circle cx="15" cy="15.5" r="1"></circle>
+            </svg>
+            <span>Exchanges</span>
+          </button>
+        </aside>
+        <aside class="settings-tabs settings-middle-section is-active" aria-label="Exchange tabs" data-settings-middle-section="exchanges">
+          <h3 class="settings-tabs-title">Exchanges</h3>
+          {% for item in market_data.supported_exchanges %}
+            <div class="settings-exchange-row" data-settings-exchange-row="{{ item.key }}">
+              <button
+                type="button"
+                class="settings-tab{% if item.key == market_data.exchange_key %} is-active{% endif %}"
+                data-settings-exchange="{{ item.key }}"
+              >
+                {{ item.label }}
+              </button>
+              <label class="settings-exchange-option settings-exchange-option--inline" for="settings-enabled-exchange-{{ item.key }}">
+                <input
+                  id="settings-enabled-exchange-{{ item.key }}"
+                  type="checkbox"
+                  data-settings-enabled-exchange="{{ item.key }}"
+                  checked
+                />
+                <span>Enabled</span>
+              </label>
+            </div>
+          {% endfor %}
+        </aside>
+        <aside class="settings-tabs settings-middle-section" aria-label="General settings tabs" data-settings-middle-section="general">
+          <h3 class="settings-tabs-title">General</h3>
+          <button type="button" class="settings-tab is-active" aria-current="page" data-settings-general-item="indicators">Indicators</button>
+        </aside>
+        <div class="settings-content">
+          <section id="settings-category-exchanges" class="settings-category-section is-active" data-settings-category-section="exchanges">
+            <h3 id="settings-exchange-label" class="settings-subpanel-title">{{ market_data.exchange }}</h3>
+            <div class="settings-form-grid">
+              <label class="settings-field" for="settings-api-key">
+                <span>API Key</span>
+                <input id="settings-api-key" type="text" autocomplete="off" placeholder="Enter API key" />
+              </label>
+              <label class="settings-field" for="settings-api-secret">
+                <span>API Secret</span>
+                <input id="settings-api-secret" type="password" autocomplete="off" placeholder="Enter API secret" />
+              </label>
+              <label class="settings-field" for="settings-api-passphrase">
+                <span>Passphrase (optional)</span>
+                <input id="settings-api-passphrase" type="password" autocomplete="off" placeholder="Enter passphrase" />
+              </label>
+            </div>
+          </section>
+          <section id="settings-category-general" class="settings-category-section" data-settings-category-section="general">
+            <div class="settings-subpanel settings-general-subsection is-active" data-settings-general-section="indicators">
+              <h3 class="settings-subpanel-title">Indicators</h3>
+              <div class="settings-checkbox-list" role="group" aria-label="Indicators options">
+                <label class="settings-exchange-option" for="settings-indicator-bb">
+                  <input id="settings-indicator-bb" type="checkbox" data-settings-enabled-indicator="bb" checked />
+                  <span>BB</span>
+                </label>
+                <label class="settings-exchange-option" for="settings-indicator-rsi">
+                  <input id="settings-indicator-rsi" type="checkbox" data-settings-enabled-indicator="rsi" checked />
+                  <span>RSI</span>
+                </label>
+                <label class="settings-exchange-option" for="settings-indicator-stoch">
+                  <input id="settings-indicator-stoch" type="checkbox" data-settings-enabled-indicator="stoch" checked />
+                  <span>Stoch</span>
+                </label>
+                <label class="settings-exchange-option" for="settings-indicator-fvg">
+                  <input id="settings-indicator-fvg" type="checkbox" data-settings-enabled-indicator="fvg" checked />
+                  <span>FVG</span>
+                </label>
+                <label class="settings-exchange-option" for="settings-indicator-smc">
+                  <input id="settings-indicator-smc" type="checkbox" data-settings-enabled-indicator="smc" checked />
+                  <span>SMC</span>
+                </label>
+                <label class="settings-exchange-option" for="settings-indicator-volume">
+                  <input id="settings-indicator-volume" type="checkbox" data-settings-enabled-indicator="volume" checked />
+                  <span>Volume</span>
+                </label>
+              </div>
+            </div>
+          </section>
+          <div id="settings-actions" class="settings-actions">
+            <button id="settings-save-btn" type="button" class="settings-save-btn">Save</button>
+            <span id="settings-save-status" class="settings-save-status" aria-live="polite"></span>
+          </div>
+          <div id="settings-exchange-timeframes-panel" class="settings-subpanel settings-exchange-timeframes-panel">
+            <h3 class="settings-subpanel-title">Timeframes</h3>
+            <div class="settings-checkbox-list" role="group" aria-label="Timeframes options">
+              {% for timeframe in market_data.supported_timeframes %}
+                <label class="settings-exchange-option" for="settings-timeframe-{{ timeframe|replace('/', '-') }}">
+                  <input id="settings-timeframe-{{ timeframe|replace('/', '-') }}" type="checkbox" data-settings-enabled-timeframe="{{ timeframe }}" checked />
+                  <span>{{ timeframe }}</span>
+                </label>
+              {% endfor %}
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
     <main class="chart-area">
       <div class="chart-toolbar">
         <div class="toolbar-group toolbar-group--timeframes">
           <div id="timeframe-buttons" class="timeframe-buttons" role="group" aria-label="Timeframe">
-            <button type="button" class="timeframe-btn{% if market_data.timeframe == '1m' %} is-active{% endif %}" data-timeframe="1m">1m</button>
-            <button type="button" class="timeframe-btn{% if market_data.timeframe == '3m' %} is-active{% endif %}" data-timeframe="3m">3m</button>
-            <button type="button" class="timeframe-btn{% if market_data.timeframe == '5m' %} is-active{% endif %}" data-timeframe="5m">5m</button>
-            <button type="button" class="timeframe-btn{% if market_data.timeframe == '15m' %} is-active{% endif %}" data-timeframe="15m">15m</button>
-            <button type="button" class="timeframe-btn{% if market_data.timeframe == '1h' %} is-active{% endif %}" data-timeframe="1h">1h</button>
-            <button type="button" class="timeframe-btn{% if market_data.timeframe == '4h' %} is-active{% endif %}" data-timeframe="4h">4h</button>
-            <button type="button" class="timeframe-btn{% if market_data.timeframe == '1d' %} is-active{% endif %}" data-timeframe="1d">1d</button>
-            <button type="button" class="timeframe-btn{% if market_data.timeframe == '1w' %} is-active{% endif %}" data-timeframe="1w">1w</button>
-            <button type="button" class="timeframe-btn{% if market_data.timeframe == '1M' %} is-active{% endif %}" data-timeframe="1M">1M</button>
+            {% for timeframe in market_data.supported_timeframes %}
+              <button type="button" class="timeframe-btn{% if market_data.timeframe == timeframe %} is-active{% endif %}" data-timeframe="{{ timeframe }}">{{ timeframe }}</button>
+            {% endfor %}
           </div>
+          <button id="timeframe-settings-btn" type="button" class="draw-tool-btn" aria-label="Open indicator settings" title="Indicator settings">
+            <svg class="tool-btn-icon-svg" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+              <circle cx="12" cy="12" r="3"></circle>
+              <path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 0 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 0 1-4 0v-.2a1.7 1.7 0 0 0-1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 0 1 0-4h.2a1.7 1.7 0 0 0 1.5-1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 0 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3h.1a1.7 1.7 0 0 0 1-1.5V3a2 2 0 0 1 4 0v.2a1.7 1.7 0 0 0 1 1.5h.1a1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 0 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8v.1a1.7 1.7 0 0 0 1.5 1H21a2 2 0 0 1 0 4h-.2a1.7 1.7 0 0 0-1.5 1Z"></path>
+            </svg>
+          </button>
         </div>
         <div class="toolbar-divider" aria-hidden="true"></div>
         <div class="toolbar-group toolbar-group--indicators">
@@ -102,6 +218,12 @@
             <button type="button" class="indicator-btn is-active" data-indicator="stoch">Stoch</button>
             <button type="button" class="indicator-btn is-active" data-indicator="volume">Volume</button>
           </div>
+          <button id="indicator-settings-btn" type="button" class="draw-tool-btn" aria-label="Open indicators settings" title="Indicators settings">
+            <svg class="tool-btn-icon-svg" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+              <circle cx="12" cy="12" r="3"></circle>
+              <path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 0 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 0 1-4 0v-.2a1.7 1.7 0 0 0-1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 0 1 0-4h.2a1.7 1.7 0 0 0 1.5-1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 0 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3h.1a1.7 1.7 0 0 0 1-1.5V3a2 2 0 0 1 4 0v.2a1.7 1.7 0 0 0 1 1.5h.1a1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 0 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8v.1a1.7 1.7 0 0 0 1.5 1H21a2 2 0 0 1 0 4h-.2a1.7 1.7 0 0 0-1.5 1Z"></path>
+            </svg>
+          </button>
         </div>
         <div class="toolbar-divider" aria-hidden="true"></div>
         <div class="drawing-tools" role="group" aria-label="Drawing tools">
@@ -284,8 +406,31 @@
       const timeframeButtonElements = Array.from(document.querySelectorAll(".timeframe-btn"));
       const indicatorButtonsElement = document.querySelector(".indicator-buttons");
       const indicatorButtonElements = Array.from(document.querySelectorAll(".indicator-btn"));
+      const timeframeSettingsButtonElement = document.getElementById("timeframe-settings-btn");
+      const indicatorSettingsButtonElement = document.getElementById("indicator-settings-btn");
       const undoButtonElement = document.getElementById("undo-btn");
       const drawLineButtonElement = document.getElementById("horizontal-line-btn");
+      const leftMenuButtonElements = Array.from(document.querySelectorAll(".left-menu-btn"));
+      const leftMenuTradeButtonElement = document.getElementById("left-menu-trade-btn");
+      const leftMenuSettingsButtonElement = document.getElementById("left-menu-settings-btn");
+      const settingsPanelElement = document.getElementById("settings-panel");
+      const settingsCategoryTabElements = Array.from(document.querySelectorAll("[data-settings-category]"));
+      const settingsCategorySectionElements = Array.from(document.querySelectorAll("[data-settings-category-section]"));
+      const settingsMiddleSectionElements = Array.from(document.querySelectorAll("[data-settings-middle-section]"));
+      const settingsGeneralItemTabElements = Array.from(document.querySelectorAll("[data-settings-general-item]"));
+      const settingsGeneralSectionElements = Array.from(document.querySelectorAll("[data-settings-general-section]"));
+      const settingsExchangeLabelElement = document.getElementById("settings-exchange-label");
+      const settingsExchangeTabElements = Array.from(document.querySelectorAll("[data-settings-exchange]"));
+      const settingsExchangeToggleElements = Array.from(document.querySelectorAll("[data-settings-enabled-exchange]"));
+      const settingsTimeframeToggleElements = Array.from(document.querySelectorAll("[data-settings-enabled-timeframe]"));
+      const settingsIndicatorToggleElements = Array.from(document.querySelectorAll("[data-settings-enabled-indicator]"));
+      const settingsApiKeyElement = document.getElementById("settings-api-key");
+      const settingsApiSecretElement = document.getElementById("settings-api-secret");
+      const settingsApiPassphraseElement = document.getElementById("settings-api-passphrase");
+      const settingsActionsElement = document.getElementById("settings-actions");
+      const settingsExchangeTimeframesPanelElement = document.getElementById("settings-exchange-timeframes-panel");
+      const settingsSaveButtonElement = document.getElementById("settings-save-btn");
+      const settingsSaveStatusElement = document.getElementById("settings-save-status");
       const rightPanelTabsElement = document.getElementById("right-panel-tabs");
       const panelTabButtons = Array.from(document.querySelectorAll(".panel-tab"));
       const panelOrderElement = document.getElementById("panel-order");
@@ -335,14 +480,24 @@
       const timeframeStorageKey = "trade-wijs-timeframe";
       const symbolStorageKey = "trade-wijs-symbol";
       const exchangeStorageKey = "trade-wijs-exchange";
+      const appViewModeStorageKey = "trade-wijs-app-view-mode";
       const rightPanelCollapseStorageKey = "trade-wijs-right-panel-collapsed";
+      const settingsCategoryStorageKey = "trade-wijs-settings-category";
+      const settingsExchangeStorageKey = "trade-wijs-settings-exchange";
+      const settingsGeneralItemStorageKey = "trade-wijs-settings-general-item";
+      const enabledExchangesStorageKey = "trade-wijs-enabled-exchanges";
+      const enabledTimeframesStorageKey = "trade-wijs-enabled-timeframes";
+      const enabledIndicatorsStorageKey = "trade-wijs-enabled-indicators";
+      const exchangeApiSettingsStorageKey = "trade-wijs-exchange-api-settings";
       const validTimeframes = new Set(timeframeButtonElements.map((button) => button.dataset.timeframe).filter(Boolean));
+      const validIndicators = new Set(indicatorButtonElements.map((button) => button.dataset.indicator).filter(Boolean));
       const validSymbols = new Set(
         Array.from(pairSelectorMenuElement?.querySelectorAll("[data-symbol]") || []).map((button) => button.dataset.symbol).filter(Boolean),
       );
       const validExchangeKeys = new Set(
         Array.from(exchangeSelectorMenuElement?.querySelectorAll("[data-exchange]") || []).map((button) => button.dataset.exchange).filter(Boolean),
       );
+      const exchangeSelectorMenuItemElements = Array.from(exchangeSelectorMenuElement?.querySelectorAll("[data-exchange]") || []);
       let shouldInitialTimeframeRefresh = false;
       let isRefreshing = false;
       let refreshRequestCounter = 0;
@@ -364,8 +519,17 @@
       let drawHoverPreviewLine = null;
       let drawCaptureOverlayElement = null;
       let drawLineMode = false;
+      let currentAppViewMode = "trade";
       let isRightPanelCollapsed = false;
       let isMarketInfoCollapsed = false;
+      let activeSettingsCategory = "exchanges";
+      let activeSettingsExchangeKey = currentExchangeKey;
+      let activeSettingsGeneralItem = "indicators";
+      let exchangeApiSettings = {};
+      let enabledExchangeKeys = new Set(validExchangeKeys);
+      let enabledTimeframes = new Set(validTimeframes);
+      let enabledTimeframesByExchange = {};
+      let enabledIndicators = new Set(validIndicators);
       let marketInfoHasError =
         Boolean(marketErrorElement)
         && (marketErrorElement.style.display || "") !== "none"
@@ -432,19 +596,28 @@
       ) => `${timeframe}|${exchangeKey}|${symbol}`;
 
       const getTimeframeDurationSeconds = (timeframe) => {
-        const timeframeSecondsMap = {
-          "1m": 60,
-          "3m": 180,
-          "5m": 300,
-          "15m": 900,
-          "1h": 3600,
-          "4h": 14400,
-          "1d": 86400,
-          "1w": 604800,
-          "1M": 2592000,
+        if (typeof timeframe !== "string" || timeframe.length < 2) {
+          return 60;
+        }
+
+        const units = {
+          m: 60,
+          h: 3600,
+          d: 86400,
+          w: 604800,
+          M: 2592000,
         };
 
-        return timeframeSecondsMap[timeframe] || 60;
+        const numberPart = timeframe.slice(0, -1);
+        const unitPart = timeframe.slice(-1);
+        const multiplier = Number(numberPart);
+        const unitSeconds = units[unitPart];
+
+        if (!Number.isFinite(multiplier) || multiplier <= 0 || !Number.isFinite(unitSeconds)) {
+          return 60;
+        }
+
+        return Math.floor(multiplier * unitSeconds);
       };
 
       const getEstimatedServerNowSeconds = () => {
@@ -512,6 +685,95 @@
       };
 
       try {
+        const savedAppViewMode = localStorage.getItem(appViewModeStorageKey);
+        if (savedAppViewMode === "trade" || savedAppViewMode === "settings") {
+          currentAppViewMode = savedAppViewMode;
+        }
+      } catch (_error) {
+      }
+
+      try {
+        const savedEnabledExchanges = JSON.parse(localStorage.getItem(enabledExchangesStorageKey) || "[]");
+        if (Array.isArray(savedEnabledExchanges)) {
+          const sanitizedEnabledExchanges = savedEnabledExchanges.filter((exchangeKey) => validExchangeKeys.has(exchangeKey));
+          if (sanitizedEnabledExchanges.length > 0) {
+            enabledExchangeKeys = new Set(sanitizedEnabledExchanges);
+          }
+        }
+      } catch (_error) {
+      }
+
+      try {
+        const savedEnabledTimeframes = JSON.parse(localStorage.getItem(enabledTimeframesStorageKey) || "{}");
+        if (savedEnabledTimeframes && typeof savedEnabledTimeframes === "object") {
+          const nextEnabledTimeframesByExchange = {};
+          Object.keys(savedEnabledTimeframes).forEach((exchangeKey) => {
+            if (!validExchangeKeys.has(exchangeKey)) {
+              return;
+            }
+
+            const configuredTimeframes = savedEnabledTimeframes[exchangeKey];
+            if (!Array.isArray(configuredTimeframes)) {
+              return;
+            }
+
+            const sanitizedEnabledTimeframes = configuredTimeframes.filter((timeframe) => validTimeframes.has(timeframe));
+            if (sanitizedEnabledTimeframes.length > 0) {
+              nextEnabledTimeframesByExchange[exchangeKey] = Array.from(new Set(sanitizedEnabledTimeframes));
+            }
+          });
+
+          if (Object.keys(nextEnabledTimeframesByExchange).length > 0) {
+            enabledTimeframesByExchange = nextEnabledTimeframesByExchange;
+          }
+        }
+      } catch (_error) {
+      }
+
+      try {
+        const savedEnabledIndicators = JSON.parse(localStorage.getItem(enabledIndicatorsStorageKey) || "[]");
+        if (Array.isArray(savedEnabledIndicators)) {
+          const sanitizedEnabledIndicators = savedEnabledIndicators.filter((indicator) => validIndicators.has(indicator));
+          if (sanitizedEnabledIndicators.length > 0) {
+            enabledIndicators = new Set(sanitizedEnabledIndicators);
+          }
+        }
+      } catch (_error) {
+      }
+
+      try {
+        const savedSettingsCategory = localStorage.getItem(settingsCategoryStorageKey);
+        if (savedSettingsCategory === "exchanges" || savedSettingsCategory === "general") {
+          activeSettingsCategory = savedSettingsCategory;
+        }
+      } catch (_error) {
+      }
+
+      try {
+        const savedSettingsExchange = localStorage.getItem(settingsExchangeStorageKey);
+        if (savedSettingsExchange && validExchangeKeys.has(savedSettingsExchange)) {
+          activeSettingsExchangeKey = savedSettingsExchange;
+        }
+      } catch (_error) {
+      }
+
+      try {
+        const savedSettingsGeneralItem = localStorage.getItem(settingsGeneralItemStorageKey);
+        if (savedSettingsGeneralItem === "indicators") {
+          activeSettingsGeneralItem = savedSettingsGeneralItem;
+        }
+      } catch (_error) {
+      }
+
+      try {
+        const savedExchangeApiSettings = JSON.parse(localStorage.getItem(exchangeApiSettingsStorageKey) || "{}");
+        if (savedExchangeApiSettings && typeof savedExchangeApiSettings === "object") {
+          exchangeApiSettings = savedExchangeApiSettings;
+        }
+      } catch (_error) {
+      }
+
+      try {
         const savedRightPanelCollapsed = localStorage.getItem(rightPanelCollapseStorageKey);
         isRightPanelCollapsed = savedRightPanelCollapsed === "true";
       } catch (_error) {
@@ -559,11 +821,41 @@
 
       try {
         const savedExchange = localStorage.getItem(exchangeStorageKey);
-        if (savedExchange && validExchangeKeys.has(savedExchange) && savedExchange !== currentExchangeKey) {
+        if (savedExchange && validExchangeKeys.has(savedExchange) && enabledExchangeKeys.has(savedExchange) && savedExchange !== currentExchangeKey) {
           currentExchangeKey = savedExchange;
           shouldInitialTimeframeRefresh = true;
         }
       } catch (_error) {
+      }
+
+      if (!enabledExchangeKeys.has(currentExchangeKey)) {
+        const fallbackEnabledExchange = Array.from(enabledExchangeKeys)[0] || currentExchangeKey;
+        if (fallbackEnabledExchange !== currentExchangeKey) {
+          currentExchangeKey = fallbackEnabledExchange;
+          shouldInitialTimeframeRefresh = true;
+        }
+      }
+
+      const getEnabledTimeframesForExchange = (exchangeKey) => {
+        const configured = enabledTimeframesByExchange[exchangeKey];
+        if (Array.isArray(configured)) {
+          const sanitized = configured.filter((timeframe) => validTimeframes.has(timeframe));
+          if (sanitized.length > 0) {
+            return new Set(sanitized);
+          }
+        }
+
+        return new Set(validTimeframes);
+      };
+
+      enabledTimeframes = getEnabledTimeframesForExchange(currentExchangeKey);
+
+      if (!enabledTimeframes.has(currentTimeframe)) {
+        const fallbackEnabledTimeframe = Array.from(enabledTimeframes)[0] || currentTimeframe;
+        if (fallbackEnabledTimeframe !== currentTimeframe) {
+          currentTimeframe = fallbackEnabledTimeframe;
+          shouldInitialTimeframeRefresh = true;
+        }
       }
 
       setPreferenceCookie("trade_wijs_timeframe", currentTimeframe);
@@ -2575,6 +2867,368 @@
         });
       };
 
+      const renderChartViewport = () => {
+        if (!rightPanelElement || !chartElement) {
+          return;
+        }
+
+        window.requestAnimationFrame(() => {
+          chart.applyOptions({
+            width: chartElement.clientWidth,
+            height: chartElement.clientHeight,
+          });
+          applyChartSplit();
+          renderFvgOverlay();
+          renderSmcOverlay();
+          renderDynamicPriceScaleLines();
+          renderPaneScaleOverlay();
+          renderSelectedHorizontalLineHandle();
+          updateScrollToRecentButtonVisibility();
+        });
+      };
+
+      const setAppViewMode = (mode) => {
+        currentAppViewMode = mode === "settings" ? "settings" : "trade";
+
+        if (appShellElement) {
+          appShellElement.classList.toggle("is-settings-mode", currentAppViewMode === "settings");
+        }
+
+        leftMenuButtonElements.forEach((button) => {
+          const buttonView = button.dataset.view;
+          const isActive = buttonView === currentAppViewMode;
+          button.classList.toggle("is-active", isActive);
+          button.setAttribute("aria-pressed", isActive ? "true" : "false");
+        });
+
+        try {
+          localStorage.setItem(appViewModeStorageKey, currentAppViewMode);
+        } catch (_error) {
+        }
+
+        if (currentAppViewMode === "trade") {
+          renderChartViewport();
+        }
+      };
+
+      const setSettingsExchangeTab = (exchangeKey) => {
+        const nextExchangeKey = validExchangeKeys.has(exchangeKey) ? exchangeKey : currentExchangeKey;
+        activeSettingsExchangeKey = nextExchangeKey;
+
+        settingsExchangeTabElements.forEach((button) => {
+          const isActive = button.dataset.settingsExchange === activeSettingsExchangeKey;
+          button.classList.toggle("is-active", isActive);
+        });
+
+        const selectedExchangeButton = settingsExchangeTabElements.find(
+          (button) => button.dataset.settingsExchange === activeSettingsExchangeKey,
+        );
+        if (settingsExchangeLabelElement) {
+          settingsExchangeLabelElement.textContent = (selectedExchangeButton?.textContent || "").trim();
+        }
+
+        const settingsForExchange = exchangeApiSettings[activeSettingsExchangeKey] || {};
+        if (settingsApiKeyElement) {
+          settingsApiKeyElement.value = settingsForExchange.apiKey || "";
+        }
+        if (settingsApiSecretElement) {
+          settingsApiSecretElement.value = settingsForExchange.apiSecret || "";
+        }
+        if (settingsApiPassphraseElement) {
+          settingsApiPassphraseElement.value = settingsForExchange.passphrase || "";
+        }
+
+        if (settingsSaveStatusElement) {
+          settingsSaveStatusElement.textContent = "";
+        }
+
+        applyEnabledTimeframesToUI();
+
+        try {
+          localStorage.setItem(settingsExchangeStorageKey, activeSettingsExchangeKey);
+        } catch (_error) {
+        }
+      };
+
+      const persistEnabledExchanges = () => {
+        try {
+          localStorage.setItem(enabledExchangesStorageKey, JSON.stringify(Array.from(enabledExchangeKeys)));
+        } catch (_error) {
+        }
+      };
+
+      const getExchangeLabelByKey = (exchangeKey) => {
+        const exchangeMenuItem = exchangeSelectorMenuItemElements.find((item) => item.dataset.exchange === exchangeKey);
+        return (exchangeMenuItem?.dataset.exchangeLabel || exchangeMenuItem?.textContent || "").trim();
+      };
+
+      const applyEnabledExchangesToUI = () => {
+        const previousExchangeKey = currentExchangeKey;
+
+        exchangeSelectorMenuItemElements.forEach((button) => {
+          const exchangeKey = button.dataset.exchange;
+          button.hidden = !enabledExchangeKeys.has(exchangeKey);
+        });
+
+        settingsExchangeToggleElements.forEach((checkbox) => {
+          checkbox.checked = enabledExchangeKeys.has(checkbox.dataset.settingsEnabledExchange);
+        });
+
+        if (!enabledExchangeKeys.has(currentExchangeKey)) {
+          const fallbackExchangeKey = Array.from(enabledExchangeKeys)[0] || currentExchangeKey;
+          currentExchangeKey = fallbackExchangeKey;
+          localStorage.setItem(exchangeStorageKey, currentExchangeKey);
+          setPreferenceCookie("trade_wijs_exchange", currentExchangeKey);
+        }
+
+        if (currentExchangeKey !== previousExchangeKey) {
+          enabledTimeframes = getEnabledTimeframesForExchange(currentExchangeKey);
+          applyEnabledTimeframesToUI();
+        }
+
+        if (exchangeSelectorButtonElement) {
+          exchangeSelectorButtonElement.textContent = getExchangeLabelByKey(currentExchangeKey);
+        }
+        setActiveSelectorMenuItem(exchangeSelectorMenuElement, "data-exchange", currentExchangeKey);
+      };
+
+      const setEnabledExchanges = (exchangeKeys, options = {}) => {
+        const nextEnabledExchangeKeys = new Set(
+          (Array.isArray(exchangeKeys) ? exchangeKeys : []).filter((exchangeKey) => validExchangeKeys.has(exchangeKey)),
+        );
+
+        if (nextEnabledExchangeKeys.size === 0) {
+          const fallbackExchangeKey = currentExchangeKey && validExchangeKeys.has(currentExchangeKey)
+            ? currentExchangeKey
+            : Array.from(validExchangeKeys)[0];
+          if (fallbackExchangeKey) {
+            nextEnabledExchangeKeys.add(fallbackExchangeKey);
+          }
+        }
+
+        const previousExchangeKey = currentExchangeKey;
+        enabledExchangeKeys = nextEnabledExchangeKeys;
+        persistEnabledExchanges();
+        applyEnabledExchangesToUI();
+
+        if (currentExchangeKey !== previousExchangeKey && options.refresh !== false) {
+          pendingRestoreLogicalRange = null;
+          hasFitContent = false;
+          setLoadingTimeframeButton(currentTimeframe);
+          refreshChartData({ priority: true, showUpdatingStatus: true });
+          scheduleNextRefresh();
+        }
+      };
+
+      const persistEnabledTimeframes = () => {
+        try {
+          localStorage.setItem(enabledTimeframesStorageKey, JSON.stringify(enabledTimeframesByExchange));
+        } catch (_error) {
+        }
+      };
+
+      const applyEnabledTimeframesToUI = () => {
+        timeframeButtonElements.forEach((button) => {
+          const timeframe = button.dataset.timeframe;
+          button.hidden = !enabledTimeframes.has(timeframe);
+        });
+
+        const activeSettingsTimeframes = getEnabledTimeframesForExchange(activeSettingsExchangeKey);
+        const enabledTimeframeCount = activeSettingsTimeframes.size;
+        settingsTimeframeToggleElements.forEach((checkbox) => {
+          const timeframe = checkbox.dataset.settingsEnabledTimeframe;
+          const isEnabled = activeSettingsTimeframes.has(timeframe);
+          checkbox.checked = isEnabled;
+          checkbox.disabled = isEnabled && enabledTimeframeCount === 1;
+        });
+
+        if (!enabledTimeframes.has(currentTimeframe)) {
+          const fallbackTimeframe = Array.from(enabledTimeframes)[0] || currentTimeframe;
+          currentTimeframe = fallbackTimeframe;
+          localStorage.setItem(timeframeStorageKey, currentTimeframe);
+          setPreferenceCookie("trade_wijs_timeframe", currentTimeframe);
+        }
+
+        setActiveTimeframeButton(currentTimeframe);
+      };
+
+      const setEnabledTimeframes = (timeframes, options = {}) => {
+        const targetExchangeKey = validExchangeKeys.has(options.exchangeKey)
+          ? options.exchangeKey
+          : currentExchangeKey;
+        const nextEnabledTimeframes = new Set(
+          (Array.isArray(timeframes) ? timeframes : []).filter((timeframe) => validTimeframes.has(timeframe)),
+        );
+
+        if (nextEnabledTimeframes.size === 0) {
+          const fallbackTimeframe = targetExchangeKey === currentExchangeKey && currentTimeframe && validTimeframes.has(currentTimeframe)
+            ? currentTimeframe
+            : Array.from(validTimeframes)[0];
+          if (fallbackTimeframe) {
+            nextEnabledTimeframes.add(fallbackTimeframe);
+          }
+        }
+
+        enabledTimeframesByExchange[targetExchangeKey] = Array.from(nextEnabledTimeframes);
+
+        const previousTimeframe = currentTimeframe;
+        if (targetExchangeKey === currentExchangeKey) {
+          enabledTimeframes = nextEnabledTimeframes;
+        }
+        persistEnabledTimeframes();
+        applyEnabledTimeframesToUI();
+
+        if (targetExchangeKey === currentExchangeKey && currentTimeframe !== previousTimeframe && options.refresh !== false) {
+          const savedView =
+            savedChartViewByTimeframe[getChartViewKey(currentTimeframe)] ||
+            savedChartViewByTimeframe[currentTimeframe];
+          if (
+            savedView &&
+            Number.isFinite(Number(savedView.from)) &&
+            Number.isFinite(Number(savedView.to))
+          ) {
+            pendingRestoreLogicalRange = {
+              from: Number(savedView.from),
+              to: Number(savedView.to),
+            };
+          } else {
+            pendingRestoreLogicalRange = null;
+            hasFitContent = false;
+          }
+
+          setLoadingTimeframeButton(currentTimeframe);
+          refreshChartData({ priority: true, showUpdatingStatus: true });
+          scheduleNextRefresh();
+        }
+      };
+
+      const persistEnabledIndicators = () => {
+        try {
+          localStorage.setItem(enabledIndicatorsStorageKey, JSON.stringify(Array.from(enabledIndicators)));
+        } catch (_error) {
+        }
+      };
+
+      const applyEnabledIndicatorsToUI = () => {
+        let shouldRedraw = false;
+
+        indicatorButtonElements.forEach((button) => {
+          const indicatorName = button.dataset.indicator;
+          const isEnabled = enabledIndicators.has(indicatorName);
+          button.hidden = !isEnabled;
+
+          if (!isEnabled && indicatorState[indicatorName]) {
+            indicatorState[indicatorName] = false;
+            shouldRedraw = true;
+          }
+        });
+
+        const enabledIndicatorCount = enabledIndicators.size;
+        settingsIndicatorToggleElements.forEach((checkbox) => {
+          const indicatorName = checkbox.dataset.settingsEnabledIndicator;
+          const isEnabled = enabledIndicators.has(indicatorName);
+          checkbox.checked = isEnabled;
+          checkbox.disabled = isEnabled && enabledIndicatorCount === 1;
+        });
+
+        setIndicatorButtonState();
+        if (shouldRedraw) {
+          redrawChart();
+          applyChartSplit();
+          updateScaleDividerLabel(false);
+          updateStochDividerLabel(false);
+          updateRsiDividerLabel(false);
+        }
+      };
+
+      const setEnabledIndicators = (indicators) => {
+        const nextEnabledIndicators = new Set(
+          (Array.isArray(indicators) ? indicators : []).filter((indicatorName) => validIndicators.has(indicatorName)),
+        );
+
+        if (nextEnabledIndicators.size === 0) {
+          const fallbackIndicatorName = Array.from(validIndicators)[0];
+          if (fallbackIndicatorName) {
+            nextEnabledIndicators.add(fallbackIndicatorName);
+          }
+        }
+
+        enabledIndicators = nextEnabledIndicators;
+        persistEnabledIndicators();
+        applyEnabledIndicatorsToUI();
+      };
+
+      const setSettingsCategory = (category) => {
+        activeSettingsCategory = category === "general" ? "general" : "exchanges";
+
+        settingsCategoryTabElements.forEach((button) => {
+          const isActive = button.dataset.settingsCategory === activeSettingsCategory;
+          button.classList.toggle("is-active", isActive);
+          if (isActive) {
+            button.setAttribute("aria-current", "page");
+          } else {
+            button.removeAttribute("aria-current");
+          }
+        });
+
+        settingsCategorySectionElements.forEach((section) => {
+          const isActive = section.dataset.settingsCategorySection === activeSettingsCategory;
+          section.classList.toggle("is-active", isActive);
+        });
+
+        settingsMiddleSectionElements.forEach((section) => {
+          const isActive = section.dataset.settingsMiddleSection === activeSettingsCategory;
+          section.classList.toggle("is-active", isActive);
+        });
+
+        const isExchangesCategory = activeSettingsCategory === "exchanges";
+        if (settingsActionsElement) {
+          settingsActionsElement.style.display = isExchangesCategory ? "inline-flex" : "none";
+        }
+        if (settingsExchangeTimeframesPanelElement) {
+          settingsExchangeTimeframesPanelElement.style.display = isExchangesCategory ? "block" : "none";
+        }
+        if (settingsExchangeLabelElement) {
+          settingsExchangeLabelElement.style.display = isExchangesCategory ? "block" : "none";
+        }
+        if (settingsSaveStatusElement) {
+          settingsSaveStatusElement.textContent = "";
+        }
+
+        try {
+          localStorage.setItem(settingsCategoryStorageKey, activeSettingsCategory);
+        } catch (_error) {
+        }
+      };
+
+      const setSettingsGeneralItem = (item) => {
+        activeSettingsGeneralItem = "indicators";
+
+        settingsGeneralItemTabElements.forEach((button) => {
+          const isActive = button.dataset.settingsGeneralItem === activeSettingsGeneralItem;
+          button.classList.toggle("is-active", isActive);
+          if (isActive) {
+            button.setAttribute("aria-current", "page");
+          } else {
+            button.removeAttribute("aria-current");
+          }
+        });
+
+        settingsGeneralSectionElements.forEach((section) => {
+          const isActive = section.dataset.settingsGeneralSection === activeSettingsGeneralItem;
+          section.classList.toggle("is-active", isActive);
+        });
+
+        if (settingsSaveStatusElement) {
+          settingsSaveStatusElement.textContent = "";
+        }
+
+        try {
+          localStorage.setItem(settingsGeneralItemStorageKey, activeSettingsGeneralItem);
+        } catch (_error) {
+        }
+      };
+
       const setRightPanelCollapsed = (collapsed) => {
         isRightPanelCollapsed = collapsed;
 
@@ -2595,23 +3249,7 @@
         } catch (_error) {
         }
 
-        if (!rightPanelElement || !chartElement) {
-          return;
-        }
-
-        window.requestAnimationFrame(() => {
-          chart.applyOptions({
-            width: chartElement.clientWidth,
-            height: chartElement.clientHeight,
-          });
-          applyChartSplit();
-          renderFvgOverlay();
-          renderSmcOverlay();
-          renderDynamicPriceScaleLines();
-          renderPaneScaleOverlay();
-          renderSelectedHorizontalLineHandle();
-          updateScrollToRecentButtonVisibility();
-        });
+        renderChartViewport();
       };
 
       const setMarketInfoCollapsed = (collapsed) => {
@@ -4167,6 +4805,8 @@
           }
 
           currentExchangeKey = nextExchange;
+          enabledTimeframes = getEnabledTimeframesForExchange(currentExchangeKey);
+          applyEnabledTimeframesToUI();
           localStorage.setItem(exchangeStorageKey, currentExchangeKey);
           setPreferenceCookie("trade_wijs_exchange", currentExchangeKey);
           setActiveSelectorMenuItem(exchangeSelectorMenuElement, "data-exchange", currentExchangeKey);
@@ -4228,6 +4868,17 @@
           updateRsiDividerLabel(false);
         });
       }
+
+      settingsGeneralItemTabElements.forEach((button) => {
+        button.addEventListener("click", () => {
+          const nextItem = button.dataset.settingsGeneralItem;
+          if (!nextItem || nextItem === activeSettingsGeneralItem) {
+            return;
+          }
+
+          setSettingsGeneralItem(nextItem);
+        });
+      });
 
       const removeHorizontalLineEntry = (lineEntry) => {
         if (!lineEntry || lineEntry.removed) {
@@ -4572,6 +5223,22 @@
         });
       }
 
+      if (timeframeSettingsButtonElement) {
+        timeframeSettingsButtonElement.addEventListener("click", () => {
+          setSettingsCategory("exchanges");
+          setSettingsExchangeTab(currentExchangeKey);
+          setAppViewMode("settings");
+        });
+      }
+
+      if (indicatorSettingsButtonElement) {
+        indicatorSettingsButtonElement.addEventListener("click", () => {
+          setSettingsCategory("general");
+          setSettingsGeneralItem("indicators");
+          setAppViewMode("settings");
+        });
+      }
+
       if (scrollToRecentButtonElement) {
         scrollToRecentButtonElement.addEventListener("click", () => {
           chart.timeScale().scrollToRealTime();
@@ -4598,6 +5265,131 @@
       if (rightPanelToggleButtonElement) {
         rightPanelToggleButtonElement.addEventListener("click", () => {
           setRightPanelCollapsed(!isRightPanelCollapsed);
+        });
+      }
+
+      if (leftMenuTradeButtonElement) {
+        leftMenuTradeButtonElement.addEventListener("click", () => {
+          setAppViewMode("trade");
+        });
+      }
+
+      if (leftMenuSettingsButtonElement) {
+        leftMenuSettingsButtonElement.addEventListener("click", () => {
+          setAppViewMode("settings");
+        });
+      }
+
+      if (settingsPanelElement) {
+        settingsPanelElement.addEventListener("click", (event) => {
+          const categoryButton = event.target.closest("[data-settings-category]");
+          if (categoryButton) {
+            const category = categoryButton.dataset.settingsCategory;
+            if (category) {
+              setSettingsCategory(category);
+            }
+            return;
+          }
+
+          const tabButton = event.target.closest("[data-settings-exchange]");
+          if (!tabButton) {
+            return;
+          }
+
+          const exchangeKey = tabButton.dataset.settingsExchange;
+          if (!exchangeKey) {
+            return;
+          }
+
+          setSettingsExchangeTab(exchangeKey);
+        });
+
+        settingsPanelElement.addEventListener("change", (event) => {
+          const checkbox = event.target.closest("[data-settings-enabled-exchange]");
+          if (checkbox) {
+            const selectedExchangeKeys = settingsExchangeToggleElements
+              .filter((element) => element.checked)
+              .map((element) => element.dataset.settingsEnabledExchange)
+              .filter(Boolean);
+
+            if (selectedExchangeKeys.length === 0) {
+              checkbox.checked = true;
+              if (settingsSaveStatusElement) {
+                settingsSaveStatusElement.textContent = "Select at least one exchange";
+              }
+              return;
+            }
+
+            setEnabledExchanges(selectedExchangeKeys);
+            if (settingsSaveStatusElement) {
+              settingsSaveStatusElement.textContent = "Exchanges updated";
+            }
+            return;
+          }
+
+          const timeframeCheckbox = event.target.closest("[data-settings-enabled-timeframe]");
+          if (timeframeCheckbox) {
+            const selectedTimeframes = settingsTimeframeToggleElements
+              .filter((element) => element.checked)
+              .map((element) => element.dataset.settingsEnabledTimeframe)
+              .filter(Boolean);
+
+            if (selectedTimeframes.length === 0) {
+              timeframeCheckbox.checked = true;
+              if (settingsSaveStatusElement) {
+                settingsSaveStatusElement.textContent = "Select at least one timeframe";
+              }
+              return;
+            }
+
+            setEnabledTimeframes(selectedTimeframes, { exchangeKey: activeSettingsExchangeKey });
+            if (settingsSaveStatusElement) {
+              settingsSaveStatusElement.textContent = "Timeframes updated";
+            }
+            return;
+          }
+
+          const indicatorCheckbox = event.target.closest("[data-settings-enabled-indicator]");
+          if (indicatorCheckbox) {
+            const selectedIndicators = settingsIndicatorToggleElements
+              .filter((element) => element.checked)
+              .map((element) => element.dataset.settingsEnabledIndicator)
+              .filter(Boolean);
+
+            if (selectedIndicators.length === 0) {
+              indicatorCheckbox.checked = true;
+              if (settingsSaveStatusElement) {
+                settingsSaveStatusElement.textContent = "Select at least one indicator";
+              }
+              return;
+            }
+
+            setEnabledIndicators(selectedIndicators);
+            if (settingsSaveStatusElement) {
+              settingsSaveStatusElement.textContent = "Indicators updated";
+            }
+          }
+        });
+      }
+
+      if (settingsSaveButtonElement) {
+        settingsSaveButtonElement.addEventListener("click", () => {
+          exchangeApiSettings[activeSettingsExchangeKey] = {
+            apiKey: settingsApiKeyElement?.value || "",
+            apiSecret: settingsApiSecretElement?.value || "",
+            passphrase: settingsApiPassphraseElement?.value || "",
+          };
+
+          try {
+            localStorage.setItem(exchangeApiSettingsStorageKey, JSON.stringify(exchangeApiSettings));
+            if (settingsSaveStatusElement) {
+              settingsSaveStatusElement.textContent = "Saved";
+            }
+          } catch (_error) {
+            if (settingsSaveStatusElement) {
+              settingsSaveStatusElement.textContent = "Save failed";
+            }
+          }
         });
       }
 
@@ -4643,11 +5435,18 @@
       updateScaleDividerLabel(false);
       updateStochDividerLabel(false);
       updateRsiDividerLabel(false);
+      applyEnabledTimeframesToUI();
+      applyEnabledIndicatorsToUI();
       setActiveTimeframeButton(currentTimeframe);
       setIndicatorButtonState();
       setRightPanelTab("order");
       setRightPanelCollapsed(isRightPanelCollapsed);
       setMarketInfoCollapsed(isMarketInfoCollapsed);
+      applyEnabledExchangesToUI();
+      setSettingsExchangeTab(activeSettingsExchangeKey);
+      setSettingsGeneralItem(activeSettingsGeneralItem);
+      setSettingsCategory(activeSettingsCategory);
+      setAppViewMode(currentAppViewMode);
       setDrawLineMode(false);
       updateUndoButtonState();
       setLoadingTimeframeButton(null);
