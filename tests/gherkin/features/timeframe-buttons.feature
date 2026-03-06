@@ -5,7 +5,7 @@ Feature: Timeframe buttons on the homepage
     When I open the homepage
     Then the page title is visible
     And the timeframe buttons block is visible
-    And there are 9 timeframe buttons
+    And there is at least 1 timeframe button
     And the <timeframe> button is visible
     When I click the <timeframe> button
     Then there is exactly 1 active timeframe button

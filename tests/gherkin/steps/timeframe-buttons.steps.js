@@ -23,6 +23,24 @@ Then('there are {int} timeframe buttons', async function (count) {
   );
 });
 
+Then('there are at least {int} timeframe buttons', async function (count) {
+  const buttonCount = await this.page.locator('#timeframe-buttons .timeframe-btn').count();
+  assert.equal(
+    buttonCount >= count,
+    true,
+    `Expected at least ${count} buttons, got ${buttonCount}.`,
+  );
+});
+
+Then('there is at least {int} timeframe button', async function (count) {
+  const buttonCount = await this.page.locator('#timeframe-buttons .timeframe-btn').count();
+  assert.equal(
+    buttonCount >= count,
+    true,
+    `Expected at least ${count} button(s), got ${buttonCount}.`,
+  );
+});
+
 Then('there is exactly {int} active timeframe button', async function (count) {
   const activeCount = await this.page.locator('#timeframe-buttons .timeframe-btn.is-active').count();
   assert.equal(activeCount, count, `Expected ${count} active button(s), got ${activeCount}.`);
