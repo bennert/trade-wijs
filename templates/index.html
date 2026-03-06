@@ -583,6 +583,7 @@
       const horizontalLineStorageKey = "trade-wijs-horizontal-lines:{{ market_data.display_symbol|replace(' ', '_') }}";
       const maxTrendLines = 20;
       const trendLineStorageKey = "trade-wijs-trend-lines:{{ market_data.display_symbol|replace(' ', '_') }}";
+      const drawingUndoStackStorageKey = "trade-wijs-drawing-undo-stack:{{ market_data.display_symbol|replace(' ', '_') }}";
       const indicatorStorageKey = "trade-wijs-indicators";
       const marketInfoCollapseStorageKey = "trade-wijs-market-info-collapsed";
       let chartData = [];
@@ -5134,6 +5135,148 @@
         undoButtonElement.disabled = drawingUndoStack.length === 0;
       };
 
+      const serializeUndoAction = (undoAction) => {
+        if (!undoAction || !undoAction.lineEntry) {
+          return null;
+        }
+
+        if (undoAction.type === "horizontal-line") {
+          const linePrice = Number(undoAction.lineEntry.price);
+          if (!Number.isFinite(linePrice) || linePrice <= 0) {
+            return null;
+          }
+
+          return {
+            type: "horizontal-line",
+            price: linePrice,
+          };
+        }
+
+        if (undoAction.type === "trend-line") {
+          const startTime = Number(undoAction.lineEntry.startTime);
+          const startPrice = Number(undoAction.lineEntry.startPrice);
+          const endTime = Number(undoAction.lineEntry.endTime);
+          const endPrice = Number(undoAction.lineEntry.endPrice);
+          if (!Number.isFinite(startTime) || !Number.isFinite(startPrice) || !Number.isFinite(endTime) || !Number.isFinite(endPrice)) {
+            return null;
+          }
+
+          return {
+            type: "trend-line",
+            startTime,
+            startPrice,
+            endTime,
+            endPrice,
+          };
+        }
+
+        return null;
+      };
+
+      const persistDrawingUndoStack = () => {
+        try {
+          const persistedUndoActions = drawingUndoStack
+            .map((undoAction) => serializeUndoAction(undoAction))
+            .filter((undoAction) => undoAction);
+          localStorage.setItem(drawingUndoStackStorageKey, JSON.stringify(persistedUndoActions));
+        } catch (_error) {
+        }
+      };
+
+      const buildUndoActionForLineEntry = (type, lineEntry) => {
+        if (!lineEntry || lineEntry.removed) {
+          return null;
+        }
+
+        if (type === "horizontal-line") {
+          return {
+            type,
+            lineEntry,
+            undo: () => {
+              removeHorizontalLineEntry(lineEntry);
+            },
+          };
+        }
+
+        if (type === "trend-line") {
+          return {
+            type,
+            lineEntry,
+            undo: () => {
+              removeTrendLineEntry(lineEntry);
+            },
+          };
+        }
+
+        return null;
+      };
+
+      const restoreDrawingUndoStack = () => {
+        let storedUndoActions = [];
+
+        try {
+          const savedValue = JSON.parse(localStorage.getItem(drawingUndoStackStorageKey) || "[]");
+          if (Array.isArray(savedValue)) {
+            storedUndoActions = savedValue;
+          }
+        } catch (_error) {
+          storedUndoActions = [];
+        }
+
+        if (!storedUndoActions.length) {
+          persistDrawingUndoStack();
+          return;
+        }
+
+        drawingUndoStack.length = 0;
+
+        const availableHorizontalLines = drawnLineSeries.filter((lineEntry) => lineEntry && !lineEntry.removed);
+        const availableTrendLines = drawnTrendLineSeries.filter((lineEntry) => lineEntry && !lineEntry.removed);
+
+        storedUndoActions.forEach((storedUndoAction) => {
+          if (storedUndoAction?.type === "horizontal-line") {
+            const targetPrice = Number(storedUndoAction.price);
+            const matchedIndex = availableHorizontalLines.findIndex((lineEntry) => Number(lineEntry.price) === targetPrice);
+            if (matchedIndex === -1) {
+              return;
+            }
+
+            const matchedLineEntry = availableHorizontalLines.splice(matchedIndex, 1)[0];
+            const rebuiltUndoAction = buildUndoActionForLineEntry("horizontal-line", matchedLineEntry);
+            if (rebuiltUndoAction) {
+              drawingUndoStack.push(rebuiltUndoAction);
+            }
+            return;
+          }
+
+          if (storedUndoAction?.type === "trend-line") {
+            const targetStartTime = Number(storedUndoAction.startTime);
+            const targetStartPrice = Number(storedUndoAction.startPrice);
+            const targetEndTime = Number(storedUndoAction.endTime);
+            const targetEndPrice = Number(storedUndoAction.endPrice);
+
+            const matchedIndex = availableTrendLines.findIndex((lineEntry) => (
+              Number(lineEntry.startTime) === targetStartTime
+              && Number(lineEntry.startPrice) === targetStartPrice
+              && Number(lineEntry.endTime) === targetEndTime
+              && Number(lineEntry.endPrice) === targetEndPrice
+            ));
+
+            if (matchedIndex === -1) {
+              return;
+            }
+
+            const matchedLineEntry = availableTrendLines.splice(matchedIndex, 1)[0];
+            const rebuiltUndoAction = buildUndoActionForLineEntry("trend-line", matchedLineEntry);
+            if (rebuiltUndoAction) {
+              drawingUndoStack.push(rebuiltUndoAction);
+            }
+          }
+        });
+
+        persistDrawingUndoStack();
+      };
+
       const pushUndoAction = (undoAction) => {
         if (!undoAction || typeof undoAction.undo !== "function") {
           return;
@@ -5141,6 +5284,7 @@
 
         drawingUndoStack.push(undoAction);
         updateUndoButtonState();
+        persistDrawingUndoStack();
       };
 
       const undoLastDrawingAction = () => {
@@ -5151,6 +5295,7 @@
 
         undoAction.undo();
         updateUndoButtonState();
+        persistDrawingUndoStack();
         return true;
       };
 
@@ -5853,6 +5998,7 @@
           }
         }
         updateUndoButtonState();
+        persistDrawingUndoStack();
       };
 
       const removeTrendLineEntry = (lineEntry) => {
@@ -5888,6 +6034,7 @@
           }
         }
         updateUndoButtonState();
+        persistDrawingUndoStack();
       };
 
       const handleDrawLineClick = (clickedPoint) => {
@@ -6744,6 +6891,7 @@
       redrawChart();
       restoreHorizontalLines();
       restoreTrendLines();
+      restoreDrawingUndoStack();
       setSelectedHorizontalLine(null);
       setSelectedTrendLine(null);
       syncHorizontalLineTestMeta();
