@@ -329,10 +329,9 @@
             </svg>
           </button>
         </div>
-        {% if market_data.error %}
-          <div id="market-error" class="placeholder-block">Unable to load market data: {{ market_data.error }}</div>
-        {% else %}
-          <div id="market-error" class="placeholder-block" style="display:none;"></div>
+          <div id="market-error" class="placeholder-block"{% if not market_data.error %} style="display:none;"{% endif %}>
+            {% if market_data.error %}Unable to load market data: {{ market_data.error }}{% endif %}
+          </div>
           <div id="market-info-grid" class="market-info-grid">
             <div class="info-item">
               <span class="info-label">Last</span>
@@ -359,8 +358,9 @@
               <span id="value-volume" class="info-value">{{ market_data.quote_volume_compact }}</span>
             </div>
           </div>
-          <div id="market-updated" class="market-updated" data-timestamp-unix="{{ market_data.timestamp_unix if market_data.timestamp_unix is not none else '' }}">Updated: {{ market_data.timestamp if market_data.timestamp else 'Unknown' }}</div>
-        {% endif %}
+          <div id="market-updated" class="market-updated" data-timestamp-unix="{{ market_data.timestamp_unix or '' }}">
+            Updated: {{ market_data.timestamp or 'Unknown' }}
+          </div>
       </section>
     </aside>
 
@@ -3325,7 +3325,7 @@
         }
 
         const showError = !isMarketInfoCollapsed && marketInfoHasError;
-        const showGrid = !isMarketInfoCollapsed && !marketInfoHasError;
+        const showGrid = !isMarketInfoCollapsed;
 
         if (marketErrorElement) {
           marketErrorElement.style.display = showError ? "block" : "none";

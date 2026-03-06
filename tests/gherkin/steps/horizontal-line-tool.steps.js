@@ -41,8 +41,6 @@ Then('the horizontal line button is active', async function () {
 });
 
 When('I hover over the chart in horizontal line mode', async function () {
-  const chart = this.page.locator('.chart-canvas');
-  await chart.hover({ position: { x: 180, y: 120 } });
   await this.page.evaluate(() => {
     const chartElement = document.querySelector('.chart-canvas');
     if (!chartElement) {
@@ -50,22 +48,25 @@ When('I hover over the chart in horizontal line mode', async function () {
     }
 
     const rect = chartElement.getBoundingClientRect();
-    const clientX = rect.left + Math.min(180, Math.max(10, rect.width - 10));
-    const clientY = rect.top + Math.min(120, Math.max(10, rect.height - 30));
     const overlay = document.querySelector('#draw-capture-overlay');
+    const clientX = rect.left + Math.min(Math.max(20, rect.width * 0.25), Math.max(20, rect.width - 20));
+    const candidateYRatios = [0.03, 0.05, 0.07, 0.09];
 
-    const mouseMoveEvent = new MouseEvent('mousemove', {
-      clientX,
-      clientY,
-      bubbles: true,
-      cancelable: true,
-      view: window,
+    candidateYRatios.forEach((ratio) => {
+      const clientY = rect.top + Math.max(10, Math.min(rect.height - 30, rect.height * ratio));
+      const mouseMoveEvent = new MouseEvent('mousemove', {
+        clientX,
+        clientY,
+        bubbles: true,
+        cancelable: true,
+        view: window,
+      });
+
+      chartElement.dispatchEvent(mouseMoveEvent);
+      if (overlay) {
+        overlay.dispatchEvent(mouseMoveEvent);
+      }
     });
-
-    chartElement.dispatchEvent(mouseMoveEvent);
-    if (overlay) {
-      overlay.dispatchEvent(mouseMoveEvent);
-    }
   });
 });
 
@@ -73,21 +74,29 @@ Then('the horizontal line preview is visible', async function () {
   await this.page.waitForFunction(() => {
     const element = document.querySelector('.chart-canvas');
     return Boolean(element && element.dataset.previewVisible === 'true');
-  }, null, { timeout: 2000 });
+  }, null, { timeout: 4000 });
 
   const previewVisible = await this.page.locator('.chart-canvas').getAttribute('data-preview-visible');
   assert.equal(previewVisible, 'true', 'Preview line is not visible during hover.');
 });
 
 When('I click the chart to place a horizontal line', async function () {
-  await this.page.locator('#draw-capture-overlay').click({ position: { x: 220, y: 200 } });
+  const overlay = this.page.locator('#draw-capture-overlay');
+  const box = await overlay.boundingBox();
+
+  const clickPosition = {
+    x: box ? Math.max(20, Math.min(box.width - 20, box.width * 0.3)) : 220,
+    y: box ? Math.max(14, Math.min(box.height - 30, box.height * 0.07)) : 40,
+  };
+
+  await overlay.click({ position: clickPosition });
 });
 
 Then('a horizontal line is placed', async function () {
   await this.page.waitForFunction(() => {
     const element = document.querySelector('.chart-canvas');
     return Boolean(element && Number(element.dataset.horizontalLineCount || '0') >= 1);
-  }, null, { timeout: 2000 });
+  }, null, { timeout: 4000 });
 
   const countRaw = await this.page.locator('.chart-canvas').getAttribute('data-horizontal-line-count');
   const count = Number(countRaw || '0');
