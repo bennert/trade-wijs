@@ -121,6 +121,7 @@
         </aside>
         <aside class="settings-tabs settings-middle-section" aria-label="General settings tabs" data-settings-middle-section="general">
           <h3 class="settings-tabs-title">General</h3>
+          <button type="button" class="settings-tab" data-settings-general-item="display">Display</button>
           <button type="button" class="settings-tab is-active" aria-current="page" data-settings-general-item="indicators">Indicators</button>
         </aside>
         <div class="settings-content">
@@ -142,6 +143,19 @@
             </div>
           </section>
           <section id="settings-category-general" class="settings-category-section" data-settings-category-section="general">
+            <div class="settings-subpanel settings-general-subsection" data-settings-general-section="display">
+              <h3 class="settings-subpanel-title">Display</h3>
+              <div class="settings-radio-list" role="radiogroup" aria-label="Theme mode">
+                <label class="settings-exchange-option" for="settings-display-theme-dark">
+                  <input id="settings-display-theme-dark" type="radio" name="settings-display-theme" value="dark" checked />
+                  <span>Dark mode</span>
+                </label>
+                <label class="settings-exchange-option" for="settings-display-theme-light">
+                  <input id="settings-display-theme-light" type="radio" name="settings-display-theme" value="light" />
+                  <span>Light mode</span>
+                </label>
+              </div>
+            </div>
             <div class="settings-subpanel settings-general-subsection is-active" data-settings-general-section="indicators">
               <h3 class="settings-subpanel-title">Indicators</h3>
               <div class="settings-checkbox-list" role="group" aria-label="Indicators options">
@@ -436,6 +450,7 @@
       const settingsMiddleSectionElements = Array.from(document.querySelectorAll("[data-settings-middle-section]"));
       const settingsGeneralItemTabElements = Array.from(document.querySelectorAll("[data-settings-general-item]"));
       const settingsGeneralSectionElements = Array.from(document.querySelectorAll("[data-settings-general-section]"));
+      const settingsDisplayThemeRadioElements = Array.from(document.querySelectorAll("input[name='settings-display-theme']"));
       const settingsExchangeLabelElement = document.getElementById("settings-exchange-label");
       const settingsExchangeTabElements = Array.from(document.querySelectorAll("[data-settings-exchange]"));
       const settingsExchangeToggleElements = Array.from(document.querySelectorAll("[data-settings-enabled-exchange]"));
@@ -504,6 +519,7 @@
       const settingsCategoryStorageKey = "trade-wijs-settings-category";
       const settingsExchangeStorageKey = "trade-wijs-settings-exchange";
       const settingsGeneralItemStorageKey = "trade-wijs-settings-general-item";
+      const displayThemeStorageKey = "trade-wijs-display-theme";
       const enabledExchangesStorageKey = "trade-wijs-enabled-exchanges";
       const enabledTimeframesStorageKey = "trade-wijs-enabled-timeframes";
       const enabledIndicatorsStorageKey = "trade-wijs-enabled-indicators";
@@ -544,6 +560,7 @@
       let activeSettingsCategory = "exchanges";
       let activeSettingsExchangeKey = currentExchangeKey;
       let activeSettingsGeneralItem = "indicators";
+      let activeDisplayTheme = "dark";
       let exchangeApiSettings = {};
       let enabledExchangeKeys = new Set(validExchangeKeys);
       let enabledTimeframes = new Set(validTimeframes);
@@ -778,8 +795,16 @@
 
       try {
         const savedSettingsGeneralItem = localStorage.getItem(settingsGeneralItemStorageKey);
-        if (savedSettingsGeneralItem === "indicators") {
+        if (savedSettingsGeneralItem === "indicators" || savedSettingsGeneralItem === "display") {
           activeSettingsGeneralItem = savedSettingsGeneralItem;
+        }
+      } catch (_error) {
+      }
+
+      try {
+        const savedDisplayTheme = localStorage.getItem(displayThemeStorageKey);
+        if (savedDisplayTheme === "light" || savedDisplayTheme === "dark") {
+          activeDisplayTheme = savedDisplayTheme;
         }
       } catch (_error) {
       }
@@ -914,15 +939,27 @@
       } catch (_error) {
       }
 
-      const chartBackgroundColor = "#151925";
       const horizontalLineColor = "#ffd166";
+
+      const readThemeColor = (variableName, fallback) => {
+        const colorValue = window.getComputedStyle(document.documentElement).getPropertyValue(variableName).trim();
+        return colorValue || fallback;
+      };
+
+      const getChartThemeColors = () => ({
+        background: readThemeColor("--panel", "#151925"),
+        border: readThemeColor("--border", "#2b3345"),
+        text: readThemeColor("--muted", "#9aa5bd"),
+      });
+
+      let chartThemeColors = getChartThemeColors();
 
       const chart = LightweightCharts.createChart(chartElement, {
         width: chartElement.clientWidth,
         height: chartElement.clientHeight,
         layout: {
-          background: { color: chartBackgroundColor },
-          textColor: "#9aa5bd",
+          background: { color: chartThemeColors.background },
+          textColor: chartThemeColors.text,
         },
         grid: {
           vertLines: { color: "rgba(0,0,0,0)" },
@@ -930,10 +967,10 @@
         },
         rightPriceScale: {
           visible: true,
-          borderColor: "#2b3345",
+          borderColor: chartThemeColors.border,
         },
         timeScale: {
-          borderColor: "#2b3345",
+          borderColor: chartThemeColors.border,
           timeVisible: true,
           secondsVisible: false,
         },
@@ -976,7 +1013,7 @@
       chart.priceScale("price").applyOptions({
         visible: true,
         autoScale: true,
-        borderColor: "#2b3345",
+        borderColor: chartThemeColors.border,
         ticksVisible: true,
         alignLabels: false,
         entireTextOnly: false,
@@ -1038,7 +1075,7 @@
       chart.priceScale("stoch").applyOptions({
         visible: true,
         autoScale: true,
-        borderColor: "#2b3345",
+        borderColor: chartThemeColors.border,
         ticksVisible: true,
         minimumWidth: 58,
         scaleMargins: {
@@ -1084,7 +1121,7 @@
       chart.priceScale("rsi").applyOptions({
         visible: true,
         autoScale: true,
-        borderColor: "#2b3345",
+        borderColor: chartThemeColors.border,
         ticksVisible: true,
         minimumWidth: 58,
         scaleMargins: {
@@ -1107,7 +1144,7 @@
       chart.priceScale("volume").applyOptions({
         visible: true,
         autoScale: true,
-        borderColor: "#2b3345",
+        borderColor: chartThemeColors.border,
         ticksVisible: true,
         minimumWidth: 64,
         scaleMargins: {
@@ -1900,7 +1937,7 @@
         chart.priceScale("volume").applyOptions({
           visible: Boolean(normalizedVolumeSegment),
           autoScale: true,
-          borderColor: "#2b3345",
+          borderColor: chartThemeColors.border,
           borderVisible: false,
           ticksVisible: true,
           minimumWidth: 64,
@@ -1910,7 +1947,7 @@
         chart.priceScale("stoch").applyOptions({
           visible: Boolean(normalizedStochSegment),
           autoScale: true,
-          borderColor: "#2b3345",
+          borderColor: chartThemeColors.border,
           borderVisible: false,
           ticksVisible: true,
           minimumWidth: 58,
@@ -1920,7 +1957,7 @@
         chart.priceScale("rsi").applyOptions({
           visible: Boolean(normalizedRsiSegment),
           autoScale: true,
-          borderColor: "#2b3345",
+          borderColor: chartThemeColors.border,
           borderVisible: false,
           ticksVisible: true,
           minimumWidth: 58,
@@ -3280,7 +3317,7 @@
       };
 
       const setSettingsGeneralItem = (item) => {
-        activeSettingsGeneralItem = "indicators";
+        activeSettingsGeneralItem = item === "display" ? "display" : "indicators";
 
         settingsGeneralItemTabElements.forEach((button) => {
           const isActive = button.dataset.settingsGeneralItem === activeSettingsGeneralItem;
@@ -3304,6 +3341,45 @@
         try {
           localStorage.setItem(settingsGeneralItemStorageKey, activeSettingsGeneralItem);
         } catch (_error) {
+        }
+      };
+
+      const applyDisplayTheme = (theme, options = {}) => {
+        const nextTheme = theme === "light" ? "light" : "dark";
+        const shouldPersist = options.persist !== false;
+        activeDisplayTheme = nextTheme;
+
+        document.documentElement.dataset.theme = nextTheme;
+        chartThemeColors = getChartThemeColors();
+
+        chart.applyOptions({
+          layout: {
+            background: { color: chartThemeColors.background },
+            textColor: chartThemeColors.text,
+          },
+          rightPriceScale: {
+            borderColor: chartThemeColors.border,
+          },
+          timeScale: {
+            borderColor: chartThemeColors.border,
+          },
+        });
+
+        chart.priceScale("price").applyOptions({ borderColor: chartThemeColors.border });
+        chart.priceScale("volume").applyOptions({ borderColor: chartThemeColors.border });
+        chart.priceScale("stoch").applyOptions({ borderColor: chartThemeColors.border });
+        chart.priceScale("rsi").applyOptions({ borderColor: chartThemeColors.border });
+        applyChartSplit();
+
+        settingsDisplayThemeRadioElements.forEach((radioElement) => {
+          radioElement.checked = radioElement.value === nextTheme;
+        });
+
+        if (shouldPersist) {
+          try {
+            localStorage.setItem(displayThemeStorageKey, nextTheme);
+          } catch (_error) {
+          }
         }
       };
 
@@ -5035,6 +5111,16 @@
         });
       });
 
+      settingsDisplayThemeRadioElements.forEach((radioElement) => {
+        radioElement.addEventListener("change", () => {
+          if (!radioElement.checked) {
+            return;
+          }
+
+          applyDisplayTheme(radioElement.value, { persist: true });
+        });
+      });
+
       const removeHorizontalLineEntry = (lineEntry) => {
         if (!lineEntry || lineEntry.removed) {
           return;
@@ -5631,6 +5717,7 @@
       updateRsiDividerLabel(false);
       applyEnabledTimeframesToUI();
       applyEnabledIndicatorsToUI();
+      applyDisplayTheme(activeDisplayTheme, { persist: false });
       setActiveTimeframeButton(currentTimeframe);
       setIndicatorButtonState();
       setRightPanelTab("order");
