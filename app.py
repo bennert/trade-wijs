@@ -15,7 +15,7 @@ app = Flask(__name__)
 MAX_CANDLES = 5000
 CACHE_TTL_SECONDS = 20
 _ohlcv_cache = {}
-SUPPORTED_TIMEFRAMES = ("1m", "3m", "5m", "15m", "1h", "4h", "1d", "1w", "1M")
+DEFAULT_SUPPORTED_TIMEFRAMES = ("1m", "3m", "5m", "15m", "1h", "4h", "1d", "1w", "1M")
 SUPPORTED_EXCHANGES = {
     "bybit": {
         "label": "Bybit Global",
@@ -92,10 +92,44 @@ def _build_fallback_candles(timeframe, count=600):
     return candles
 
 
-def _normalize_timeframe(value):
-    if value in SUPPORTED_TIMEFRAMES:
+def _is_valid_timeframe(value):
+    if not isinstance(value, str):
+        return False
+
+    if len(value) < 2:
+        return False
+
+    number = value[:-1]
+    unit = value[-1]
+    return number.isdigit() and unit in {"m", "h", "d", "w", "M"}
+
+
+def _sort_timeframe_values(timeframes):
+    return sorted(
+        timeframes,
+        key=lambda timeframe: (_timeframe_to_seconds(timeframe), timeframe),
+    )
+
+
+def _get_supported_timeframes(exchange):
+    raw_timeframes = getattr(exchange, "timeframes", None)
+    if isinstance(raw_timeframes, dict):
+        filtered = [timeframe for timeframe in raw_timeframes.keys() if _is_valid_timeframe(timeframe)]
+        if filtered:
+            return _sort_timeframe_values(filtered)
+
+    return list(DEFAULT_SUPPORTED_TIMEFRAMES)
+
+
+def _normalize_timeframe(value, supported_timeframes=None):
+    available = list(supported_timeframes or DEFAULT_SUPPORTED_TIMEFRAMES)
+    if value in available:
         return value
-    return "1m"
+
+    if "1m" in available:
+        return "1m"
+
+    return available[0] if available else "1m"
 
 
 def _normalize_exchange(value):
@@ -284,10 +318,28 @@ def _get_cached_ohlcv(exchange, symbol, timeframe, target_limit):
 
 
 def _fetch_chart_payload(timeframe=None, exchange_key=None, symbol=None):
-    selected_timeframe = _normalize_timeframe(timeframe)
     selected_exchange_key = _normalize_exchange(exchange_key)
     selected_symbol = _normalize_symbol(symbol)
     selected_exchange = SUPPORTED_EXCHANGES[selected_exchange_key]
+    exchange_class = getattr(ccxt, selected_exchange["ccxt_id"])
+    exchange = None
+    supported_timeframes = list(DEFAULT_SUPPORTED_TIMEFRAMES)
+
+    try:
+        exchange = exchange_class({"enableRateLimit": True})
+        exchange.load_markets()
+        supported_timeframes = _get_supported_timeframes(exchange)
+    except (
+        ccxt.RequestTimeout,
+        ccxt.NetworkError,
+        ccxt.ExchangeNotAvailable,
+        ccxt.BadSymbol,
+        ccxt.ExchangeError,
+        OSError,
+    ):
+        supported_timeframes = list(DEFAULT_SUPPORTED_TIMEFRAMES)
+
+    selected_timeframe = _normalize_timeframe(timeframe, supported_timeframes)
 
     market_data = {
         "symbol": selected_symbol,
@@ -303,6 +355,7 @@ def _fetch_chart_payload(timeframe=None, exchange_key=None, symbol=None):
             {"symbol": supported_symbol, "display_symbol": supported_symbol.replace("/", "")}
             for supported_symbol in SUPPORTED_SYMBOLS
         ],
+        "supported_timeframes": supported_timeframes,
         "max_candles": MAX_CANDLES,
         "last": None,
         "bid": None,
@@ -320,8 +373,9 @@ def _fetch_chart_payload(timeframe=None, exchange_key=None, symbol=None):
     footer_points = []
 
     try:
-        exchange_class = getattr(ccxt, selected_exchange["ccxt_id"])
-        exchange = exchange_class({"enableRateLimit": True})
+        if exchange is None:
+            exchange = exchange_class({"enableRateLimit": True})
+            exchange.load_markets()
         ticker = exchange.fetch_ticker(market_data["symbol"])
         ohlcv_rows = _get_cached_ohlcv(
             exchange,
