@@ -46,7 +46,14 @@
           {% endfor %}
         </div>
       </div>
-      <div class="top-actions"><span id="refresh-status" class="refresh-status">Live</span></div>
+      <div class="top-actions">
+        <button id="right-panel-toggle-btn" type="button" class="right-panel-toggle-btn" aria-label="Collapse right panel" aria-expanded="true">
+          <svg class="right-panel-toggle-icon" viewBox="0 0 16 16" aria-hidden="true" focusable="false">
+            <path d="M6.5 3.5L11 8l-4.5 4.5" />
+          </svg>
+        </button>
+        <span id="refresh-status" class="refresh-status">Live</span>
+      </div>
     </header>
 
     <main class="chart-area">
@@ -172,8 +179,15 @@
           </ul>
         </div>
       </section>
-      <section>
-        <h2 id="market-title">{{ market_data.display_symbol }} Info</h2>
+      <section id="market-info-section" class="market-info-section">
+        <div class="market-info-header">
+          <h2 id="market-title">{{ market_data.display_symbol }} Info</h2>
+          <button id="market-info-toggle-btn" type="button" class="market-info-toggle-btn" aria-label="Collapse info panel" aria-expanded="true">
+            <svg class="market-info-toggle-icon" viewBox="0 0 16 16" aria-hidden="true" focusable="false">
+              <path d="M3.5 6.5L8 11l4.5-4.5" />
+            </svg>
+          </button>
+        </div>
         {% if market_data.error %}
           <div id="market-error" class="placeholder-block">Unable to load market data: {{ market_data.error }}</div>
         {% else %}
@@ -220,6 +234,8 @@
   <script id="candles-data" type="application/json">{{ candles | tojson }}</script>
   <script>
     (function () {
+      const appShellElement = document.querySelector(".app-shell");
+      const rightPanelElement = document.querySelector(".right-panel");
       const chartFooterElement = document.getElementById("chart-footer");
       const chartElement = document.getElementById("tv-chart");
       const chartCanvas = document.querySelector(".chart-canvas");
@@ -270,7 +286,10 @@
       const timeframeLabelElement = document.getElementById("timeframe-label");
       const pairSelectorMenuElement = document.getElementById("pair-selector-menu");
       const exchangeSelectorMenuElement = document.getElementById("exchange-selector-menu");
+      const rightPanelToggleButtonElement = document.getElementById("right-panel-toggle-btn");
       const marketTitleElement = document.getElementById("market-title");
+      const marketInfoSectionElement = document.getElementById("market-info-section");
+      const marketInfoToggleButtonElement = document.getElementById("market-info-toggle-btn");
       const marketErrorElement = document.getElementById("market-error");
       const marketInfoGridElement = document.getElementById("market-info-grid");
       const marketUpdatedElement = document.getElementById("market-updated");
@@ -301,6 +320,7 @@
       const timeframeStorageKey = "trade-wijs-timeframe";
       const symbolStorageKey = "trade-wijs-symbol";
       const exchangeStorageKey = "trade-wijs-exchange";
+      const rightPanelCollapseStorageKey = "trade-wijs-right-panel-collapsed";
       const validTimeframes = new Set(timeframeButtonElements.map((button) => button.dataset.timeframe).filter(Boolean));
       const validSymbols = new Set(
         Array.from(pairSelectorMenuElement?.querySelectorAll("[data-symbol]") || []).map((button) => button.dataset.symbol).filter(Boolean),
@@ -318,6 +338,7 @@
       const maxHorizontalLines = 20;
       const horizontalLineStorageKey = "trade-wijs-horizontal-lines:{{ market_data.display_symbol|replace(' ', '_') }}";
       const indicatorStorageKey = "trade-wijs-indicators";
+      const marketInfoCollapseStorageKey = "trade-wijs-market-info-collapsed";
       let chartData = [];
       let deferredCandlesForRedraw = null;
       let deferredMarketDataForRefresh = null;
@@ -328,6 +349,12 @@
       let drawHoverPreviewLine = null;
       let drawCaptureOverlayElement = null;
       let drawLineMode = false;
+      let isRightPanelCollapsed = false;
+      let isMarketInfoCollapsed = false;
+      let marketInfoHasError =
+        Boolean(marketErrorElement)
+        && (marketErrorElement.style.display || "") !== "none"
+        && ((marketErrorElement.textContent || "").trim().length > 0);
       let currentPriceCountdownIntervalId = null;
       let liveQuotePollIntervalId = null;
       let liveQuoteRequestInFlight = false;
@@ -468,6 +495,18 @@
         const safeValue = encodeURIComponent(String(value || ""));
         document.cookie = `${key}=${safeValue}; path=/; max-age=31536000; samesite=lax`;
       };
+
+      try {
+        const savedRightPanelCollapsed = localStorage.getItem(rightPanelCollapseStorageKey);
+        isRightPanelCollapsed = savedRightPanelCollapsed === "true";
+      } catch (_error) {
+      }
+
+      try {
+        const savedMarketInfoCollapsed = localStorage.getItem(marketInfoCollapseStorageKey);
+        isMarketInfoCollapsed = savedMarketInfoCollapsed === "true";
+      } catch (_error) {
+      }
 
       try {
         const savedIndicators = JSON.parse(localStorage.getItem(indicatorStorageKey) || "{}");
@@ -2521,6 +2560,81 @@
         });
       };
 
+      const setRightPanelCollapsed = (collapsed) => {
+        isRightPanelCollapsed = collapsed;
+
+        if (appShellElement) {
+          appShellElement.classList.toggle("is-right-panel-collapsed", isRightPanelCollapsed);
+        }
+
+        if (rightPanelToggleButtonElement) {
+          rightPanelToggleButtonElement.setAttribute("aria-expanded", isRightPanelCollapsed ? "false" : "true");
+          rightPanelToggleButtonElement.setAttribute(
+            "aria-label",
+            isRightPanelCollapsed ? "Expand right panel" : "Collapse right panel",
+          );
+        }
+
+        try {
+          localStorage.setItem(rightPanelCollapseStorageKey, String(isRightPanelCollapsed));
+        } catch (_error) {
+        }
+
+        if (!rightPanelElement || !chartElement) {
+          return;
+        }
+
+        window.requestAnimationFrame(() => {
+          chart.applyOptions({
+            width: chartElement.clientWidth,
+            height: chartElement.clientHeight,
+          });
+          applyChartSplit();
+          renderFvgOverlay();
+          renderSmcOverlay();
+          renderDynamicPriceScaleLines();
+          renderPaneScaleOverlay();
+          renderSelectedHorizontalLineHandle();
+          updateScrollToRecentButtonVisibility();
+        });
+      };
+
+      const setMarketInfoCollapsed = (collapsed) => {
+        isMarketInfoCollapsed = collapsed;
+
+        if (marketInfoSectionElement) {
+          marketInfoSectionElement.classList.toggle("is-collapsed", isMarketInfoCollapsed);
+        }
+
+        if (marketInfoToggleButtonElement) {
+          marketInfoToggleButtonElement.setAttribute("aria-expanded", isMarketInfoCollapsed ? "false" : "true");
+          marketInfoToggleButtonElement.setAttribute(
+            "aria-label",
+            isMarketInfoCollapsed ? "Expand info panel" : "Collapse info panel",
+          );
+        }
+
+        const showError = !isMarketInfoCollapsed && marketInfoHasError;
+        const showGrid = !isMarketInfoCollapsed && !marketInfoHasError;
+
+        if (marketErrorElement) {
+          marketErrorElement.style.display = showError ? "block" : "none";
+        }
+
+        if (marketInfoGridElement) {
+          marketInfoGridElement.style.display = showGrid ? "grid" : "none";
+        }
+
+        if (marketUpdatedElement) {
+          marketUpdatedElement.style.display = showGrid ? "block" : "none";
+        }
+
+        try {
+          localStorage.setItem(marketInfoCollapseStorageKey, String(isMarketInfoCollapsed));
+        } catch (_error) {
+        }
+      };
+
       const getRefreshIntervalMs = (timeframe) => {
         const fastTimeframes = new Set(["1m", "3m", "5m"]);
         return fastTimeframes.has(timeframe) ? 5000 : 60000;
@@ -3802,31 +3916,21 @@
         }
 
         if (marketData.error) {
+          marketInfoHasError = true;
           if (marketErrorElement) {
-            marketErrorElement.style.display = "block";
             marketErrorElement.textContent = `Unable to load market data: ${marketData.error}`;
           }
-          if (marketInfoGridElement) {
-            marketInfoGridElement.style.display = "none";
-          }
-          if (marketUpdatedElement) {
-            marketUpdatedElement.style.display = "none";
-          }
+          setMarketInfoCollapsed(isMarketInfoCollapsed);
           return;
         }
 
-        if (marketErrorElement) {
-          marketErrorElement.style.display = "none";
-        }
-        if (marketInfoGridElement) {
-          marketInfoGridElement.style.display = "grid";
-        }
+        marketInfoHasError = false;
         if (marketUpdatedElement) {
-          marketUpdatedElement.style.display = "block";
           marketUpdatedElement.textContent = `Updated: ${marketData.timestamp || "Unknown"}`;
           const timestampUnix = Number(marketData.timestamp_unix);
           marketUpdatedElement.dataset.timestampUnix = Number.isFinite(timestampUnix) ? String(timestampUnix) : "";
         }
+        setMarketInfoCollapsed(isMarketInfoCollapsed);
 
         if (valueLastElement) valueLastElement.textContent = formatValue(marketData.last);
         if (valueBidElement) valueBidElement.textContent = formatValue(marketData.bid);
@@ -4469,6 +4573,18 @@
         });
       }
 
+      if (rightPanelToggleButtonElement) {
+        rightPanelToggleButtonElement.addEventListener("click", () => {
+          setRightPanelCollapsed(!isRightPanelCollapsed);
+        });
+      }
+
+      if (marketInfoToggleButtonElement) {
+        marketInfoToggleButtonElement.addEventListener("click", () => {
+          setMarketInfoCollapsed(!isMarketInfoCollapsed);
+        });
+      }
+
       if (chartFooterElement) {
         chartFooterElement.style.justifyContent = "space-between";
       }
@@ -4508,6 +4624,8 @@
       setActiveTimeframeButton(currentTimeframe);
       setIndicatorButtonState();
       setRightPanelTab("order");
+      setRightPanelCollapsed(isRightPanelCollapsed);
+      setMarketInfoCollapsed(isMarketInfoCollapsed);
       setDrawLineMode(false);
       updateUndoButtonState();
       setLoadingTimeframeButton(null);

@@ -231,3 +231,26 @@ When('I trigger a manual market refresh via {word}', async function (selector) {
 Then('the refresh status transitions through Updating to Live', async function () {
   await assertRefreshStatusUpdatingThenLive(this.page);
 });
+
+Then('the market info panel is expanded', async function () {
+  const toggle = this.page.locator('#market-info-toggle-btn');
+  const isVisible = await this.page.locator('#market-info-grid').isVisible();
+  const expanded = await toggle.getAttribute('aria-expanded');
+
+  assert.equal(expanded, 'true', 'Market info toggle should be expanded.');
+  assert.equal(isVisible, true, 'Market info grid should be visible when expanded.');
+});
+
+When('I toggle the market info panel', async function () {
+  await this.page.locator('#market-info-toggle-btn').click();
+});
+
+Then('the market info panel is collapsed', async function () {
+  const toggle = this.page.locator('#market-info-toggle-btn');
+  const grid = this.page.locator('#market-info-grid');
+  const expanded = await toggle.getAttribute('aria-expanded');
+  const isVisible = await grid.isVisible();
+
+  assert.equal(expanded, 'false', 'Market info toggle should be collapsed.');
+  assert.equal(isVisible, false, 'Market info grid should be hidden when collapsed.');
+});

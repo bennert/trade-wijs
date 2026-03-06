@@ -25,7 +25,7 @@ body {
   grid-template-areas:
     "topbar topbar"
     "chart right"
-    "bottom bottom";
+    "bottom right";
   height: 100vh;
 }
 
@@ -136,8 +136,57 @@ body {
 .top-actions {
   grid-column: 3;
   justify-self: end;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
   text-align: right;
   color: var(--muted);
+}
+
+.right-panel-toggle-btn {
+  border: 1px solid var(--border);
+  background: var(--panel-2);
+  color: var(--muted);
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  border-radius: 4px;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.right-panel-toggle-btn:hover {
+  color: var(--text);
+  border-color: var(--text);
+}
+
+.right-panel-toggle-icon {
+  width: 12px;
+  height: 12px;
+  stroke: currentColor;
+  stroke-width: 2;
+  fill: none;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  transition: transform 120ms ease;
+}
+
+.right-panel-toggle-btn[aria-expanded="false"] .right-panel-toggle-icon {
+  transform: rotate(180deg);
+}
+
+.app-shell.is-right-panel-collapsed {
+  grid-template-columns: 1fr 0;
+}
+
+.app-shell.is-right-panel-collapsed .right-panel {
+  border: 0;
+  padding: 0;
+  overflow: hidden;
+  visibility: hidden;
+  pointer-events: none;
 }
 
 .refresh-status {
@@ -157,11 +206,53 @@ body {
 }
 
 .right-panel h2 {
-  margin: 0 0 10px;
+  margin: 0;
   font-size: 14px;
   color: var(--muted);
   text-transform: uppercase;
   letter-spacing: 0.08em;
+}
+
+.market-info-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 10px;
+}
+
+.market-info-toggle-btn {
+  border: 1px solid var(--border);
+  background: var(--panel-2);
+  color: var(--muted);
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  border-radius: 4px;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.market-info-toggle-btn:hover {
+  color: var(--text);
+  border-color: var(--text);
+}
+
+.market-info-toggle-icon {
+  width: 12px;
+  height: 12px;
+  stroke: currentColor;
+  stroke-width: 2;
+  fill: none;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  transform: rotate(180deg);
+  transition: transform 120ms ease;
+}
+
+.market-info-toggle-btn[aria-expanded="true"] .market-info-toggle-icon {
+  transform: rotate(0deg);
 }
 
 .chart-area {
@@ -973,6 +1064,15 @@ body.is-dragging-pane-order {
       "topbar"
       "chart"
       "right"
+      "bottom";
+  }
+
+  .app-shell.is-right-panel-collapsed {
+    grid-template-columns: 1fr;
+    grid-template-rows: 56px 1fr 120px;
+    grid-template-areas:
+      "topbar"
+      "chart"
       "bottom";
   }
 

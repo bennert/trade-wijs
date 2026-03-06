@@ -32,3 +32,12 @@ Feature: Market selector buttons
       | timeframe |
       | pair      |
       | exchange  |
+
+  Scenario: Right info panel can be collapsed and expanded
+    Given the Trade Wijs homepage
+    When I open the homepage
+    Then the market info panel is expanded
+    When I toggle the market info panel
+    Then the market info panel is collapsed
+    When I toggle the market info panel
+    Then the market info panel is expanded
