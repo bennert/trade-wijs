@@ -11,7 +11,41 @@
   <div class="app-shell">
     <header class="topbar">
       <div class="brand">Trade Wijs v{{ app_version }}</div>
-      <div id="symbol-info" class="symbol-info">{{ market_data.display_symbol }} · {{ market_data.timeframe }} · {{ market_data.exchange }}</div>
+      <div class="market-selectors">
+        <button id="exchange-selector-btn" type="button" class="market-selector-btn" aria-haspopup="true" aria-expanded="false">
+          {{ market_data.exchange }}
+        </button>
+        <button id="pair-selector-btn" type="button" class="market-selector-btn" aria-haspopup="true" aria-expanded="false">
+          {{ market_data.display_symbol }}
+        </button>
+        <span id="timeframe-label" class="market-timeframe-label">{{ market_data.timeframe }}</span>
+
+        <div id="exchange-selector-menu" class="market-selector-menu" role="menu" aria-label="Select exchange">
+          {% for item in market_data.supported_exchanges %}
+            <button
+              type="button"
+              class="market-selector-menu-item{% if item.key == market_data.exchange_key %} is-active{% endif %}"
+              data-exchange="{{ item.key }}"
+              role="menuitem"
+            >
+              {{ item.label }}
+            </button>
+          {% endfor %}
+        </div>
+
+        <div id="pair-selector-menu" class="market-selector-menu" role="menu" aria-label="Select trading pair">
+          {% for item in market_data.supported_symbols %}
+            <button
+              type="button"
+              class="market-selector-menu-item{% if item.symbol == market_data.symbol %} is-active{% endif %}"
+              data-symbol="{{ item.symbol }}"
+              role="menuitem"
+            >
+              {{ item.display_symbol }}
+            </button>
+          {% endfor %}
+        </div>
+      </div>
       <div class="top-actions"><span id="refresh-status" class="refresh-status">Live</span></div>
     </header>
 
@@ -231,7 +265,11 @@
       const ohlcCloseElement = document.getElementById("ohlc-close");
       const ohlcBarVolumeElement = document.getElementById("ohlc-bar-volume");
       const ohlcVol24Element = document.getElementById("ohlc-vol24");
-      const symbolInfoElement = document.getElementById("symbol-info");
+      const pairSelectorButtonElement = document.getElementById("pair-selector-btn");
+      const exchangeSelectorButtonElement = document.getElementById("exchange-selector-btn");
+      const timeframeLabelElement = document.getElementById("timeframe-label");
+      const pairSelectorMenuElement = document.getElementById("pair-selector-menu");
+      const exchangeSelectorMenuElement = document.getElementById("exchange-selector-menu");
       const marketTitleElement = document.getElementById("market-title");
       const marketErrorElement = document.getElementById("market-error");
       const marketInfoGridElement = document.getElementById("market-info-grid");
@@ -253,8 +291,21 @@
       }
 
       let currentTimeframe = "{{ market_data.timeframe }}";
+      let currentSymbol = "{{ market_data.symbol }}";
+      let currentDisplaySymbol = "{{ market_data.display_symbol }}";
+      let currentExchangeKey = "{{ market_data.exchange_key }}";
+      let currentExchangeLabel = "{{ market_data.exchange }}";
+      let activeSelectorMenu = null;
       const timeframeStorageKey = "trade-wijs-timeframe";
+      const symbolStorageKey = "trade-wijs-symbol";
+      const exchangeStorageKey = "trade-wijs-exchange";
       const validTimeframes = new Set(timeframeButtonElements.map((button) => button.dataset.timeframe).filter(Boolean));
+      const validSymbols = new Set(
+        Array.from(pairSelectorMenuElement?.querySelectorAll("[data-symbol]") || []).map((button) => button.dataset.symbol).filter(Boolean),
+      );
+      const validExchangeKeys = new Set(
+        Array.from(exchangeSelectorMenuElement?.querySelectorAll("[data-exchange]") || []).map((button) => button.dataset.exchange).filter(Boolean),
+      );
       let shouldInitialTimeframeRefresh = false;
       let isRefreshing = false;
       let refreshRequestCounter = 0;
@@ -324,6 +375,11 @@
 
       const clamp = (value, min, max) => Math.max(min, Math.min(max, value));
 
+      const setPreferenceCookie = (key, value) => {
+        const safeValue = encodeURIComponent(String(value || ""));
+        document.cookie = `${key}=${safeValue}; path=/; max-age=31536000; samesite=lax`;
+      };
+
       try {
         const savedIndicators = JSON.parse(localStorage.getItem(indicatorStorageKey) || "{}");
         if (savedIndicators && typeof savedIndicators === "object") {
@@ -348,6 +404,28 @@
         }
       } catch (_error) {
       }
+
+      try {
+        const savedSymbol = localStorage.getItem(symbolStorageKey);
+        if (savedSymbol && validSymbols.has(savedSymbol) && savedSymbol !== currentSymbol) {
+          currentSymbol = savedSymbol;
+          shouldInitialTimeframeRefresh = true;
+        }
+      } catch (_error) {
+      }
+
+      try {
+        const savedExchange = localStorage.getItem(exchangeStorageKey);
+        if (savedExchange && validExchangeKeys.has(savedExchange) && savedExchange !== currentExchangeKey) {
+          currentExchangeKey = savedExchange;
+          shouldInitialTimeframeRefresh = true;
+        }
+      } catch (_error) {
+      }
+
+      setPreferenceCookie("trade_wijs_timeframe", currentTimeframe);
+      setPreferenceCookie("trade_wijs_symbol", currentSymbol);
+      setPreferenceCookie("trade_wijs_exchange", currentExchangeKey);
 
       try {
         const savedPaneOrder = JSON.parse(localStorage.getItem(paneOrderStorageKey) || "[]");
@@ -2098,6 +2176,58 @@
         timeframeButtonElements.forEach((button) => {
           button.classList.toggle("is-active", button.dataset.timeframe === timeframe);
         });
+
+        if (timeframeLabelElement) {
+          timeframeLabelElement.textContent = timeframe;
+        }
+      };
+
+      const hideSelectorMenus = () => {
+        activeSelectorMenu = null;
+
+        if (pairSelectorMenuElement) {
+          pairSelectorMenuElement.classList.remove("is-visible");
+        }
+        if (exchangeSelectorMenuElement) {
+          exchangeSelectorMenuElement.classList.remove("is-visible");
+        }
+        if (pairSelectorButtonElement) {
+          pairSelectorButtonElement.setAttribute("aria-expanded", "false");
+        }
+        if (exchangeSelectorButtonElement) {
+          exchangeSelectorButtonElement.setAttribute("aria-expanded", "false");
+        }
+      };
+
+      const toggleSelectorMenu = (menuName) => {
+        const nextMenu = activeSelectorMenu === menuName ? null : menuName;
+        hideSelectorMenus();
+
+        if (!nextMenu) {
+          return;
+        }
+
+        activeSelectorMenu = nextMenu;
+        if (nextMenu === "pair") {
+          pairSelectorMenuElement?.classList.add("is-visible");
+          pairSelectorButtonElement?.setAttribute("aria-expanded", "true");
+        }
+        if (nextMenu === "exchange") {
+          exchangeSelectorMenuElement?.classList.add("is-visible");
+          exchangeSelectorButtonElement?.setAttribute("aria-expanded", "true");
+        }
+      };
+
+      const setActiveSelectorMenuItem = (menuElement, attributeName, value) => {
+        if (!menuElement) {
+          return;
+        }
+
+        const selector = `[${attributeName}]`;
+        Array.from(menuElement.querySelectorAll(selector)).forEach((button) => {
+          const isActive = button.getAttribute(attributeName) === value;
+          button.classList.toggle("is-active", isActive);
+        });
       };
 
       const setDrawLineMode = (enabled) => {
@@ -3381,11 +3511,26 @@
           return;
         }
 
-        if (symbolInfoElement) {
-          symbolInfoElement.textContent = `${marketData.display_symbol} · ${marketData.timeframe} · ${marketData.exchange}`;
+        currentSymbol = marketData.symbol || currentSymbol;
+        currentDisplaySymbol = marketData.display_symbol || currentDisplaySymbol;
+        currentExchangeKey = marketData.exchange_key || currentExchangeKey;
+        currentExchangeLabel = marketData.exchange || currentExchangeLabel;
+
+        if (pairSelectorButtonElement) {
+          pairSelectorButtonElement.textContent = currentDisplaySymbol;
         }
+        if (exchangeSelectorButtonElement) {
+          exchangeSelectorButtonElement.textContent = currentExchangeLabel;
+        }
+        if (timeframeLabelElement) {
+          timeframeLabelElement.textContent = currentTimeframe;
+        }
+
+        setActiveSelectorMenuItem(pairSelectorMenuElement, "data-symbol", currentSymbol);
+        setActiveSelectorMenuItem(exchangeSelectorMenuElement, "data-exchange", currentExchangeKey);
+
         if (marketTitleElement) {
-          marketTitleElement.textContent = `${marketData.display_symbol} Info`;
+          marketTitleElement.textContent = `${currentDisplaySymbol} Info`;
         }
 
         if (marketData.error) {
@@ -3444,7 +3589,12 @@
         setRefreshStatus("Updating...", "is-updating");
 
         try {
-          const response = await fetch(`/api/chart-data?timeframe=${encodeURIComponent(requestedTimeframe)}`, { cache: "no-store" });
+          const query = new URLSearchParams({
+            timeframe: requestedTimeframe,
+            symbol: currentSymbol,
+            exchange: currentExchangeKey,
+          });
+          const response = await fetch(`/api/chart-data?${query.toString()}`, { cache: "no-store" });
           if (!response.ok) {
             setRefreshStatus("Retrying", "is-error");
             isRefreshing = false;
@@ -3522,6 +3672,7 @@
 
           currentTimeframe = nextTimeframe;
           localStorage.setItem(timeframeStorageKey, currentTimeframe);
+          setPreferenceCookie("trade_wijs_timeframe", currentTimeframe);
           pendingRestoreLogicalRange = null;
           const timeframeView = savedChartViewByTimeframe[currentTimeframe];
           if (
@@ -3536,6 +3687,78 @@
           }
           hasFitContent = false;
           setActiveTimeframeButton(currentTimeframe);
+          setLoadingTimeframeButton(currentTimeframe);
+          refreshChartData({ priority: true });
+          scheduleNextRefresh();
+        });
+      }
+
+      if (pairSelectorButtonElement) {
+        pairSelectorButtonElement.addEventListener("click", (event) => {
+          event.preventDefault();
+          event.stopPropagation();
+          toggleSelectorMenu("pair");
+        });
+      }
+
+      if (exchangeSelectorButtonElement) {
+        exchangeSelectorButtonElement.addEventListener("click", (event) => {
+          event.preventDefault();
+          event.stopPropagation();
+          toggleSelectorMenu("exchange");
+        });
+      }
+
+      if (pairSelectorMenuElement) {
+        pairSelectorMenuElement.addEventListener("click", (event) => {
+          const button = event.target.closest("[data-symbol]");
+          if (!button) {
+            return;
+          }
+
+          const nextSymbol = button.dataset.symbol;
+          if (!nextSymbol || !validSymbols.has(nextSymbol) || nextSymbol === currentSymbol) {
+            hideSelectorMenus();
+            return;
+          }
+
+          currentSymbol = nextSymbol;
+          localStorage.setItem(symbolStorageKey, currentSymbol);
+          setPreferenceCookie("trade_wijs_symbol", currentSymbol);
+          setActiveSelectorMenuItem(pairSelectorMenuElement, "data-symbol", currentSymbol);
+          if (pairSelectorButtonElement) {
+            pairSelectorButtonElement.textContent = nextSymbol.replace("/", "");
+          }
+
+          hideSelectorMenus();
+          setLoadingTimeframeButton(currentTimeframe);
+          refreshChartData({ priority: true });
+          scheduleNextRefresh();
+        });
+      }
+
+      if (exchangeSelectorMenuElement) {
+        exchangeSelectorMenuElement.addEventListener("click", (event) => {
+          const button = event.target.closest("[data-exchange]");
+          if (!button) {
+            return;
+          }
+
+          const nextExchange = button.dataset.exchange;
+          if (!nextExchange || !validExchangeKeys.has(nextExchange) || nextExchange === currentExchangeKey) {
+            hideSelectorMenus();
+            return;
+          }
+
+          currentExchangeKey = nextExchange;
+          localStorage.setItem(exchangeStorageKey, currentExchangeKey);
+          setPreferenceCookie("trade_wijs_exchange", currentExchangeKey);
+          setActiveSelectorMenuItem(exchangeSelectorMenuElement, "data-exchange", currentExchangeKey);
+          if (exchangeSelectorButtonElement) {
+            exchangeSelectorButtonElement.textContent = (button.textContent || "").trim();
+          }
+
+          hideSelectorMenus();
           setLoadingTimeframeButton(currentTimeframe);
           refreshChartData({ priority: true });
           scheduleNextRefresh();
@@ -3802,11 +4025,23 @@
       }
 
       window.addEventListener("click", (event) => {
+        const clickTarget = event.target;
+
+        if (activeSelectorMenu) {
+          const clickedInsidePair = Boolean(clickTarget instanceof Node
+            && (pairSelectorButtonElement?.contains(clickTarget) || pairSelectorMenuElement?.contains(clickTarget)));
+          const clickedInsideExchange = Boolean(clickTarget instanceof Node
+            && (exchangeSelectorButtonElement?.contains(clickTarget) || exchangeSelectorMenuElement?.contains(clickTarget)));
+
+          if (!clickedInsidePair && !clickedInsideExchange) {
+            hideSelectorMenus();
+          }
+        }
+
         if (!horizontalLineContextMenuElement || !horizontalLineContextMenuElement.classList.contains("is-visible")) {
           return;
         }
 
-        const clickTarget = event.target;
         if (clickTarget instanceof Node && horizontalLineContextMenuElement.contains(clickTarget)) {
           return;
         }
@@ -3849,6 +4084,10 @@
         }
 
         if (event.key === "Escape") {
+          if (activeSelectorMenu) {
+            hideSelectorMenus();
+          }
+
           if (drawLineMode) {
             setDrawLineMode(false);
             setRefreshStatus("Live", "is-live");

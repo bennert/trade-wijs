@@ -5,9 +5,10 @@ import os
 import re
 import subprocess
 import time
+from urllib.parse import unquote
 
 import ccxt
-from flask import Flask, jsonify, render_template, request
+from flask import Flask, jsonify, make_response, render_template, request
 
 app = Flask(__name__)
 
@@ -15,6 +16,17 @@ MAX_CANDLES = 5000
 CACHE_TTL_SECONDS = 20
 _ohlcv_cache = {}
 SUPPORTED_TIMEFRAMES = ("1m", "3m", "5m", "15m", "1h", "4h", "1d", "1w", "1M")
+SUPPORTED_EXCHANGES = {
+    "bybit": {
+        "label": "Bybit Global",
+        "ccxt_id": "bybit",
+    },
+    "binance": {
+        "label": "Binance",
+        "ccxt_id": "binance",
+    },
+}
+SUPPORTED_SYMBOLS = ("BTC/USDT", "ETH/USDT", "SOL/USDT")
 
 
 def _timeframe_to_seconds(timeframe):
@@ -84,6 +96,24 @@ def _normalize_timeframe(value):
     if value in SUPPORTED_TIMEFRAMES:
         return value
     return "1m"
+
+
+def _normalize_exchange(value):
+    if value in SUPPORTED_EXCHANGES:
+        return value
+    return "bybit"
+
+
+def _normalize_symbol(value):
+    if value in SUPPORTED_SYMBOLS:
+        return value
+    return "BTC/USDT"
+
+
+def _decode_request_value(value):
+    if isinstance(value, str):
+        return unquote(value)
+    return value
 
 
 def _format_compact_volume(value):
@@ -237,7 +267,8 @@ def _fetch_ohlcv_window(exchange, symbol, timeframe, target_limit):
 
 
 def _get_cached_ohlcv(exchange, symbol, timeframe, target_limit):
-    cache_key = f"{symbol}:{timeframe}:{target_limit}"
+    exchange_id = getattr(exchange, "id", "exchange")
+    cache_key = f"{exchange_id}:{symbol}:{timeframe}:{target_limit}"
     now = time.monotonic()
     cached = _ohlcv_cache.get(cache_key)
 
@@ -252,13 +283,26 @@ def _get_cached_ohlcv(exchange, symbol, timeframe, target_limit):
     return rows
 
 
-def _fetch_chart_payload(timeframe=None):
+def _fetch_chart_payload(timeframe=None, exchange_key=None, symbol=None):
     selected_timeframe = _normalize_timeframe(timeframe)
+    selected_exchange_key = _normalize_exchange(exchange_key)
+    selected_symbol = _normalize_symbol(symbol)
+    selected_exchange = SUPPORTED_EXCHANGES[selected_exchange_key]
+
     market_data = {
-        "symbol": "BTC/USDT",
-        "display_symbol": "BTCUSDT",
-        "exchange": "Bybit Global",
+        "symbol": selected_symbol,
+        "display_symbol": selected_symbol.replace("/", ""),
+        "exchange_key": selected_exchange_key,
+        "exchange": selected_exchange["label"],
         "timeframe": selected_timeframe,
+        "supported_exchanges": [
+            {"key": key, "label": metadata["label"]}
+            for key, metadata in SUPPORTED_EXCHANGES.items()
+        ],
+        "supported_symbols": [
+            {"symbol": supported_symbol, "display_symbol": supported_symbol.replace("/", "")}
+            for supported_symbol in SUPPORTED_SYMBOLS
+        ],
         "max_candles": MAX_CANDLES,
         "last": None,
         "bid": None,
@@ -275,11 +319,12 @@ def _fetch_chart_payload(timeframe=None):
     footer_points = []
 
     try:
-        exchange = ccxt.bybit({"enableRateLimit": True})
-        ticker = exchange.fetch_ticker("BTC/USDT")
+        exchange_class = getattr(ccxt, selected_exchange["ccxt_id"])
+        exchange = exchange_class({"enableRateLimit": True})
+        ticker = exchange.fetch_ticker(market_data["symbol"])
         ohlcv_rows = _get_cached_ohlcv(
             exchange,
-            "BTC/USDT",
+            market_data["symbol"],
             market_data["timeframe"],
             market_data["max_candles"],
         )
@@ -326,15 +371,41 @@ def _fetch_chart_payload(timeframe=None):
 @app.route("/")
 def index():
     """ Main page route. """
-    payload = _fetch_chart_payload(request.args.get("timeframe"))
+    requested_timeframe = _decode_request_value(
+        request.args.get("timeframe") or request.cookies.get("trade_wijs_timeframe")
+    )
+    requested_exchange = _decode_request_value(
+        request.args.get("exchange") or request.cookies.get("trade_wijs_exchange")
+    )
+    requested_symbol = _decode_request_value(
+        request.args.get("symbol") or request.cookies.get("trade_wijs_symbol")
+    )
+
+    payload = _fetch_chart_payload(
+        requested_timeframe,
+        requested_exchange,
+        requested_symbol,
+    )
     payload["app_version"] = _get_git_version()
-    return render_template("index.html", **payload)
+
+    response = make_response(render_template("index.html", **payload))
+    cookie_ttl = 60 * 60 * 24 * 365
+    response.set_cookie("trade_wijs_timeframe", payload["market_data"]["timeframe"], max_age=cookie_ttl, samesite="Lax")
+    response.set_cookie("trade_wijs_exchange", payload["market_data"]["exchange_key"], max_age=cookie_ttl, samesite="Lax")
+    response.set_cookie("trade_wijs_symbol", payload["market_data"]["symbol"], max_age=cookie_ttl, samesite="Lax")
+    return response
 
 
 @app.route("/api/chart-data")
 def chart_data():
     """ API route for fetching chart data as JSON. """
-    return jsonify(_fetch_chart_payload(request.args.get("timeframe")))
+    return jsonify(
+        _fetch_chart_payload(
+            _decode_request_value(request.args.get("timeframe")),
+            _decode_request_value(request.args.get("exchange")),
+            _decode_request_value(request.args.get("symbol")),
+        )
+    )
 
 
 if __name__ == "__main__":
