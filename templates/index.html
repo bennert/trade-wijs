@@ -56,6 +56,27 @@
       </div>
     </header>
 
+    <aside class="left-panel" aria-label="Main menu">
+      <button type="button" class="left-menu-btn is-active" aria-label="Trade panel">
+        <svg class="left-menu-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+          <path d="M6 18V10"></path>
+          <path d="M12 18V6"></path>
+          <path d="M18 18V13"></path>
+          <rect x="4" y="8" width="4" height="2"></rect>
+          <rect x="10" y="4" width="4" height="2"></rect>
+          <rect x="16" y="11" width="4" height="2"></rect>
+        </svg>
+        <span>Trade panel</span>
+      </button>
+      <button type="button" class="left-menu-btn" aria-label="Settings">
+        <svg class="left-menu-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+          <circle cx="12" cy="12" r="3"></circle>
+          <path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 0 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 0 1-4 0v-.2a1.7 1.7 0 0 0-1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 0 1 0-4h.2a1.7 1.7 0 0 0 1.5-1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 0 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3h.1a1.7 1.7 0 0 0 1-1.5V3a2 2 0 0 1 4 0v.2a1.7 1.7 0 0 0 1 1.5h.1a1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 0 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8v.1a1.7 1.7 0 0 0 1.5 1H21a2 2 0 0 1 0 4h-.2a1.7 1.7 0 0 0-1.5 1Z"></path>
+        </svg>
+        <span>Settings</span>
+      </button>
+    </aside>
+
     <main class="chart-area">
       <div class="chart-toolbar">
         <div class="toolbar-group toolbar-group--timeframes">
@@ -223,12 +244,6 @@
       </section>
     </aside>
 
-    <footer class="bottom-panel">
-      <div>Orders</div>
-      <div>Trades</div>
-      <div>History</div>
-      <div>Log</div>
-    </footer>
   </div>
 
   <script id="candles-data" type="application/json">{{ candles | tojson }}</script>
@@ -2635,9 +2650,16 @@
         }
       };
 
-      const getRefreshIntervalMs = (timeframe) => {
-        const fastTimeframes = new Set(["1m", "3m", "5m"]);
-        return fastTimeframes.has(timeframe) ? 5000 : 60000;
+      const getNextRefreshDelayMs = (timeframe) => {
+        const timeframeSeconds = getTimeframeDurationSeconds(timeframe);
+        const estimatedServerNowSeconds = getEstimatedServerNowSeconds();
+        const currentBucketOpenTime = Math.floor(estimatedServerNowSeconds / timeframeSeconds) * timeframeSeconds;
+        const nextBucketOpenTime = currentBucketOpenTime + timeframeSeconds;
+        const secondsUntilNextBucket = Math.max(1, nextBucketOpenTime - estimatedServerNowSeconds);
+        const boundaryDelayMs = (secondsUntilNextBucket * 1000) + 250;
+        const safetyDelayMs = timeframeSeconds <= 300 ? 15000 : 60000;
+
+        return Math.max(1000, Math.min(boundaryDelayMs, safetyDelayMs));
       };
 
       const scheduleNextRefresh = () => {
@@ -2648,7 +2670,7 @@
         refreshTimerId = setTimeout(async () => {
           await refreshChartData();
           scheduleNextRefresh();
-        }, getRefreshIntervalMs(currentTimeframe));
+        }, getNextRefreshDelayMs(currentTimeframe));
       };
 
       const setLoadingTimeframeButton = (timeframe) => {
