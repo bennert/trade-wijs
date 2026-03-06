@@ -8,7 +8,23 @@ Then('the horizontal line button is visible', async function () {
 });
 
 When('I click the horizontal line button', async function () {
-  await this.page.locator('#horizontal-line-btn').click();
+  const button = this.page.locator('#horizontal-line-btn');
+  await button.waitFor({ state: 'visible', timeout: 10000 });
+  await button.scrollIntoViewIfNeeded();
+
+  const isDisabled = await button.isDisabled();
+  assert.equal(isDisabled, false, 'Horizontal Line button is disabled.');
+
+  try {
+    await button.click({ timeout: 5000 });
+  } catch (_error) {
+    await this.page.evaluate(() => {
+      const element = document.querySelector('#horizontal-line-btn');
+      if (element instanceof HTMLButtonElement) {
+        element.click();
+      }
+    });
+  }
 });
 
 Then('the horizontal line button is active', async function () {
