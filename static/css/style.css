@@ -499,6 +499,25 @@ body {
   background: rgba(207, 95, 107, 0.14);
 }
 
+.horizontal-line-selection-handle {
+  position: absolute;
+  left: 0;
+  width: 10px;
+  height: 10px;
+  transform: translate(-50%, -50%);
+  border-radius: 50%;
+  border: 2px solid rgba(255, 224, 138, 1);
+  background: #151925;
+  box-shadow: 0 0 0 1px rgba(255, 224, 138, 0.35);
+  pointer-events: none;
+  opacity: 0;
+  z-index: 11;
+}
+
+.horizontal-line-selection-handle.is-visible {
+  opacity: 1;
+}
+
 .pane-reorder-overlay {
   position: absolute;
   inset: 0;

@@ -66,6 +66,7 @@
           <span class="price-hover-guide-plus">+</span>
           <span id="price-hover-guide-value">-</span>
         </div>
+        <div id="horizontal-line-selection-handle" class="horizontal-line-selection-handle" aria-hidden="true"></div>
         <div id="pane-scale-overlay" class="pane-scale-overlay" aria-hidden="true"></div>
         <div id="pane-reorder-overlay" class="pane-reorder-overlay" aria-hidden="true"></div>
         <button id="scroll-to-recent-btn" type="button" class="scroll-to-recent-btn" aria-label="Scroll to most recent bar">↦ Latest</button>
@@ -183,6 +184,7 @@
       const priceHoverGuideLineElement = document.getElementById("price-hover-guide-line");
       const priceHoverGuideLabelElement = document.getElementById("price-hover-guide-label");
       const priceHoverGuideValueElement = document.getElementById("price-hover-guide-value");
+      const horizontalLineSelectionHandleElement = document.getElementById("horizontal-line-selection-handle");
       const paneScaleOverlayElement = document.getElementById("pane-scale-overlay");
       const paneReorderOverlayElement = document.getElementById("pane-reorder-overlay");
       const stochDividerElement = document.getElementById("stoch-divider");
@@ -1872,6 +1874,7 @@
         renderSmcOverlay();
         renderDynamicPriceScaleLines();
         renderPaneScaleOverlay();
+        renderSelectedHorizontalLineHandle();
         updateScrollToRecentButtonVisibility();
       });
       chartResizeObserver.observe(chartElement);
@@ -1886,6 +1889,7 @@
           paneScaleOverlayRafId = null;
           renderDynamicPriceScaleLines();
           renderPaneScaleOverlay();
+          renderSelectedHorizontalLineHandle();
         });
       };
 
@@ -1972,6 +1976,49 @@
         if (priceHoverGuideLabelElement) {
           priceHoverGuideLabelElement.classList.remove("is-visible");
         }
+      };
+
+      const renderSelectedHorizontalLineHandle = () => {
+        if (!horizontalLineSelectionHandleElement || !chartCanvas || !paneLayout.candle) {
+          return;
+        }
+
+        if (!selectedHorizontalLineEntry || selectedHorizontalLineEntry.removed || drawLineMode) {
+          horizontalLineSelectionHandleElement.classList.remove("is-visible");
+          return;
+        }
+
+        const selectedPrice = Number(selectedHorizontalLineEntry.price);
+        if (!Number.isFinite(selectedPrice) || selectedPrice <= 0) {
+          horizontalLineSelectionHandleElement.classList.remove("is-visible");
+          return;
+        }
+
+        const yCoordinate = candleSeries.priceToCoordinate(selectedPrice);
+        if (!Number.isFinite(Number(yCoordinate))) {
+          horizontalLineSelectionHandleElement.classList.remove("is-visible");
+          return;
+        }
+
+        const canvasHeight = chartCanvas.clientHeight;
+        const canvasWidth = chartCanvas.clientWidth;
+        if (canvasHeight <= 0 || canvasWidth <= 0) {
+          horizontalLineSelectionHandleElement.classList.remove("is-visible");
+          return;
+        }
+
+        const timeAxisSafeZonePx = 22;
+        const usableBottomPx = Math.max(0, canvasHeight - timeAxisSafeZonePx);
+        const candleTopPx = paneLayout.candle.top * usableBottomPx;
+        const candleBottomPx = paneLayout.candle.bottom * usableBottomPx;
+        const rightScaleReservePx = 66;
+        const maxDrawableRightPx = Math.max(0, canvasWidth - rightScaleReservePx);
+        const handleX = Math.max(10, maxDrawableRightPx / 2);
+        const clampedY = clamp(Number(yCoordinate), candleTopPx, candleBottomPx);
+
+        horizontalLineSelectionHandleElement.style.left = `${handleX}px`;
+        horizontalLineSelectionHandleElement.style.top = `${clampedY}px`;
+        horizontalLineSelectionHandleElement.classList.add("is-visible");
       };
 
       const updatePriceHoverGuide = (param) => {
@@ -2098,6 +2145,8 @@
         if (drawLineButtonElement) {
           drawLineButtonElement.classList.toggle("is-active", enabled);
         }
+
+        renderSelectedHorizontalLineHandle();
       };
 
       const clearHorizontalLineHoverPreview = () => {
@@ -2942,6 +2991,7 @@
         }
 
         renderPaneScaleOverlay();
+        renderSelectedHorizontalLineHandle();
       };
 
       const getHorizontalLineSelectionTolerance = (linePrice) => {
@@ -3278,6 +3328,7 @@
         renderFvgOverlay();
         renderSmcOverlay();
         renderPaneScaleOverlay();
+        renderSelectedHorizontalLineHandle();
       };
 
       chart.subscribeCrosshairMove((param) => {
@@ -3546,6 +3597,7 @@
         syncHorizontalLineTestMeta();
         persistHorizontalLines();
         renderPaneScaleOverlay();
+        renderSelectedHorizontalLineHandle();
       };
 
       const removeUndoActionsForLineEntry = (lineEntry) => {
@@ -3692,6 +3744,7 @@
             applyHorizontalLineVisualState(draggedHorizontalLineEntry);
             didDragHorizontalLine = true;
             renderPaneScaleOverlay();
+            renderSelectedHorizontalLineHandle();
             event.preventDefault();
             event.stopPropagation();
             return;
@@ -3760,6 +3813,7 @@
         if (didDragHorizontalLine) {
           persistHorizontalLines();
           renderPaneScaleOverlay();
+          renderSelectedHorizontalLineHandle();
           setRefreshStatus("Horizontal line moved", "is-updating");
           window.setTimeout(() => {
             setRefreshStatus("Live", "is-live");
