@@ -732,6 +732,11 @@ body {
   justify-content: center;
 }
 
+.drawing-tools .draw-tool-btn {
+  width: 36px;
+  height: 36px;
+}
+
 .tool-btn-icon-svg {
   width: 14px;
   height: 14px;
@@ -742,6 +747,28 @@ body {
   stroke-linejoin: round;
 }
 
+.drawing-tools .tool-btn-icon-svg {
+  width: 20px;
+  height: 20px;
+}
+
+.settings-tool-option-icon {
+  width: 18px;
+  height: 18px;
+  stroke: currentColor;
+  stroke-width: 1.8;
+  fill: none;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  margin-left: 4px;
+  opacity: 0.85;
+}
+
+:root[data-theme="light"] .drawing-tools .tool-btn-icon-svg,
+:root[data-theme="light"] .settings-tool-option-icon {
+  stroke: #000000;
+}
+
 .draw-tool-btn.is-active {
   color: var(--text);
   border-color: var(--text);
@@ -750,6 +777,10 @@ body {
 .draw-tool-btn:disabled {
   opacity: 0.5;
   cursor: not-allowed;
+}
+
+.draw-tool-btn.is-hidden-by-settings {
+  display: none !important;
 }
 
 .timeframe-btn.is-active {

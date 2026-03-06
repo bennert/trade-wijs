@@ -121,8 +121,9 @@
         </aside>
         <aside class="settings-tabs settings-middle-section" aria-label="General settings tabs" data-settings-middle-section="general">
           <h3 class="settings-tabs-title">General</h3>
-          <button type="button" class="settings-tab" data-settings-general-item="display">Display</button>
           <button type="button" class="settings-tab is-active" aria-current="page" data-settings-general-item="indicators">Indicators</button>
+          <button type="button" class="settings-tab" data-settings-general-item="display">Theme</button>
+          <button type="button" class="settings-tab" data-settings-general-item="tools">Tools</button>
         </aside>
         <div class="settings-content">
           <section id="settings-category-exchanges" class="settings-category-section is-active" data-settings-category-section="exchanges">
@@ -153,6 +154,29 @@
                 <label class="settings-exchange-option" for="settings-display-theme-light">
                   <input id="settings-display-theme-light" type="radio" name="settings-display-theme" value="light" />
                   <span>Light mode</span>
+                </label>
+              </div>
+            </div>
+            <div class="settings-subpanel settings-general-subsection" data-settings-general-section="tools">
+              <h3 class="settings-subpanel-title">Tools</h3>
+              <div class="settings-checkbox-list" role="group" aria-label="Drawing tools options">
+                <label class="settings-exchange-option" for="settings-tool-horizontal-line">
+                  <input id="settings-tool-horizontal-line" type="checkbox" data-settings-enabled-tool="horizontal-line" checked />
+                  <span>Horizontal line</span>
+                  <svg class="settings-tool-option-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+                    <path d="M4 12h16"></path>
+                    <circle cx="7" cy="12" r="1.5"></circle>
+                    <circle cx="17" cy="12" r="1.5"></circle>
+                  </svg>
+                </label>
+                <label class="settings-exchange-option" for="settings-tool-trend-line">
+                  <input id="settings-tool-trend-line" type="checkbox" data-settings-enabled-tool="trend-line" checked />
+                  <span>Trend line</span>
+                  <svg class="settings-tool-option-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+                    <path d="M5 16L19 8"></path>
+                    <circle cx="5" cy="16" r="1.5"></circle>
+                    <circle cx="19" cy="8" r="1.5"></circle>
+                  </svg>
                 </label>
               </div>
             </div>
@@ -468,6 +492,7 @@
       const settingsExchangeToggleElements = Array.from(document.querySelectorAll("[data-settings-enabled-exchange]"));
       const settingsTimeframeToggleElements = Array.from(document.querySelectorAll("[data-settings-enabled-timeframe]"));
       const settingsIndicatorToggleElements = Array.from(document.querySelectorAll("[data-settings-enabled-indicator]"));
+      const settingsToolToggleElements = Array.from(document.querySelectorAll("[data-settings-enabled-tool]"));
       const settingsApiKeyElement = document.getElementById("settings-api-key");
       const settingsApiSecretElement = document.getElementById("settings-api-secret");
       const settingsApiPassphraseElement = document.getElementById("settings-api-passphrase");
@@ -535,9 +560,11 @@
       const enabledExchangesStorageKey = "trade-wijs-enabled-exchanges";
       const enabledTimeframesStorageKey = "trade-wijs-enabled-timeframes";
       const enabledIndicatorsStorageKey = "trade-wijs-enabled-indicators";
+      const enabledToolsStorageKey = "trade-wijs-enabled-tools";
       const exchangeApiSettingsStorageKey = "trade-wijs-exchange-api-settings";
       const validTimeframes = new Set(timeframeButtonElements.map((button) => button.dataset.timeframe).filter(Boolean));
       const validIndicators = new Set(indicatorButtonElements.map((button) => button.dataset.indicator).filter(Boolean));
+      const validTools = new Set(["horizontal-line", "trend-line"]);
       const validSymbols = new Set(
         Array.from(pairSelectorMenuElement?.querySelectorAll("[data-symbol]") || []).map((button) => button.dataset.symbol).filter(Boolean),
       );
@@ -584,6 +611,7 @@
       let enabledTimeframes = new Set(validTimeframes);
       let enabledTimeframesByExchange = {};
       let enabledIndicators = new Set(validIndicators);
+      let enabledTools = new Set(validTools);
       let marketInfoHasError =
         Boolean(marketErrorElement)
         && (marketErrorElement.style.display || "") !== "none"
@@ -806,6 +834,17 @@
       }
 
       try {
+        const savedEnabledTools = JSON.parse(localStorage.getItem(enabledToolsStorageKey) || "[]");
+        if (Array.isArray(savedEnabledTools)) {
+          const sanitizedEnabledTools = savedEnabledTools.filter((toolName) => validTools.has(toolName));
+          if (sanitizedEnabledTools.length > 0) {
+            enabledTools = new Set(sanitizedEnabledTools);
+          }
+        }
+      } catch (_error) {
+      }
+
+      try {
         const savedSettingsCategory = localStorage.getItem(settingsCategoryStorageKey);
         if (savedSettingsCategory === "exchanges" || savedSettingsCategory === "general") {
           activeSettingsCategory = savedSettingsCategory;
@@ -823,7 +862,7 @@
 
       try {
         const savedSettingsGeneralItem = localStorage.getItem(settingsGeneralItemStorageKey);
-        if (savedSettingsGeneralItem === "indicators" || savedSettingsGeneralItem === "display") {
+        if (savedSettingsGeneralItem === "indicators" || savedSettingsGeneralItem === "display" || savedSettingsGeneralItem === "tools") {
           activeSettingsGeneralItem = savedSettingsGeneralItem;
         }
       } catch (_error) {
@@ -3392,6 +3431,13 @@
         }
       };
 
+      const persistEnabledTools = () => {
+        try {
+          localStorage.setItem(enabledToolsStorageKey, JSON.stringify(Array.from(enabledTools)));
+        } catch (_error) {
+        }
+      };
+
       const applyEnabledIndicatorsToUI = () => {
         let shouldRedraw = false;
 
@@ -3441,6 +3487,54 @@
         applyEnabledIndicatorsToUI();
       };
 
+      const applyEnabledToolsToUI = () => {
+        const toolButtonByName = {
+          "horizontal-line": drawLineButtonElement,
+          "trend-line": trendLineButtonElement,
+        };
+
+        Object.keys(toolButtonByName).forEach((toolName) => {
+          const buttonElement = toolButtonByName[toolName];
+          if (!buttonElement) {
+            return;
+          }
+
+          const isEnabled = enabledTools.has(toolName);
+          buttonElement.classList.toggle("is-hidden-by-settings", !isEnabled);
+        });
+
+        const enabledToolCount = enabledTools.size;
+        settingsToolToggleElements.forEach((checkbox) => {
+          const toolName = checkbox.dataset.settingsEnabledTool;
+          const isEnabled = enabledTools.has(toolName);
+          checkbox.checked = isEnabled;
+          checkbox.disabled = isEnabled && enabledToolCount === 1;
+        });
+
+        const activeToolName = activeDrawTool === "trend" ? "trend-line" : "horizontal-line";
+        if (drawLineMode && !enabledTools.has(activeToolName)) {
+          setDrawLineMode(false);
+          setRefreshStatus("Live", "is-live");
+        }
+      };
+
+      const setEnabledTools = (tools) => {
+        const nextEnabledTools = new Set(
+          (Array.isArray(tools) ? tools : []).filter((toolName) => validTools.has(toolName)),
+        );
+
+        if (nextEnabledTools.size === 0) {
+          const fallbackTool = Array.from(validTools)[0];
+          if (fallbackTool) {
+            nextEnabledTools.add(fallbackTool);
+          }
+        }
+
+        enabledTools = nextEnabledTools;
+        persistEnabledTools();
+        applyEnabledToolsToUI();
+      };
+
       const setSettingsCategory = (category) => {
         activeSettingsCategory = category === "general" ? "general" : "exchanges";
 
@@ -3485,7 +3579,13 @@
       };
 
       const setSettingsGeneralItem = (item) => {
-        activeSettingsGeneralItem = item === "display" ? "display" : "indicators";
+        if (item === "display") {
+          activeSettingsGeneralItem = "display";
+        } else if (item === "tools") {
+          activeSettingsGeneralItem = "tools";
+        } else {
+          activeSettingsGeneralItem = "indicators";
+        }
 
         settingsGeneralItemTabElements.forEach((button) => {
           const isActive = button.dataset.settingsGeneralItem === activeSettingsGeneralItem;
@@ -6560,6 +6660,28 @@
             if (settingsSaveStatusElement) {
               settingsSaveStatusElement.textContent = "Indicators updated";
             }
+            return;
+          }
+
+          const toolCheckbox = event.target.closest("[data-settings-enabled-tool]");
+          if (toolCheckbox) {
+            const selectedTools = settingsToolToggleElements
+              .filter((element) => element.checked)
+              .map((element) => element.dataset.settingsEnabledTool)
+              .filter(Boolean);
+
+            if (selectedTools.length === 0) {
+              toolCheckbox.checked = true;
+              if (settingsSaveStatusElement) {
+                settingsSaveStatusElement.textContent = "Select at least one tool";
+              }
+              return;
+            }
+
+            setEnabledTools(selectedTools);
+            if (settingsSaveStatusElement) {
+              settingsSaveStatusElement.textContent = "Tools updated";
+            }
           }
         });
       }
@@ -6632,6 +6754,7 @@
       updateRsiDividerLabel(false);
       applyEnabledTimeframesToUI();
       applyEnabledIndicatorsToUI();
+      applyEnabledToolsToUI();
       applyDisplayTheme(activeDisplayTheme, { persist: false });
       setActiveTimeframeButton(currentTimeframe);
       setIndicatorButtonState();
