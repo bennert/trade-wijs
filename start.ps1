@@ -44,22 +44,28 @@ if (-not (Test-PodmanAvailable)) {
     exit 1
 }
 
-if (-not $env:APP_VERSION) {
-    $venvPython = if (Test-IsWindows) {
-        Join-Path $PSScriptRoot ".venv\Scripts\python.exe"
-    }
-    else {
-        Join-Path $PSScriptRoot ".venv/bin/python"
-    }
+$venvPython = if (Test-IsWindows) {
+    Join-Path $PSScriptRoot ".venv\Scripts\python.exe"
+}
+else {
+    Join-Path $PSScriptRoot ".venv/bin/python"
+}
 
-    if (Test-Path $venvPython) {
-        $resolvedVersion = (& $venvPython -c "import app; print(app._get_git_version())" 2>$null | Select-Object -First 1)
+if (Test-Path $venvPython) {
+    $previousAppVersion = $env:APP_VERSION
+    Remove-Item Env:APP_VERSION -ErrorAction SilentlyContinue
+    $resolvedVersion = (& $venvPython -c "import app; print(app._get_git_version())" 2>$null | Select-Object -First 1)
+    if ($resolvedVersion) {
+        $resolvedVersion = $resolvedVersion.ToString().Trim()
         if ($resolvedVersion) {
-            $resolvedVersion = $resolvedVersion.ToString().Trim()
-            if ($resolvedVersion) {
-                $env:APP_VERSION = $resolvedVersion
-            }
+            $env:APP_VERSION = $resolvedVersion
         }
+        elseif ($previousAppVersion) {
+            $env:APP_VERSION = $previousAppVersion
+        }
+    }
+    elseif ($previousAppVersion) {
+        $env:APP_VERSION = $previousAppVersion
     }
 }
 
