@@ -1649,6 +1649,11 @@ body.is-dragging-pane-order {
   display: grid;
 }
 
+.order-input-field.is-hidden,
+.order-price-fill-actions.is-hidden {
+  display: none;
+}
+
 .order-fill-btn {
   border: 1px solid var(--border);
   background: var(--panel-2);
