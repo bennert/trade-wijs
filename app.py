@@ -283,6 +283,31 @@ def _get_supported_timeframes(exchange):
     return list(DEFAULT_SUPPORTED_TIMEFRAMES)
 
 
+def _get_supported_quote_currencies(exchange):
+    markets = getattr(exchange, "markets", None)
+    if not isinstance(markets, dict):
+        return []
+
+    quote_currencies = set()
+    for market in markets.values():
+        if not isinstance(market, dict):
+            continue
+
+        quote_currency = market.get("quote")
+        if isinstance(quote_currency, str) and quote_currency.strip():
+            quote_currencies.add(quote_currency.strip().upper())
+            continue
+
+        symbol = market.get("symbol")
+        if isinstance(symbol, str) and "/" in symbol:
+            symbol_parts = symbol.split("/")
+            fallback_quote = symbol_parts[-1].strip().upper()
+            if fallback_quote:
+                quote_currencies.add(fallback_quote)
+
+    return sorted(quote_currencies)
+
+
 def _normalize_timeframe(value, supported_timeframes=None):
     available = list(supported_timeframes or DEFAULT_SUPPORTED_TIMEFRAMES)
     if value in available:
@@ -486,6 +511,11 @@ def _fetch_chart_payload(timeframe=None, exchange_key=None, symbol=None):
     exchange_class = getattr(ccxt, selected_exchange["ccxt_id"])
     exchange = None
     supported_timeframes = list(DEFAULT_SUPPORTED_TIMEFRAMES)
+    supported_quote_currencies = sorted({
+        supported_symbol.split("/")[-1].strip().upper()
+        for supported_symbol in SUPPORTED_SYMBOLS
+        if isinstance(supported_symbol, str) and "/" in supported_symbol
+    })
     amount_step = None
     amount_min = None
     total_min = None
@@ -499,6 +529,9 @@ def _fetch_chart_payload(timeframe=None, exchange_key=None, symbol=None):
         exchange = exchange_class({"enableRateLimit": True})
         exchange.load_markets()
         supported_timeframes = _get_supported_timeframes(exchange)
+        quote_currencies = _get_supported_quote_currencies(exchange)
+        if quote_currencies:
+            supported_quote_currencies = quote_currencies
         (
             amount_step,
             amount_min,
@@ -536,6 +569,7 @@ def _fetch_chart_payload(timeframe=None, exchange_key=None, symbol=None):
             for supported_symbol in SUPPORTED_SYMBOLS
         ],
         "supported_timeframes": supported_timeframes,
+        "supported_quote_currencies": supported_quote_currencies,
         "max_candles": MAX_CANDLES,
         "last": None,
         "bid": None,

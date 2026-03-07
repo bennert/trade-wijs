@@ -223,14 +223,35 @@
             <span id="settings-save-status" class="settings-save-status" aria-live="polite"></span>
           </div>
           <div id="settings-exchange-timeframes-panel" class="settings-subpanel settings-exchange-timeframes-panel">
-            <h3 class="settings-subpanel-title">Timeframes</h3>
-            <div class="settings-checkbox-list" role="group" aria-label="Timeframes options">
-              {% for timeframe in market_data.supported_timeframes %}
-                <label class="settings-exchange-option" for="settings-timeframe-{{ timeframe|replace('/', '-') }}">
-                  <input id="settings-timeframe-{{ timeframe|replace('/', '-') }}" type="checkbox" data-settings-enabled-timeframe="{{ timeframe }}" checked />
-                  <span>{{ timeframe }}</span>
-                </label>
-              {% endfor %}
+            <div class="settings-exchange-options-grid">
+              <div class="settings-exchange-options-column">
+                <div class="settings-subpanel-title-row">
+                  <button id="settings-toggle-timeframes-btn" type="button" class="settings-section-toggle-btn" aria-label="Toggle all timeframes" title="Toggle all timeframes">☑</button>
+                  <h3 class="settings-subpanel-title">Timeframes</h3>
+                </div>
+                <div class="settings-checkbox-list" role="group" aria-label="Timeframes options">
+                  {% for timeframe in market_data.supported_timeframes %}
+                    <label class="settings-exchange-option" for="settings-timeframe-{{ timeframe|replace('/', '-') }}">
+                      <input id="settings-timeframe-{{ timeframe|replace('/', '-') }}" type="checkbox" data-settings-enabled-timeframe="{{ timeframe }}" checked />
+                      <span>{{ timeframe }}</span>
+                    </label>
+                  {% endfor %}
+                </div>
+              </div>
+              <div class="settings-exchange-options-column">
+                <div class="settings-subpanel-title-row">
+                  <button id="settings-toggle-quote-currencies-btn" type="button" class="settings-section-toggle-btn" aria-label="Toggle all quote currencies" title="Toggle all quote currencies">☑</button>
+                  <h3 class="settings-subpanel-title">Quote currencies</h3>
+                </div>
+                <div class="settings-checkbox-list" role="group" aria-label="Quote currency options">
+                  {% for quote_currency in market_data.supported_quote_currencies %}
+                    <label class="settings-exchange-option" for="settings-quote-currency-{{ quote_currency|replace('/', '-') }}">
+                      <input id="settings-quote-currency-{{ quote_currency|replace('/', '-') }}" type="checkbox" data-settings-enabled-quote-currency="{{ quote_currency }}" checked />
+                      <span>{{ quote_currency }}</span>
+                    </label>
+                  {% endfor %}
+                </div>
+              </div>
             </div>
           </div>
         </div>
@@ -561,6 +582,9 @@
       const settingsExchangeTabElements = Array.from(document.querySelectorAll("[data-settings-exchange]"));
       const settingsExchangeToggleElements = Array.from(document.querySelectorAll("[data-settings-enabled-exchange]"));
       const settingsTimeframeToggleElements = Array.from(document.querySelectorAll("[data-settings-enabled-timeframe]"));
+      const settingsQuoteCurrencyToggleElements = Array.from(document.querySelectorAll("[data-settings-enabled-quote-currency]"));
+      const settingsToggleTimeframesButtonElement = document.getElementById("settings-toggle-timeframes-btn");
+      const settingsToggleQuoteCurrenciesButtonElement = document.getElementById("settings-toggle-quote-currencies-btn");
       const settingsIndicatorToggleElements = Array.from(document.querySelectorAll("[data-settings-enabled-indicator]"));
       const settingsToolToggleElements = Array.from(document.querySelectorAll("[data-settings-enabled-tool]"));
       const settingsApiKeyElement = document.getElementById("settings-api-key");
@@ -654,10 +678,14 @@
       const displayThemeStorageKey = "trade-wijs-display-theme";
       const enabledExchangesStorageKey = "trade-wijs-enabled-exchanges";
       const enabledTimeframesStorageKey = "trade-wijs-enabled-timeframes";
+      const enabledQuoteCurrenciesStorageKey = "trade-wijs-enabled-quote-currencies";
       const enabledIndicatorsStorageKey = "trade-wijs-enabled-indicators";
       const enabledToolsStorageKey = "trade-wijs-enabled-tools";
       const exchangeApiSettingsStorageKey = "trade-wijs-exchange-api-settings";
       const validTimeframes = new Set(timeframeButtonElements.map((button) => button.dataset.timeframe).filter(Boolean));
+      const validQuoteCurrencies = new Set(
+        settingsQuoteCurrencyToggleElements.map((checkbox) => checkbox.dataset.settingsEnabledQuoteCurrency).filter(Boolean),
+      );
       const validIndicators = new Set(indicatorButtonElements.map((button) => button.dataset.indicator).filter(Boolean));
       const validTools = new Set(["horizontal-line", "trend-line"]);
       const validSymbols = new Set(
@@ -706,6 +734,8 @@
       let enabledExchangeKeys = new Set(validExchangeKeys);
       let enabledTimeframes = new Set(validTimeframes);
       let enabledTimeframesByExchange = {};
+      let enabledQuoteCurrencies = new Set(validQuoteCurrencies);
+      let enabledQuoteCurrenciesByExchange = {};
       let enabledIndicators = new Set(validIndicators);
       let enabledTools = new Set(validTools);
       let marketInfoHasError =
@@ -910,13 +940,36 @@
             }
 
             const sanitizedEnabledTimeframes = configuredTimeframes.filter((timeframe) => validTimeframes.has(timeframe));
-            if (sanitizedEnabledTimeframes.length > 0) {
-              nextEnabledTimeframesByExchange[exchangeKey] = Array.from(new Set(sanitizedEnabledTimeframes));
-            }
+            nextEnabledTimeframesByExchange[exchangeKey] = Array.from(new Set(sanitizedEnabledTimeframes));
           });
 
           if (Object.keys(nextEnabledTimeframesByExchange).length > 0) {
             enabledTimeframesByExchange = nextEnabledTimeframesByExchange;
+          }
+        }
+      } catch (_error) {
+      }
+
+      try {
+        const savedEnabledQuoteCurrencies = JSON.parse(localStorage.getItem(enabledQuoteCurrenciesStorageKey) || "{}");
+        if (savedEnabledQuoteCurrencies && typeof savedEnabledQuoteCurrencies === "object") {
+          const nextEnabledQuoteCurrenciesByExchange = {};
+          Object.keys(savedEnabledQuoteCurrencies).forEach((exchangeKey) => {
+            if (!validExchangeKeys.has(exchangeKey)) {
+              return;
+            }
+
+            const configuredQuoteCurrencies = savedEnabledQuoteCurrencies[exchangeKey];
+            if (!Array.isArray(configuredQuoteCurrencies)) {
+              return;
+            }
+
+            const sanitizedEnabledQuoteCurrencies = configuredQuoteCurrencies.filter((quoteCurrency) => validQuoteCurrencies.has(quoteCurrency));
+            nextEnabledQuoteCurrenciesByExchange[exchangeKey] = Array.from(new Set(sanitizedEnabledQuoteCurrencies));
+          });
+
+          if (Object.keys(nextEnabledQuoteCurrenciesByExchange).length > 0) {
+            enabledQuoteCurrenciesByExchange = nextEnabledQuoteCurrenciesByExchange;
           }
         }
       } catch (_error) {
@@ -1051,15 +1104,24 @@
         const configured = enabledTimeframesByExchange[exchangeKey];
         if (Array.isArray(configured)) {
           const sanitized = configured.filter((timeframe) => validTimeframes.has(timeframe));
-          if (sanitized.length > 0) {
-            return new Set(sanitized);
-          }
+          return new Set(sanitized);
         }
 
         return new Set(validTimeframes);
       };
 
+      const getEnabledQuoteCurrenciesForExchange = (exchangeKey) => {
+        const configured = enabledQuoteCurrenciesByExchange[exchangeKey];
+        if (Array.isArray(configured)) {
+          const sanitized = configured.filter((quoteCurrency) => validQuoteCurrencies.has(quoteCurrency));
+          return new Set(sanitized);
+        }
+
+        return new Set(validQuoteCurrencies);
+      };
+
       enabledTimeframes = getEnabledTimeframesForExchange(currentExchangeKey);
+      enabledQuoteCurrencies = getEnabledQuoteCurrenciesForExchange(currentExchangeKey);
 
       if (!enabledTimeframes.has(currentTimeframe)) {
         const fallbackEnabledTimeframe = Array.from(enabledTimeframes)[0] || currentTimeframe;
@@ -4479,6 +4541,7 @@
         }
 
         applyEnabledTimeframesToUI();
+        applyEnabledQuoteCurrenciesToUI();
         applySettingsExchangeEditableState();
 
         try {
@@ -4501,6 +4564,12 @@
         }
         if (settingsSaveButtonElement) {
           settingsSaveButtonElement.disabled = !isSettingsExchangeEnabled;
+        }
+        if (settingsToggleTimeframesButtonElement) {
+          settingsToggleTimeframesButtonElement.disabled = !isSettingsExchangeEnabled;
+        }
+        if (settingsToggleQuoteCurrenciesButtonElement) {
+          settingsToggleQuoteCurrenciesButtonElement.disabled = !isSettingsExchangeEnabled;
         }
 
         if (settingsActionsElement) {
@@ -4552,9 +4621,11 @@
 
         if (currentExchangeKey !== previousExchangeKey) {
           enabledTimeframes = getEnabledTimeframesForExchange(currentExchangeKey);
+          enabledQuoteCurrencies = getEnabledQuoteCurrenciesForExchange(currentExchangeKey);
         }
 
         applyEnabledTimeframesToUI();
+        applyEnabledQuoteCurrenciesToUI();
 
         if (exchangeSelectorButtonElement) {
           exchangeSelectorButtonElement.textContent = getExchangeLabelByKey(currentExchangeKey);
@@ -4598,6 +4669,13 @@
         }
       };
 
+      const persistEnabledQuoteCurrencies = () => {
+        try {
+          localStorage.setItem(enabledQuoteCurrenciesStorageKey, JSON.stringify(enabledQuoteCurrenciesByExchange));
+        } catch (_error) {
+        }
+      };
+
       const applyEnabledTimeframesToUI = () => {
         timeframeButtonElements.forEach((button) => {
           const timeframe = button.dataset.timeframe;
@@ -4622,17 +4700,45 @@
         }
 
         setActiveTimeframeButton(currentTimeframe);
+
+        if (settingsToggleTimeframesButtonElement) {
+          const areAllEnabled = validTimeframes.size > 0 && activeSettingsTimeframes.size === validTimeframes.size;
+          settingsToggleTimeframesButtonElement.textContent = areAllEnabled ? "☑" : "☐";
+          settingsToggleTimeframesButtonElement.setAttribute("aria-label", areAllEnabled ? "Disable all timeframes" : "Enable all timeframes");
+          settingsToggleTimeframesButtonElement.title = areAllEnabled ? "Disable all timeframes" : "Enable all timeframes";
+        }
+      };
+
+      const applyEnabledQuoteCurrenciesToUI = () => {
+        const activeSettingsQuoteCurrencies = getEnabledQuoteCurrenciesForExchange(activeSettingsExchangeKey);
+        const isSettingsExchangeEnabled = enabledExchangeKeys.has(activeSettingsExchangeKey);
+        const enabledQuoteCurrencyCount = activeSettingsQuoteCurrencies.size;
+
+        settingsQuoteCurrencyToggleElements.forEach((checkbox) => {
+          const quoteCurrency = checkbox.dataset.settingsEnabledQuoteCurrency;
+          const isEnabled = activeSettingsQuoteCurrencies.has(quoteCurrency);
+          checkbox.checked = isEnabled;
+          checkbox.disabled = !isSettingsExchangeEnabled || (isEnabled && enabledQuoteCurrencyCount === 1);
+        });
+
+        if (settingsToggleQuoteCurrenciesButtonElement) {
+          const areAllEnabled = validQuoteCurrencies.size > 0 && activeSettingsQuoteCurrencies.size === validQuoteCurrencies.size;
+          settingsToggleQuoteCurrenciesButtonElement.textContent = areAllEnabled ? "☑" : "☐";
+          settingsToggleQuoteCurrenciesButtonElement.setAttribute("aria-label", areAllEnabled ? "Disable all quote currencies" : "Enable all quote currencies");
+          settingsToggleQuoteCurrenciesButtonElement.title = areAllEnabled ? "Disable all quote currencies" : "Enable all quote currencies";
+        }
       };
 
       const setEnabledTimeframes = (timeframes, options = {}) => {
         const targetExchangeKey = validExchangeKeys.has(options.exchangeKey)
           ? options.exchangeKey
           : currentExchangeKey;
+        const allowEmpty = options.allowEmpty === true;
         const nextEnabledTimeframes = new Set(
           (Array.isArray(timeframes) ? timeframes : []).filter((timeframe) => validTimeframes.has(timeframe)),
         );
 
-        if (nextEnabledTimeframes.size === 0) {
+        if (!allowEmpty && nextEnabledTimeframes.size === 0) {
           const fallbackTimeframe = targetExchangeKey === currentExchangeKey && currentTimeframe && validTimeframes.has(currentTimeframe)
             ? currentTimeframe
             : Array.from(validTimeframes)[0];
@@ -4672,6 +4778,58 @@
           refreshChartData({ priority: true, showUpdatingStatus: true });
           scheduleNextRefresh();
         }
+      };
+
+      const toggleAllTimeframesForActiveExchange = () => {
+        if (!validTimeframes.size) {
+          return;
+        }
+
+        const currentEnabledTimeframes = getEnabledTimeframesForExchange(activeSettingsExchangeKey);
+        const areAllEnabled = currentEnabledTimeframes.size === validTimeframes.size;
+        const nextSelection = areAllEnabled
+          ? (validTimeframes.has("1m") ? ["1m"] : [Array.from(validTimeframes)[0]])
+          : Array.from(validTimeframes);
+        setEnabledTimeframes(nextSelection, { exchangeKey: activeSettingsExchangeKey });
+      };
+
+      const setEnabledQuoteCurrencies = (quoteCurrencies, options = {}) => {
+        const targetExchangeKey = validExchangeKeys.has(options.exchangeKey)
+          ? options.exchangeKey
+          : currentExchangeKey;
+        const allowEmpty = options.allowEmpty === true;
+        const nextEnabledQuoteCurrencies = new Set(
+          (Array.isArray(quoteCurrencies) ? quoteCurrencies : []).filter((quoteCurrency) => validQuoteCurrencies.has(quoteCurrency)),
+        );
+
+        if (!allowEmpty && nextEnabledQuoteCurrencies.size === 0) {
+          const fallbackQuoteCurrency = Array.from(validQuoteCurrencies)[0];
+          if (fallbackQuoteCurrency) {
+            nextEnabledQuoteCurrencies.add(fallbackQuoteCurrency);
+          }
+        }
+
+        enabledQuoteCurrenciesByExchange[targetExchangeKey] = Array.from(nextEnabledQuoteCurrencies);
+
+        if (targetExchangeKey === currentExchangeKey) {
+          enabledQuoteCurrencies = nextEnabledQuoteCurrencies;
+        }
+
+        persistEnabledQuoteCurrencies();
+        applyEnabledQuoteCurrenciesToUI();
+      };
+
+      const toggleAllQuoteCurrenciesForActiveExchange = () => {
+        if (!validQuoteCurrencies.size) {
+          return;
+        }
+
+        const currentEnabledQuoteCurrencies = getEnabledQuoteCurrenciesForExchange(activeSettingsExchangeKey);
+        const areAllEnabled = currentEnabledQuoteCurrencies.size === validQuoteCurrencies.size;
+        const nextSelection = areAllEnabled
+          ? (validQuoteCurrencies.has("USDT") ? ["USDT"] : [Array.from(validQuoteCurrencies)[0]])
+          : Array.from(validQuoteCurrencies);
+        setEnabledQuoteCurrencies(nextSelection, { exchangeKey: activeSettingsExchangeKey });
       };
 
       const persistEnabledIndicators = () => {
@@ -7963,6 +8121,24 @@
         });
       }
 
+      if (settingsToggleTimeframesButtonElement) {
+        settingsToggleTimeframesButtonElement.addEventListener("click", () => {
+          toggleAllTimeframesForActiveExchange();
+          if (settingsSaveStatusElement) {
+            settingsSaveStatusElement.textContent = "Timeframes updated";
+          }
+        });
+      }
+
+      if (settingsToggleQuoteCurrenciesButtonElement) {
+        settingsToggleQuoteCurrenciesButtonElement.addEventListener("click", () => {
+          toggleAllQuoteCurrenciesForActiveExchange();
+          if (settingsSaveStatusElement) {
+            settingsSaveStatusElement.textContent = "Quote currencies updated";
+          }
+        });
+      }
+
       if (placeOrderButtonElement) {
         placeOrderButtonElement.addEventListener("click", () => {
           openPlaceOrderPayloadModal();
@@ -8243,6 +8419,28 @@
             return;
           }
 
+          const quoteCurrencyCheckbox = event.target.closest("[data-settings-enabled-quote-currency]");
+          if (quoteCurrencyCheckbox) {
+            const selectedQuoteCurrencies = settingsQuoteCurrencyToggleElements
+              .filter((element) => element.checked)
+              .map((element) => element.dataset.settingsEnabledQuoteCurrency)
+              .filter(Boolean);
+
+            if (selectedQuoteCurrencies.length === 0) {
+              quoteCurrencyCheckbox.checked = true;
+              if (settingsSaveStatusElement) {
+                settingsSaveStatusElement.textContent = "Select at least one quote currency";
+              }
+              return;
+            }
+
+            setEnabledQuoteCurrencies(selectedQuoteCurrencies, { exchangeKey: activeSettingsExchangeKey });
+            if (settingsSaveStatusElement) {
+              settingsSaveStatusElement.textContent = "Quote currencies updated";
+            }
+            return;
+          }
+
           const indicatorCheckbox = event.target.closest("[data-settings-enabled-indicator]");
           if (indicatorCheckbox) {
             const selectedIndicators = settingsIndicatorToggleElements
@@ -8356,6 +8554,7 @@
       updateStochDividerLabel(false);
       updateRsiDividerLabel(false);
       applyEnabledTimeframesToUI();
+      applyEnabledQuoteCurrenciesToUI();
       applyEnabledIndicatorsToUI();
       applyEnabledToolsToUI();
       applyDisplayTheme(activeDisplayTheme, { persist: false });
