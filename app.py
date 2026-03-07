@@ -76,7 +76,7 @@ def _resolve_market_amount_constraints(exchange, symbol):
         market = exchange.markets.get(symbol)
 
     if not isinstance(market, dict):
-        return None, None, None, None, None, None
+        return None, None, None, None, None, None, None, None
 
     market_limits = market.get("limits") or {}
     limits_amount = market_limits.get("amount") or {}
@@ -171,6 +171,14 @@ def _resolve_market_amount_constraints(exchange, symbol):
     if price_step is None and min_price_value is not None and math.isfinite(min_price_value) and 0 < min_price_value < 1:
         price_step = min_price_value
 
+    amount_precision = None
+    if isinstance(precision_amount, (int, float)) and math.isfinite(float(precision_amount)) and float(precision_amount) >= 0:
+        amount_precision = float(precision_amount)
+
+    price_precision = None
+    if isinstance(precision_price, (int, float)) and math.isfinite(float(precision_price)) and float(precision_price) >= 0:
+        price_precision = float(precision_price)
+
     return (
         _format_number_for_input(amount_step),
         _format_number_for_input(min_amount),
@@ -178,6 +186,8 @@ def _resolve_market_amount_constraints(exchange, symbol):
         _format_number_for_input(min_price_value),
         _format_number_for_input(max_price_value),
         _format_number_for_input(price_step),
+        _format_number_for_input(amount_precision),
+        _format_number_for_input(price_precision),
     )
 
 
@@ -482,12 +492,23 @@ def _fetch_chart_payload(timeframe=None, exchange_key=None, symbol=None):
     price_min = None
     price_max = None
     price_step = None
+    amount_precision = None
+    price_precision = None
 
     try:
         exchange = exchange_class({"enableRateLimit": True})
         exchange.load_markets()
         supported_timeframes = _get_supported_timeframes(exchange)
-        amount_step, amount_min, total_min, price_min, price_max, price_step = _resolve_market_amount_constraints(exchange, selected_symbol)
+        (
+            amount_step,
+            amount_min,
+            total_min,
+            price_min,
+            price_max,
+            price_step,
+            amount_precision,
+            price_precision,
+        ) = _resolve_market_amount_constraints(exchange, selected_symbol)
     except (
         ccxt.RequestTimeout,
         ccxt.NetworkError,
@@ -531,6 +552,8 @@ def _fetch_chart_payload(timeframe=None, exchange_key=None, symbol=None):
         "price_min": price_min,
         "price_max": price_max,
         "price_step": price_step,
+        "amount_precision": amount_precision,
+        "price_precision": price_precision,
         "error": None,
     }
     candles = []
@@ -548,6 +571,8 @@ def _fetch_chart_payload(timeframe=None, exchange_key=None, symbol=None):
             and market_data["price_min"] is None
             and market_data["price_max"] is None
             and market_data["price_step"] is None
+            and market_data["amount_precision"] is None
+            and market_data["price_precision"] is None
         ):
             (
                 market_data["amount_step"],
@@ -556,6 +581,8 @@ def _fetch_chart_payload(timeframe=None, exchange_key=None, symbol=None):
                 market_data["price_min"],
                 market_data["price_max"],
                 market_data["price_step"],
+                market_data["amount_precision"],
+                market_data["price_precision"],
             ) = _resolve_market_amount_constraints(
                 exchange,
                 market_data["symbol"],
@@ -636,6 +663,8 @@ def _fetch_market_quote_payload(exchange_key=None, symbol=None, timeframe=None):
         "price_min": None,
         "price_max": None,
         "price_step": None,
+        "amount_precision": None,
+        "price_precision": None,
         "error": None,
     }
 

@@ -311,7 +311,12 @@
           <span id="chart-order-preview-side" class="chart-order-preview-side">Buy</span>
           <span id="chart-order-preview-details" class="chart-order-preview-details"></span>
         </div>
+        <div id="chart-stop-preview" class="chart-stop-preview" aria-hidden="true">
+          <span class="chart-stop-preview-side">Stop</span>
+          <span id="chart-stop-preview-details" class="chart-stop-preview-details"></span>
+        </div>
         <div id="chart-order-preview-line" class="chart-order-preview-line" aria-hidden="true"></div>
+        <div id="chart-stop-preview-line" class="chart-stop-preview-line" aria-hidden="true"></div>
         <div id="price-hover-guide-line" class="price-hover-guide-line" aria-hidden="true"></div>
         <div id="price-hover-guide-label" class="price-hover-guide-label" aria-hidden="true">
           <span class="price-hover-guide-plus">+</span>
@@ -370,18 +375,29 @@
             <label for="type-oco">OCO</label>
           </div>
           <div class="order-inputs" aria-label="Order inputs">
+            <div id="order-stop-price-group" class="order-stop-price-group" aria-hidden="true">
+              <label class="order-input-field order-input-field--full" for="order-stop-price-input">
+                <span>Stop price</span>
+                <input id="order-stop-price-input" type="number" inputmode="decimal" step="{{ market_data.price_step or 'any' }}" data-price-precision="{{ market_data.price_precision or '' }}"{% if market_data.price_min %} min="{{ market_data.price_min }}"{% endif %}{% if market_data.price_max %} max="{{ market_data.price_max }}"{% endif %} placeholder="Stop price" />
+              </label>
+              <div class="order-price-fill-actions" role="group" aria-label="Fill stop price from market values">
+                <button type="button" class="order-fill-btn" data-order-fill-source="bid" data-order-fill-target="stop">Bid</button>
+                <button type="button" class="order-fill-btn" data-order-fill-source="ask" data-order-fill-target="stop">Ask</button>
+                <button type="button" class="order-fill-btn" data-order-fill-source="last" data-order-fill-target="stop">Last</button>
+              </div>
+            </div>
             <label class="order-input-field order-input-field--full" for="order-price-input">
-              <span>Price</span>
-              <input id="order-price-input" type="number" inputmode="decimal" step="{{ market_data.price_step or 'any' }}"{% if market_data.price_min %} min="{{ market_data.price_min }}"{% endif %}{% if market_data.price_max %} max="{{ market_data.price_max }}"{% endif %} placeholder="Order price" />
+              <span>Order price</span>
+              <input id="order-price-input" type="number" inputmode="decimal" step="{{ market_data.price_step or 'any' }}" data-price-precision="{{ market_data.price_precision or '' }}"{% if market_data.price_min %} min="{{ market_data.price_min }}"{% endif %}{% if market_data.price_max %} max="{{ market_data.price_max }}"{% endif %} placeholder="Order price" />
             </label>
             <div class="order-price-fill-actions" role="group" aria-label="Fill price from market values">
-              <button type="button" class="order-fill-btn" data-order-fill-source="bid">Bid</button>
-              <button type="button" class="order-fill-btn" data-order-fill-source="ask">Ask</button>
-              <button type="button" class="order-fill-btn" data-order-fill-source="last">Last</button>
+              <button type="button" class="order-fill-btn" data-order-fill-source="bid" data-order-fill-target="price">Bid</button>
+              <button type="button" class="order-fill-btn" data-order-fill-source="ask" data-order-fill-target="price">Ask</button>
+              <button type="button" class="order-fill-btn" data-order-fill-source="last" data-order-fill-target="price">Last</button>
             </div>
             <label class="order-input-field" for="order-amount-input">
               <span>Amount</span>
-              <input id="order-amount-input" type="number" inputmode="decimal" step="{{ market_data.amount_step or 'any' }}"{% if market_data.amount_min %} min="{{ market_data.amount_min }}"{% endif %} placeholder="Amount" />
+              <input id="order-amount-input" type="number" inputmode="decimal" step="{{ market_data.amount_step or 'any' }}" data-amount-precision="{{ market_data.amount_precision or '' }}"{% if market_data.amount_min %} min="{{ market_data.amount_min }}"{% endif %} placeholder="Amount" />
             </label>
             <label class="order-input-field" for="order-total-input">
               <span>Total</span>
@@ -464,7 +480,10 @@
       const chartOrderPreviewElement = document.getElementById("chart-order-preview");
       const chartOrderPreviewSideElement = document.getElementById("chart-order-preview-side");
       const chartOrderPreviewDetailsElement = document.getElementById("chart-order-preview-details");
+      const chartStopPreviewElement = document.getElementById("chart-stop-preview");
+      const chartStopPreviewDetailsElement = document.getElementById("chart-stop-preview-details");
       const chartOrderPreviewLineElement = document.getElementById("chart-order-preview-line");
+      const chartStopPreviewLineElement = document.getElementById("chart-stop-preview-line");
       const priceHoverGuideLineElement = document.getElementById("price-hover-guide-line");
       const priceHoverGuideLabelElement = document.getElementById("price-hover-guide-label");
       const priceHoverGuideValueElement = document.getElementById("price-hover-guide-value");
@@ -551,14 +570,18 @@
       const valueLowElement = document.getElementById("value-low");
       const valueVolumeElement = document.getElementById("value-volume");
       const orderPriceInputElement = document.getElementById("order-price-input");
+      const orderStopPriceInputElement = document.getElementById("order-stop-price-input");
       const orderAmountInputElement = document.getElementById("order-amount-input");
       const orderTotalInputElement = document.getElementById("order-total-input");
+      const orderStopPriceGroupElement = document.getElementById("order-stop-price-group");
       const orderActionStatusElement = document.getElementById("order-action-status");
       const orderActionButtonElements = Array.from(document.querySelectorAll("#panel-order .trade-btn"));
       const placeOrderButtonElement = document.getElementById("place-order-btn");
       const orderBuyButtonElement = document.querySelector("#panel-order .buy-btn");
       const orderSellButtonElement = document.querySelector("#panel-order .sell-btn");
       const orderFillButtonElements = Array.from(document.querySelectorAll("[data-order-fill-source]"));
+      const orderTypeInputElements = Array.from(document.querySelectorAll("input[name='order-type']"));
+      const orderTypeStopLimitElement = document.getElementById("type-stop-limit");
 
       if (!chartElement || !chartCanvas || !dataElement || !window.LightweightCharts) {
         return;
@@ -710,6 +733,7 @@
       let lastRsiHeightRatio = rsiHeightRatio;
       let activeOrderSide = "buy";
       let isDraggingChartOrderPreview = false;
+      let isDraggingChartStopPreview = false;
 
       const clamp = (value, min, max) => Math.max(min, Math.min(max, value));
 
@@ -2418,6 +2442,41 @@
         window.addEventListener("mouseleave", stopChartOrderPreviewDrag);
       }
 
+      if (chartStopPreviewElement) {
+        const stopChartStopPreviewDrag = () => {
+          if (!isDraggingChartStopPreview) {
+            return;
+          }
+
+          isDraggingChartStopPreview = false;
+          chartStopPreviewElement.classList.remove("is-dragging");
+          document.body.classList.remove("is-dragging-order-preview");
+        };
+
+        chartStopPreviewElement.addEventListener("mousedown", (event) => {
+          if (!chartStopPreviewElement.classList.contains("is-visible") || !isStopLimitOrderTypeSelected()) {
+            return;
+          }
+
+          event.preventDefault();
+          isDraggingChartStopPreview = true;
+          chartStopPreviewElement.classList.add("is-dragging");
+          document.body.classList.add("is-dragging-order-preview");
+          updateStopPriceFromPreviewDrag(event.clientY);
+        });
+
+        window.addEventListener("mousemove", (event) => {
+          if (!isDraggingChartStopPreview) {
+            return;
+          }
+
+          updateStopPriceFromPreviewDrag(event.clientY);
+        });
+
+        window.addEventListener("mouseup", stopChartStopPreviewDrag);
+        window.addEventListener("mouseleave", stopChartStopPreviewDrag);
+      }
+
       const fvgZoneSeries = [];
       const smcGuideSeries = [];
       let currentFvgZones = [];
@@ -2985,6 +3044,8 @@
         const nextPriceMin = marketData?.price_min;
         const nextPriceMax = marketData?.price_max;
         const nextPriceStep = marketData?.price_step;
+        const nextAmountPrecision = marketData?.amount_precision;
+        const nextPricePrecision = marketData?.price_precision;
 
         const hasStep = typeof nextStep === "string" && nextStep.trim().length > 0;
         const hasMin = typeof nextMin === "string" && nextMin.trim().length > 0;
@@ -2992,12 +3053,18 @@
         const hasPriceMin = typeof nextPriceMin === "string" && nextPriceMin.trim().length > 0;
         const hasPriceMax = typeof nextPriceMax === "string" && nextPriceMax.trim().length > 0;
         const hasPriceStep = typeof nextPriceStep === "string" && nextPriceStep.trim().length > 0;
-        if (!hasStep && !hasMin && !hasTotalMin && !hasPriceMin && !hasPriceMax && !hasPriceStep) {
+        const hasAmountPrecision = typeof nextAmountPrecision === "string" && nextAmountPrecision.trim().length > 0;
+        const hasPricePrecision = typeof nextPricePrecision === "string" && nextPricePrecision.trim().length > 0;
+        if (!hasStep && !hasMin && !hasTotalMin && !hasPriceMin && !hasPriceMax && !hasPriceStep && !hasAmountPrecision && !hasPricePrecision) {
           return;
         }
 
         if (hasStep) {
           orderAmountInputElement.setAttribute("step", nextStep);
+        }
+
+        if (hasAmountPrecision) {
+          orderAmountInputElement.dataset.amountPrecision = nextAmountPrecision;
         }
 
         if (hasMin) {
@@ -3010,17 +3077,34 @@
 
         if (hasPriceMin) {
           orderPriceInputElement.setAttribute("min", nextPriceMin);
+          if (orderStopPriceInputElement) {
+            orderStopPriceInputElement.setAttribute("min", nextPriceMin);
+          }
         }
 
         if (hasPriceMax) {
           orderPriceInputElement.setAttribute("max", nextPriceMax);
+          if (orderStopPriceInputElement) {
+            orderStopPriceInputElement.setAttribute("max", nextPriceMax);
+          }
         }
 
         if (hasPriceStep) {
           orderPriceInputElement.setAttribute("step", nextPriceStep);
+          if (orderStopPriceInputElement) {
+            orderStopPriceInputElement.setAttribute("step", nextPriceStep);
+          }
+        }
+
+        if (hasPricePrecision) {
+          orderPriceInputElement.dataset.pricePrecision = nextPricePrecision;
+          if (orderStopPriceInputElement) {
+            orderStopPriceInputElement.dataset.pricePrecision = nextPricePrecision;
+          }
         }
 
         validateOrderPriceLimits();
+        validateStopPriceLimits();
         validateOrderAmountMinimum();
         validateOrderTotalMinimum();
       };
@@ -3057,12 +3141,51 @@
           return "";
         }
 
-        const rounded = Number(numericValue.toFixed(12));
-        if (!Number.isFinite(rounded)) {
+        const fixed = numericValue.toFixed(12);
+        return fixed.replace(/\.0+$/, "").replace(/(\.\d*?[1-9])0+$/, "$1");
+      };
+
+      const getDecimalPlacesFromValue = (value) => {
+        const rawValue = String(value || "").trim();
+        if (!rawValue) {
+          return 0;
+        }
+
+        const normalizedValue = rawValue.toLowerCase();
+        if (normalizedValue.includes("e-")) {
+          const exponentPart = Number(normalizedValue.split("e-")[1]);
+          return Number.isFinite(exponentPart) && exponentPart > 0 ? Math.min(12, Math.floor(exponentPart)) : 0;
+        }
+
+        const decimalPart = normalizedValue.split(".")[1] || "";
+        return Math.min(12, decimalPart.replace(/0+$/, "").length);
+      };
+
+      const formatNumberWithDecimals = (value, decimals) => {
+        const numericValue = Number(value);
+        if (!Number.isFinite(numericValue)) {
           return "";
         }
 
-        return rounded.toString();
+        const safeDecimals = Number.isFinite(decimals) ? Math.min(12, Math.max(0, Number(decimals))) : 12;
+        const fixed = numericValue.toFixed(safeDecimals);
+        if (safeDecimals === 0) {
+          return fixed;
+        }
+
+        return fixed.replace(/\.0+$/, "").replace(/(\.\d*?[1-9])0+$/, "$1");
+      };
+
+      const isStopLimitOrderTypeSelected = () => Boolean(orderTypeStopLimitElement?.checked);
+
+      const applyOrderTypeInputsVisibility = () => {
+        if (!orderStopPriceGroupElement) {
+          return;
+        }
+
+        const isStopLimitSelected = isStopLimitOrderTypeSelected();
+        orderStopPriceGroupElement.classList.toggle("is-visible", isStopLimitSelected);
+        orderStopPriceGroupElement.setAttribute("aria-hidden", isStopLimitSelected ? "false" : "true");
       };
 
       const hideChartOrderPreview = () => {
@@ -3076,6 +3199,16 @@
         if (chartOrderPreviewLineElement) {
           chartOrderPreviewLineElement.classList.remove("is-visible", "is-buy", "is-sell");
           chartOrderPreviewLineElement.setAttribute("aria-hidden", "true");
+        }
+
+        if (chartStopPreviewElement) {
+          chartStopPreviewElement.classList.remove("is-visible", "is-buy", "is-sell");
+          chartStopPreviewElement.setAttribute("aria-hidden", "true");
+        }
+
+        if (chartStopPreviewLineElement) {
+          chartStopPreviewLineElement.classList.remove("is-visible", "is-buy", "is-sell");
+          chartStopPreviewLineElement.setAttribute("aria-hidden", "true");
         }
       };
 
@@ -3136,7 +3269,7 @@
         chartOrderPreviewElement.style.top = `${Math.round(yCoordinate)}px`;
         chartOrderPreviewElement.setAttribute("aria-hidden", "false");
         chartOrderPreviewSideElement.textContent = side === "sell" ? "Sell" : "Buy";
-        chartOrderPreviewDetailsElement.textContent = `${formatOrderInputNumber(amountValue)} • ${formatOrderInputNumber(totalValue)}`;
+        chartOrderPreviewDetailsElement.textContent = `${formatOrderAmountInputValue(amountValue)} • ${formatOrderTotalInputValue(totalValue)}`;
 
         if (chartOrderPreviewLineElement) {
           chartOrderPreviewLineElement.classList.remove("is-buy", "is-sell");
@@ -3145,6 +3278,55 @@
           chartOrderPreviewLineElement.style.left = "0px";
           chartOrderPreviewLineElement.style.width = `${maxDrawableRightPx}px`;
           chartOrderPreviewLineElement.setAttribute("aria-hidden", "false");
+        }
+
+        if (!isStopLimitOrderTypeSelected() || !chartStopPreviewElement || !chartStopPreviewDetailsElement || !orderStopPriceInputElement) {
+          if (chartStopPreviewElement) {
+            chartStopPreviewElement.classList.remove("is-visible", "is-buy", "is-sell");
+            chartStopPreviewElement.setAttribute("aria-hidden", "true");
+          }
+          if (chartStopPreviewLineElement) {
+            chartStopPreviewLineElement.classList.remove("is-visible", "is-buy", "is-sell");
+            chartStopPreviewLineElement.setAttribute("aria-hidden", "true");
+          }
+          return;
+        }
+
+        const stopPriceValue = parseOrderInputNumber(orderStopPriceInputElement);
+        if (!Number.isFinite(stopPriceValue) || stopPriceValue <= 0 || orderStopPriceInputElement.classList.contains("is-below-min")) {
+          chartStopPreviewElement.classList.remove("is-visible", "is-buy", "is-sell");
+          chartStopPreviewElement.setAttribute("aria-hidden", "true");
+          if (chartStopPreviewLineElement) {
+            chartStopPreviewLineElement.classList.remove("is-visible", "is-buy", "is-sell");
+            chartStopPreviewLineElement.setAttribute("aria-hidden", "true");
+          }
+          return;
+        }
+
+        const stopYCoordinate = candleSeries.priceToCoordinate(stopPriceValue);
+        if (!Number.isFinite(Number(stopYCoordinate)) || stopYCoordinate < candlePaneBounds.top || stopYCoordinate > candlePaneBounds.bottom) {
+          chartStopPreviewElement.classList.remove("is-visible", "is-buy", "is-sell");
+          chartStopPreviewElement.setAttribute("aria-hidden", "true");
+          if (chartStopPreviewLineElement) {
+            chartStopPreviewLineElement.classList.remove("is-visible", "is-buy", "is-sell");
+            chartStopPreviewLineElement.setAttribute("aria-hidden", "true");
+          }
+          return;
+        }
+
+        chartStopPreviewElement.classList.remove("is-buy", "is-sell");
+        chartStopPreviewElement.classList.add(side === "sell" ? "is-sell" : "is-buy", "is-visible");
+        chartStopPreviewElement.style.top = `${Math.round(stopYCoordinate)}px`;
+        chartStopPreviewElement.setAttribute("aria-hidden", "false");
+        chartStopPreviewDetailsElement.textContent = formatOrderPriceInputValue(stopPriceValue);
+
+        if (chartStopPreviewLineElement) {
+          chartStopPreviewLineElement.classList.remove("is-buy", "is-sell");
+          chartStopPreviewLineElement.classList.add(side === "sell" ? "is-sell" : "is-buy", "is-visible");
+          chartStopPreviewLineElement.style.top = `${Math.round(stopYCoordinate)}px`;
+          chartStopPreviewLineElement.style.left = "0px";
+          chartStopPreviewLineElement.style.width = `${maxDrawableRightPx}px`;
+          chartStopPreviewLineElement.setAttribute("aria-hidden", "false");
         }
       };
 
@@ -3167,7 +3349,7 @@
           return;
         }
 
-        const formattedPrice = formatOrderInputNumber(nextPrice);
+        const formattedPrice = formatOrderPriceInputValue(nextPrice);
         if (!formattedPrice) {
           return;
         }
@@ -3178,6 +3360,38 @@
 
         orderPriceInputElement.value = formattedPrice;
         orderPriceInputElement.dispatchEvent(new Event("input", { bubbles: true }));
+      };
+
+      const updateStopPriceFromPreviewDrag = (clientY) => {
+        if (!orderStopPriceInputElement || !chartCanvas || !isStopLimitOrderTypeSelected()) {
+          return;
+        }
+
+        const canvasRect = chartCanvas.getBoundingClientRect();
+        const candlePaneBounds = resolveCandlePaneBoundsPx();
+        if (!candlePaneBounds || canvasRect.height <= 0) {
+          return;
+        }
+
+        const yInCanvas = Number(clientY) - canvasRect.top;
+        const clampedY = clamp(yInCanvas, candlePaneBounds.top, candlePaneBounds.bottom);
+        const rawPrice = Number(candleSeries.coordinateToPrice(clampedY));
+        const nextPrice = snapOrderPriceToTick(rawPrice);
+        if (!Number.isFinite(nextPrice) || nextPrice <= 0) {
+          return;
+        }
+
+        const formattedPrice = formatOrderPriceInputValue(nextPrice);
+        if (!formattedPrice) {
+          return;
+        }
+
+        if (String(orderStopPriceInputElement.value || "").trim() === formattedPrice) {
+          return;
+        }
+
+        orderStopPriceInputElement.value = formattedPrice;
+        orderStopPriceInputElement.dispatchEvent(new Event("input", { bubbles: true }));
       };
 
       const getOrderAmountStepValue = () => {
@@ -3192,6 +3406,20 @@
 
         const parsedStep = Number(stepAttribute);
         return Number.isFinite(parsedStep) && parsedStep > 0 ? parsedStep : Number.NaN;
+      };
+
+      const getOrderAmountPrecisionValue = () => {
+        if (!orderAmountInputElement) {
+          return Number.NaN;
+        }
+
+        const precisionAttribute = String(orderAmountInputElement.dataset.amountPrecision || "").trim();
+        if (!precisionAttribute) {
+          return Number.NaN;
+        }
+
+        const parsedPrecision = Number(precisionAttribute);
+        return Number.isFinite(parsedPrecision) && parsedPrecision >= 0 ? parsedPrecision : Number.NaN;
       };
 
       const getOrderAmountMinValue = () => {
@@ -3250,28 +3478,138 @@
         return Number.isFinite(parsedStep) && parsedStep > 0 ? parsedStep : Number.NaN;
       };
 
+      const getOrderPricePrecisionValue = () => {
+        if (!orderPriceInputElement) {
+          return Number.NaN;
+        }
+
+        const precisionAttribute = String(orderPriceInputElement.dataset.pricePrecision || "").trim();
+        if (!precisionAttribute) {
+          return Number.NaN;
+        }
+
+        const parsedPrecision = Number(precisionAttribute);
+        return Number.isFinite(parsedPrecision) && parsedPrecision >= 0 ? parsedPrecision : Number.NaN;
+      };
+
+      const getOrderPriceDisplayDecimals = () => {
+        const precisionValue = getOrderPricePrecisionValue();
+        if (Number.isInteger(precisionValue) && precisionValue >= 0) {
+          return Math.min(12, Number(precisionValue));
+        }
+
+        const stepValue = getOrderPriceStepValue();
+        if (Number.isFinite(stepValue) && stepValue > 0) {
+          return getDecimalPlacesFromValue(stepValue);
+        }
+
+        return 8;
+      };
+
+      const formatOrderPriceInputValue = (value) => formatNumberWithDecimals(value, getOrderPriceDisplayDecimals());
+
+      const getOrderAmountDisplayDecimals = () => {
+        const precisionValue = getOrderAmountPrecisionValue();
+        if (Number.isInteger(precisionValue) && precisionValue >= 0) {
+          return Math.min(12, Number(precisionValue));
+        }
+
+        if (Number.isFinite(precisionValue) && precisionValue > 0) {
+          return getDecimalPlacesFromValue(precisionValue);
+        }
+
+        const stepValue = getOrderAmountStepValue();
+        if (Number.isFinite(stepValue) && stepValue > 0) {
+          return getDecimalPlacesFromValue(stepValue);
+        }
+
+        return 8;
+      };
+
+      const formatOrderAmountInputValue = (value) => formatNumberWithDecimals(value, getOrderAmountDisplayDecimals());
+
+      const getOrderTotalDisplayDecimals = () => {
+        const nextDecimals = getOrderPriceDisplayDecimals() + getOrderAmountDisplayDecimals();
+        return Math.min(12, Math.max(2, nextDecimals));
+      };
+
+      const formatOrderTotalInputValue = (value) => formatNumberWithDecimals(value, getOrderTotalDisplayDecimals());
+
+      const normalizeValueByPrecision = (value, precisionValue) => {
+        const numericValue = Number(value);
+        if (!Number.isFinite(numericValue) || numericValue <= 0 || !Number.isFinite(precisionValue) || precisionValue < 0) {
+          return numericValue;
+        }
+
+        if (Number.isInteger(precisionValue) && precisionValue >= 0) {
+          const decimals = Math.min(12, Number(precisionValue));
+          return Number(numericValue.toFixed(decimals));
+        }
+
+        if (precisionValue > 0) {
+          return Math.round(numericValue / precisionValue) * precisionValue;
+        }
+
+        return numericValue;
+      };
+
+      const getStopPriceMinValue = () => {
+        if (!orderStopPriceInputElement) {
+          return Number.NaN;
+        }
+
+        const minAttribute = String(orderStopPriceInputElement.getAttribute("min") || "").trim();
+        if (!minAttribute) {
+          return Number.NaN;
+        }
+
+        const parsedMin = Number(minAttribute);
+        return Number.isFinite(parsedMin) && parsedMin > 0 ? parsedMin : Number.NaN;
+      };
+
+      const getStopPriceMaxValue = () => {
+        if (!orderStopPriceInputElement) {
+          return Number.NaN;
+        }
+
+        const maxAttribute = String(orderStopPriceInputElement.getAttribute("max") || "").trim();
+        if (!maxAttribute) {
+          return Number.NaN;
+        }
+
+        const parsedMax = Number(maxAttribute);
+        return Number.isFinite(parsedMax) && parsedMax > 0 ? parsedMax : Number.NaN;
+      };
+
       const snapOrderPriceToTick = (priceValue) => {
         const numericPrice = Number(priceValue);
         if (!Number.isFinite(numericPrice) || numericPrice <= 0) {
           return Number.NaN;
         }
 
+        const precisionValue = getOrderPricePrecisionValue();
         const stepValue = getOrderPriceStepValue();
         const minPriceValue = getOrderPriceMinValue();
         const maxPriceValue = getOrderPriceMaxValue();
 
+        const precisionRoundedValue = normalizeValueByPrecision(numericPrice, precisionValue);
+        const basePriceValue = Number.isFinite(precisionRoundedValue) && precisionRoundedValue > 0
+          ? precisionRoundedValue
+          : numericPrice;
+
         if (!Number.isFinite(stepValue)) {
-          if (Number.isFinite(minPriceValue) && numericPrice < minPriceValue) {
+          if (Number.isFinite(minPriceValue) && basePriceValue < minPriceValue) {
             return minPriceValue;
           }
-          if (Number.isFinite(maxPriceValue) && numericPrice > maxPriceValue) {
+          if (Number.isFinite(maxPriceValue) && basePriceValue > maxPriceValue) {
             return maxPriceValue;
           }
-          return numericPrice;
+          return basePriceValue;
         }
 
         const snapOrigin = Number.isFinite(minPriceValue) ? minPriceValue : 0;
-        let snappedPrice = Math.round((numericPrice - snapOrigin) / stepValue) * stepValue + snapOrigin;
+        let snappedPrice = Math.round((basePriceValue - snapOrigin) / stepValue) * stepValue + snapOrigin;
+        snappedPrice = normalizeValueByPrecision(snappedPrice, precisionValue);
 
         if (Number.isFinite(minPriceValue) && snappedPrice < minPriceValue) {
           snappedPrice = minPriceValue;
@@ -3302,23 +3640,29 @@
           return;
         }
 
+        const isStopLimitSelected = isStopLimitOrderTypeSelected();
+
         const hasEmptyRequiredField = [
           orderPriceInputElement,
           orderAmountInputElement,
           orderTotalInputElement,
+          ...(isStopLimitSelected ? [orderStopPriceInputElement] : []),
         ].some((inputElement) => String(inputElement?.value || "").trim().length === 0);
 
         const hasOrderInputError = [
           orderPriceInputElement,
           orderAmountInputElement,
           orderTotalInputElement,
+          ...(isStopLimitSelected ? [orderStopPriceInputElement] : []),
         ].some((inputElement) => inputElement?.classList.contains("is-below-min"));
 
         const shouldDisableOrderActions = hasEmptyRequiredField || hasOrderInputError;
 
         if (orderActionStatusElement) {
           if (hasEmptyRequiredField) {
-            orderActionStatusElement.textContent = "Fill in Price, Amount, and Total";
+            orderActionStatusElement.textContent = isStopLimitSelected
+              ? "Fill in Stop price, Price, Amount, and Total"
+              : "Fill in Price, Amount, and Total";
           } else if (hasOrderInputError) {
             orderActionStatusElement.textContent = "Correct the invalid order values";
           } else {
@@ -3410,6 +3754,44 @@
         return isOutsideLimits;
       };
 
+      const validateStopPriceLimits = () => {
+        if (!orderStopPriceInputElement) {
+          return false;
+        }
+
+        if (!isStopLimitOrderTypeSelected()) {
+          orderStopPriceInputElement.classList.remove("is-below-min");
+          orderStopPriceInputElement.setAttribute("aria-invalid", "false");
+          return false;
+        }
+
+        const stopPriceValue = parseOrderInputNumber(orderStopPriceInputElement);
+        const minPriceValue = getStopPriceMinValue();
+        const maxPriceValue = getStopPriceMaxValue();
+
+        const isBelowMinimum = (
+          Number.isFinite(stopPriceValue)
+          && stopPriceValue > 0
+          && Number.isFinite(minPriceValue)
+          && minPriceValue > 0
+          && stopPriceValue < minPriceValue
+        );
+
+        const isAboveMaximum = (
+          Number.isFinite(stopPriceValue)
+          && stopPriceValue > 0
+          && Number.isFinite(maxPriceValue)
+          && maxPriceValue > 0
+          && stopPriceValue > maxPriceValue
+        );
+
+        const isOutsideLimits = isBelowMinimum || isAboveMaximum;
+        orderStopPriceInputElement.classList.toggle("is-below-min", isOutsideLimits);
+        orderStopPriceInputElement.setAttribute("aria-invalid", isOutsideLimits ? "true" : "false");
+        updateOrderActionButtonsState();
+        return isOutsideLimits;
+      };
+
       const validateOrderTotalMinimum = () => {
         if (!orderTotalInputElement) {
           return false;
@@ -3437,13 +3819,20 @@
           return Number.NaN;
         }
 
+        const precisionValue = getOrderAmountPrecisionValue();
+        const precisionRoundedAmount = normalizeValueByPrecision(numericAmount, precisionValue);
+        const baseAmountValue = Number.isFinite(precisionRoundedAmount) && precisionRoundedAmount > 0
+          ? precisionRoundedAmount
+          : numericAmount;
+
         const stepValue = getOrderAmountStepValue();
         if (!Number.isFinite(stepValue)) {
-          return numericAmount;
+          return baseAmountValue;
         }
 
-        const steppedAmount = Math.round(numericAmount / stepValue) * stepValue;
-        return steppedAmount > 0 ? steppedAmount : stepValue;
+        const steppedAmount = Math.round(baseAmountValue / stepValue) * stepValue;
+        const normalizedSteppedAmount = normalizeValueByPrecision(steppedAmount, precisionValue);
+        return normalizedSteppedAmount > 0 ? normalizedSteppedAmount : stepValue;
       };
 
       const updateOrderTotalFromAmount = () => {
@@ -3473,7 +3862,7 @@
         }
 
         isSyncingOrderInputs = true;
-        orderTotalInputElement.value = formatOrderInputNumber(nextTotalValue);
+        orderTotalInputElement.value = formatOrderTotalInputValue(nextTotalValue);
         isSyncingOrderInputs = false;
         validateOrderTotalMinimum();
       };
@@ -3503,7 +3892,7 @@
         }
 
         isSyncingOrderInputs = true;
-        orderAmountInputElement.value = formatOrderInputNumber(nextAmountValue);
+        orderAmountInputElement.value = formatOrderAmountInputValue(nextAmountValue);
         isSyncingOrderInputs = false;
         validateOrderAmountMinimum();
         validateOrderTotalMinimum();
@@ -7329,6 +7718,12 @@
               return;
             }
 
+            const target = button.dataset.orderFillTarget === "stop" ? "stop" : "price";
+            const targetInputElement = target === "stop" ? orderStopPriceInputElement : orderPriceInputElement;
+            if (!targetInputElement) {
+              return;
+            }
+
             const sourceElement = marketValueBySource[source];
             const parsedValue = parseMarketPriceValue(sourceElement?.textContent || "");
             if (!Number.isFinite(parsedValue)) {
@@ -7337,17 +7732,27 @@
 
             const snappedValue = snapOrderPriceToTick(parsedValue);
             const normalizedValue = Number.isFinite(snappedValue) ? snappedValue : parsedValue;
-            const formattedValue = formatOrderInputNumber(normalizedValue);
+            const formattedValue = formatOrderPriceInputValue(normalizedValue);
             if (!formattedValue) {
               return;
             }
 
-            if (String(orderPriceInputElement.value || "").trim() === formattedValue) {
+            if (String(targetInputElement.value || "").trim() === formattedValue) {
               return;
             }
 
-            orderPriceInputElement.value = formattedValue;
-            orderPriceInputElement.dispatchEvent(new Event("input", { bubbles: true }));
+            targetInputElement.value = formattedValue;
+            targetInputElement.dispatchEvent(new Event("input", { bubbles: true }));
+          });
+        });
+      }
+
+      if (orderTypeInputElements.length > 0) {
+        orderTypeInputElements.forEach((inputElement) => {
+          inputElement.addEventListener("change", () => {
+            applyOrderTypeInputsVisibility();
+            validateStopPriceLimits();
+            updateOrderActionButtonsState();
           });
         });
       }
@@ -7357,17 +7762,87 @@
           validateOrderAmountMinimum();
           updateOrderTotalFromAmount();
         });
+
+        orderAmountInputElement.addEventListener("blur", () => {
+          const parsedAmount = parseOrderInputNumber(orderAmountInputElement);
+          if (!Number.isFinite(parsedAmount) || parsedAmount <= 0) {
+            return;
+          }
+
+          const alignedAmount = alignAmountToStep(parsedAmount);
+          const formattedAmount = formatOrderAmountInputValue(alignedAmount);
+          if (!formattedAmount || String(orderAmountInputElement.value || "").trim() === formattedAmount) {
+            return;
+          }
+
+          orderAmountInputElement.value = formattedAmount;
+          orderAmountInputElement.dispatchEvent(new Event("input", { bubbles: true }));
+        });
       }
 
       if (orderPriceInputElement) {
         orderPriceInputElement.addEventListener("input", () => {
           updateOrderTotalFromAmount();
         });
+
+        orderPriceInputElement.addEventListener("blur", () => {
+          const parsedPrice = parseOrderInputNumber(orderPriceInputElement);
+          if (!Number.isFinite(parsedPrice) || parsedPrice <= 0) {
+            return;
+          }
+
+          const snappedPrice = snapOrderPriceToTick(parsedPrice);
+          const formattedPrice = formatOrderPriceInputValue(snappedPrice);
+          if (!formattedPrice || String(orderPriceInputElement.value || "").trim() === formattedPrice) {
+            return;
+          }
+
+          orderPriceInputElement.value = formattedPrice;
+          orderPriceInputElement.dispatchEvent(new Event("input", { bubbles: true }));
+        });
+      }
+
+      if (orderStopPriceInputElement) {
+        orderStopPriceInputElement.addEventListener("input", () => {
+          validateStopPriceLimits();
+          renderChartOrderPreview();
+        });
+
+        orderStopPriceInputElement.addEventListener("blur", () => {
+          const parsedStopPrice = parseOrderInputNumber(orderStopPriceInputElement);
+          if (!Number.isFinite(parsedStopPrice) || parsedStopPrice <= 0) {
+            return;
+          }
+
+          const snappedStopPrice = snapOrderPriceToTick(parsedStopPrice);
+          const formattedStopPrice = formatOrderPriceInputValue(snappedStopPrice);
+          if (!formattedStopPrice || String(orderStopPriceInputElement.value || "").trim() === formattedStopPrice) {
+            return;
+          }
+
+          orderStopPriceInputElement.value = formattedStopPrice;
+          orderStopPriceInputElement.dispatchEvent(new Event("input", { bubbles: true }));
+        });
       }
 
       if (orderTotalInputElement) {
         orderTotalInputElement.addEventListener("input", () => {
           updateOrderAmountFromTotal();
+        });
+
+        orderTotalInputElement.addEventListener("blur", () => {
+          const parsedTotal = parseOrderInputNumber(orderTotalInputElement);
+          if (!Number.isFinite(parsedTotal) || parsedTotal <= 0) {
+            return;
+          }
+
+          const formattedTotal = formatOrderTotalInputValue(parsedTotal);
+          if (!formattedTotal || String(orderTotalInputElement.value || "").trim() === formattedTotal) {
+            return;
+          }
+
+          orderTotalInputElement.value = formattedTotal;
+          orderTotalInputElement.dispatchEvent(new Event("input", { bubbles: true }));
         });
       }
 
@@ -7590,6 +8065,8 @@
       setRefreshStatus("Live", "is-live");
       updateScrollToRecentButtonVisibility();
       setOrderActionSide("buy");
+      applyOrderTypeInputsVisibility();
+      validateStopPriceLimits();
       updateOrderActionButtonsState();
       if (shouldInitialTimeframeRefresh) {
         refreshChartData({ priority: true });
