@@ -76,7 +76,7 @@ def _resolve_market_amount_constraints(exchange, symbol):
         market = exchange.markets.get(symbol)
 
     if not isinstance(market, dict):
-        return None, None, None, None, None
+        return None, None, None, None, None, None
 
     market_limits = market.get("limits") or {}
     limits_amount = market_limits.get("amount") or {}
@@ -114,6 +114,7 @@ def _resolve_market_amount_constraints(exchange, symbol):
         max_price_value = max(min_price_value, DEFAULT_PRICE_MAX)
 
     precision_amount = (market.get("precision") or {}).get("amount")
+    precision_price = (market.get("precision") or {}).get("price")
     precision_mode = getattr(exchange, "precisionMode", None)
 
     amount_step = None
@@ -147,12 +148,36 @@ def _resolve_market_amount_constraints(exchange, symbol):
         if min_candidate is not None and math.isfinite(min_candidate) and min_candidate > 0:
             amount_step = min_candidate
 
+    price_step = None
+    if precision_price is not None:
+        try:
+            precision_value = float(precision_price)
+        except (TypeError, ValueError):
+            precision_value = None
+
+        if precision_value is not None and math.isfinite(precision_value) and precision_value > 0:
+            if precision_mode == getattr(ccxt, "TICK_SIZE", object()):
+                price_step = precision_value
+            elif precision_mode == getattr(ccxt, "DECIMAL_PLACES", object()):
+                decimals = int(precision_value)
+                if decimals >= 0:
+                    price_step = 10 ** (-decimals)
+            else:
+                if precision_value < 1:
+                    price_step = precision_value
+                elif precision_value.is_integer() and int(precision_value) >= 0:
+                    price_step = 10 ** (-int(precision_value))
+
+    if price_step is None and min_price_value is not None and math.isfinite(min_price_value) and 0 < min_price_value < 1:
+        price_step = min_price_value
+
     return (
         _format_number_for_input(amount_step),
         _format_number_for_input(min_amount),
         _format_number_for_input(min_cost),
         _format_number_for_input(min_price_value),
         _format_number_for_input(max_price_value),
+        _format_number_for_input(price_step),
     )
 
 
@@ -456,12 +481,13 @@ def _fetch_chart_payload(timeframe=None, exchange_key=None, symbol=None):
     total_min = None
     price_min = None
     price_max = None
+    price_step = None
 
     try:
         exchange = exchange_class({"enableRateLimit": True})
         exchange.load_markets()
         supported_timeframes = _get_supported_timeframes(exchange)
-        amount_step, amount_min, total_min, price_min, price_max = _resolve_market_amount_constraints(exchange, selected_symbol)
+        amount_step, amount_min, total_min, price_min, price_max, price_step = _resolve_market_amount_constraints(exchange, selected_symbol)
     except (
         ccxt.RequestTimeout,
         ccxt.NetworkError,
@@ -504,6 +530,7 @@ def _fetch_chart_payload(timeframe=None, exchange_key=None, symbol=None):
         "total_min": total_min,
         "price_min": price_min,
         "price_max": price_max,
+        "price_step": price_step,
         "error": None,
     }
     candles = []
@@ -520,6 +547,7 @@ def _fetch_chart_payload(timeframe=None, exchange_key=None, symbol=None):
             and market_data["total_min"] is None
             and market_data["price_min"] is None
             and market_data["price_max"] is None
+            and market_data["price_step"] is None
         ):
             (
                 market_data["amount_step"],
@@ -527,6 +555,7 @@ def _fetch_chart_payload(timeframe=None, exchange_key=None, symbol=None):
                 market_data["total_min"],
                 market_data["price_min"],
                 market_data["price_max"],
+                market_data["price_step"],
             ) = _resolve_market_amount_constraints(
                 exchange,
                 market_data["symbol"],
@@ -606,6 +635,7 @@ def _fetch_market_quote_payload(exchange_key=None, symbol=None, timeframe=None):
         "total_min": None,
         "price_min": None,
         "price_max": None,
+        "price_step": None,
         "error": None,
     }
 

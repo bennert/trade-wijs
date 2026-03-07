@@ -942,6 +942,81 @@ body {
   z-index: 2;
 }
 
+.chart-order-preview {
+  position: absolute;
+  right: 72px;
+  transform: translateY(-50%);
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  border: 1px solid transparent;
+  border-radius: 4px;
+  padding: 4px 8px;
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 1;
+  pointer-events: auto;
+  cursor: ns-resize;
+  z-index: 5;
+  opacity: 0;
+  visibility: hidden;
+  white-space: nowrap;
+}
+
+.chart-order-preview.is-visible {
+  opacity: 1;
+  visibility: visible;
+}
+
+.chart-order-preview.is-dragging {
+  cursor: ns-resize;
+}
+
+.chart-order-preview.is-buy {
+  color: #29b37d;
+  background: rgba(41, 179, 125, 0.14);
+  border-color: rgba(41, 179, 125, 0.45);
+}
+
+.chart-order-preview.is-sell {
+  color: #cf5f6b;
+  background: rgba(207, 95, 107, 0.14);
+  border-color: rgba(207, 95, 107, 0.45);
+}
+
+.chart-order-preview-side {
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+
+.chart-order-preview-details {
+  color: var(--text);
+  opacity: 0.92;
+}
+
+.chart-order-preview-line {
+  position: absolute;
+  height: 0;
+  border-top: 1px dashed rgba(154, 165, 189, 0.85);
+  pointer-events: none;
+  z-index: 4;
+  opacity: 0;
+  visibility: hidden;
+}
+
+.chart-order-preview-line.is-visible {
+  opacity: 1;
+  visibility: visible;
+}
+
+.chart-order-preview-line.is-buy {
+  border-top-color: rgba(41, 179, 125, 0.9);
+}
+
+.chart-order-preview-line.is-sell {
+  border-top-color: rgba(207, 95, 107, 0.9);
+}
+
 .smc-zone {
   position: absolute;
   border: 1px solid transparent;
