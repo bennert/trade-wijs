@@ -113,7 +113,7 @@ body {
 
 .market-selector-btn {
   border: 1px solid var(--border);
-  background: rgba(21, 25, 37, 0.7);
+  background: var(--panel-2);
   color: var(--text);
   font-size: 12px;
   font-weight: 600;
@@ -1033,7 +1033,7 @@ body {
   font-size: 10px;
   font-weight: 600;
   color: var(--muted);
-  background: rgba(21, 25, 37, 0.85);
+  background: var(--panel-2);
   padding: 1px 4px;
   border-radius: 3px;
   line-height: 1.2;
@@ -1057,7 +1057,7 @@ body {
 
 .pane-scale-label--price-scale {
   color: rgba(154, 165, 189, 0.95);
-  background: rgba(21, 25, 37, 0.9);
+  background: var(--panel-2);
   z-index: 1;
 }
 
