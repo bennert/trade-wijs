@@ -438,6 +438,17 @@
           <button id="place-order-btn" type="button" class="place-order-btn">Place Order</button>
         </div>
       </section>
+
+      <div id="place-order-modal" class="place-order-modal" aria-hidden="true" role="dialog" aria-modal="true" aria-labelledby="place-order-modal-title">
+        <div class="place-order-modal-card">
+          <div class="place-order-modal-header">
+            <h3 id="place-order-modal-title" class="place-order-modal-title">Order payload</h3>
+            <button id="place-order-modal-close-btn" type="button" class="place-order-modal-close-btn" aria-label="Close order payload">✕</button>
+          </div>
+          <pre id="place-order-modal-payload" class="place-order-modal-payload"></pre>
+        </div>
+      </div>
+
       <section id="market-info-section" class="market-info-section">
         <div class="market-info-header">
           <h2 id="market-title">{{ market_data.display_symbol }} Info</h2>
@@ -601,6 +612,9 @@
       const orderActionStatusElement = document.getElementById("order-action-status");
       const orderActionButtonElements = Array.from(document.querySelectorAll("#panel-order .trade-btn"));
       const placeOrderButtonElement = document.getElementById("place-order-btn");
+      const placeOrderModalElement = document.getElementById("place-order-modal");
+      const placeOrderModalPayloadElement = document.getElementById("place-order-modal-payload");
+      const placeOrderModalCloseButtonElement = document.getElementById("place-order-modal-close-btn");
       const orderBuyButtonElement = document.querySelector("#panel-order .buy-btn");
       const orderSellButtonElement = document.querySelector("#panel-order .sell-btn");
       const orderFillButtonElements = Array.from(document.querySelectorAll("[data-order-fill-source]"));
@@ -608,6 +622,7 @@
       const orderTypeStopLimitElement = document.getElementById("type-stop-limit");
       const orderTypeMarketElement = document.getElementById("type-market");
       const orderTypeStopMarketElement = document.getElementById("type-stop-market");
+      const orderTypeOcoElement = document.getElementById("type-oco");
       const orderPriceFieldElement = document.getElementById("order-price-field");
       const orderPriceFillActionsElement = document.getElementById("order-price-fill-actions");
 
@@ -3276,6 +3291,26 @@
       const isStopOrderTypeSelected = () => isStopLimitOrderTypeSelected() || isStopMarketOrderTypeSelected();
       const isLimitPriceRequiredOrderTypeSelected = () => !isMarketOrderTypeSelected() && !isStopMarketOrderTypeSelected();
 
+      const getSelectedOrderTypeValue = () => {
+        if (isStopLimitOrderTypeSelected()) {
+          return "stop_limit";
+        }
+
+        if (isMarketOrderTypeSelected()) {
+          return "market";
+        }
+
+        if (isStopMarketOrderTypeSelected()) {
+          return "stop_market";
+        }
+
+        if (Boolean(orderTypeOcoElement?.checked)) {
+          return "oco";
+        }
+
+        return "limit";
+      };
+
       const getEffectiveOrderPriceValue = () => {
         if (isLimitPriceRequiredOrderTypeSelected()) {
           return parseOrderInputNumber(orderPriceInputElement);
@@ -3320,6 +3355,55 @@
       const setLockedOrderValueField = (fieldName) => {
         lockedOrderValueField = fieldName === "amount" ? "amount" : "total";
         renderOrderValueLocks();
+      };
+
+      const closePlaceOrderModal = () => {
+        if (!placeOrderModalElement) {
+          return;
+        }
+
+        placeOrderModalElement.classList.remove("is-visible");
+        placeOrderModalElement.setAttribute("aria-hidden", "true");
+      };
+
+      const buildPlaceOrderPayload = () => {
+        const orderType = getSelectedOrderTypeValue();
+        const payload = {
+          exchange: currentExchangeKey,
+          symbol: currentSymbol,
+          side: activeOrderSide === "sell" ? "sell" : "buy",
+          type: orderType,
+          amount: parseOrderInputNumber(orderAmountInputElement),
+        };
+
+        const totalValue = parseOrderInputNumber(orderTotalInputElement);
+        if (Number.isFinite(totalValue) && totalValue > 0) {
+          payload.total = totalValue;
+        }
+
+        const limitPriceValue = parseOrderInputNumber(orderPriceInputElement);
+        const stopPriceValue = parseOrderInputNumber(orderStopPriceInputElement);
+
+        if ((orderType === "limit" || orderType === "stop_limit" || orderType === "oco") && Number.isFinite(limitPriceValue) && limitPriceValue > 0) {
+          payload.price = limitPriceValue;
+        }
+
+        if ((orderType === "stop_limit" || orderType === "stop_market") && Number.isFinite(stopPriceValue) && stopPriceValue > 0) {
+          payload.stop_price = stopPriceValue;
+        }
+
+        return payload;
+      };
+
+      const openPlaceOrderPayloadModal = () => {
+        if (!placeOrderModalElement || !placeOrderModalPayloadElement) {
+          return;
+        }
+
+        const payload = buildPlaceOrderPayload();
+        placeOrderModalPayloadElement.textContent = JSON.stringify(payload, null, 2);
+        placeOrderModalElement.classList.add("is-visible");
+        placeOrderModalElement.setAttribute("aria-hidden", "false");
       };
 
       const applyOrderTypeInputsVisibility = () => {
@@ -7722,6 +7806,11 @@
         }
 
         if (event.key === "Escape") {
+          if (placeOrderModalElement?.classList.contains("is-visible")) {
+            closePlaceOrderModal();
+            return;
+          }
+
           if (activeSelectorMenu) {
             hideSelectorMenus();
           }
@@ -7871,6 +7960,26 @@
       if (orderBuyButtonElement) {
         orderBuyButtonElement.addEventListener("click", () => {
           setOrderActionSide("buy");
+        });
+      }
+
+      if (placeOrderButtonElement) {
+        placeOrderButtonElement.addEventListener("click", () => {
+          openPlaceOrderPayloadModal();
+        });
+      }
+
+      if (placeOrderModalCloseButtonElement) {
+        placeOrderModalCloseButtonElement.addEventListener("click", () => {
+          closePlaceOrderModal();
+        });
+      }
+
+      if (placeOrderModalElement) {
+        placeOrderModalElement.addEventListener("click", (event) => {
+          if (event.target === placeOrderModalElement) {
+            closePlaceOrderModal();
+          }
         });
       }
 
