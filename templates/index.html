@@ -106,24 +106,26 @@
         </aside>
         <aside class="settings-tabs settings-middle-section is-active" aria-label="Exchange tabs" data-settings-middle-section="exchanges">
           <h3 class="settings-tabs-title">Exchanges</h3>
-          {% for item in market_data.supported_exchanges %}
-            <div class="settings-exchange-row" data-settings-exchange-row="{{ item.key }}">
-              <input
-                id="settings-enabled-exchange-{{ item.key }}"
-                type="checkbox"
-                data-settings-enabled-exchange="{{ item.key }}"
-                checked
-                aria-label="Enable {{ item.label }}"
-              />
-              <button
-                type="button"
-                class="settings-tab{% if item.key == market_data.exchange_key %} is-active{% endif %}"
-                data-settings-exchange="{{ item.key }}"
-              >
-                {{ item.label }}
-              </button>
-            </div>
-          {% endfor %}
+          <div class="settings-exchanges-list" role="group" aria-label="Exchange list">
+            {% for item in market_data.supported_exchanges %}
+              <div class="settings-exchange-row" data-settings-exchange-row="{{ item.key }}">
+                <input
+                  id="settings-enabled-exchange-{{ item.key }}"
+                  type="checkbox"
+                  data-settings-enabled-exchange="{{ item.key }}"
+                  checked
+                  aria-label="Enable {{ item.label }}"
+                />
+                <button
+                  type="button"
+                  class="settings-tab{% if item.key == market_data.exchange_key %} is-active{% endif %}"
+                  data-settings-exchange="{{ item.key }}"
+                >
+                  {{ item.label }}
+                </button>
+              </div>
+            {% endfor %}
+          </div>
         </aside>
         <aside class="settings-tabs settings-middle-section" aria-label="General settings tabs" data-settings-middle-section="general">
           <h3 class="settings-tabs-title">General</h3>
@@ -5819,12 +5821,16 @@
           return;
         }
 
+        const requestedTimeframe = currentTimeframe;
+        const requestedSymbol = currentSymbol;
+        const requestedExchangeKey = currentExchangeKey;
+
         liveQuoteRequestInFlight = true;
         try {
           const query = new URLSearchParams({
-            timeframe: currentTimeframe,
-            symbol: currentSymbol,
-            exchange: currentExchangeKey,
+            timeframe: requestedTimeframe,
+            symbol: requestedSymbol,
+            exchange: requestedExchangeKey,
           });
           const response = await fetch(`/api/market-quote?${query.toString()}`, { cache: "no-store" });
           if (!response.ok) {
@@ -5834,6 +5840,26 @@
           const payload = await response.json();
           const marketData = payload?.market_data;
           if (!marketData || marketData.error) {
+            return;
+          }
+
+          const hasSelectionChanged = (
+            currentTimeframe !== requestedTimeframe
+            || currentSymbol !== requestedSymbol
+            || currentExchangeKey !== requestedExchangeKey
+          );
+          if (hasSelectionChanged) {
+            return;
+          }
+
+          const responseExchangeKey = String(marketData.exchange_key || "");
+          const responseSymbol = String(marketData.symbol || "");
+          const responseTimeframe = String(marketData.timeframe || "");
+          if (
+            responseExchangeKey !== requestedExchangeKey
+            || responseSymbol !== requestedSymbol
+            || responseTimeframe !== requestedTimeframe
+          ) {
             return;
           }
 

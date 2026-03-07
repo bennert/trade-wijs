@@ -285,13 +285,23 @@ body {
   background: var(--panel);
   display: none;
   padding: 12px;
+  height: 100%;
+  min-height: 0;
+  overflow: hidden;
 }
 
 .settings-shell {
   height: 100%;
   display: grid;
   grid-template-columns: 160px 220px 1fr;
+  grid-template-rows: minmax(0, 1fr);
   gap: 12px;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.settings-shell > * {
+  min-height: 0;
 }
 
 .settings-categories {
@@ -342,6 +352,7 @@ body {
   display: flex;
   flex-direction: column;
   gap: 6px;
+  min-height: 0;
 }
 
 .settings-middle-section {
@@ -350,6 +361,36 @@ body {
 
 .settings-middle-section.is-active {
   display: flex;
+}
+
+.settings-middle-section[data-settings-middle-section="exchanges"] {
+  height: 100%;
+  max-height: 100%;
+  overflow: hidden;
+  gap: 4px;
+}
+
+.settings-exchanges-list {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: grid;
+  gap: 3px;
+  overflow-y: scroll;
+  scrollbar-gutter: stable;
+  padding-right: 2px;
+}
+
+.settings-exchanges-list::-webkit-scrollbar {
+  width: 8px;
+}
+
+.settings-exchanges-list::-webkit-scrollbar-track {
+  background: var(--panel-2);
+}
+
+.settings-exchanges-list::-webkit-scrollbar-thumb {
+  background: var(--border);
+  border-radius: 8px;
 }
 
 .settings-tabs-title {
@@ -375,12 +416,12 @@ body {
 .settings-exchange-row {
   border: 1px solid var(--border);
   border-radius: 4px;
-  padding: 6px;
+  padding: 3px;
   background: rgba(15, 17, 22, 0.25);
   display: grid;
   grid-template-columns: auto 1fr;
   align-items: center;
-  gap: 8px;
+  gap: 5px;
 }
 
 .settings-tab {

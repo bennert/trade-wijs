@@ -17,15 +17,29 @@ CACHE_TTL_SECONDS = 20
 _ohlcv_cache = {}
 DEFAULT_SUPPORTED_TIMEFRAMES = ("1m", "3m", "5m", "15m", "1h", "4h", "1d", "1w", "1M")
 SUPPORTED_EXCHANGES = {
-    "bybit": {
-        "label": "Bybit Global",
-        "ccxt_id": "bybit",
-    },
-    "binance": {
-        "label": "Binance",
-        "ccxt_id": "binance",
-    },
+    exchange_id: {
+        "label": exchange_id.replace("-", " ").replace("_", " ").title(),
+        "ccxt_id": exchange_id,
+    }
+    for exchange_id in sorted(getattr(ccxt, "exchanges", []))
+    if isinstance(exchange_id, str) and exchange_id
 }
+if "bybit" in SUPPORTED_EXCHANGES:
+    SUPPORTED_EXCHANGES["bybit"]["label"] = "Bybit Global"
+if "binance" in SUPPORTED_EXCHANGES:
+    SUPPORTED_EXCHANGES["binance"]["label"] = "Binance"
+if not SUPPORTED_EXCHANGES:
+    SUPPORTED_EXCHANGES = {
+        "bybit": {
+            "label": "Bybit Global",
+            "ccxt_id": "bybit",
+        },
+        "binance": {
+            "label": "Binance",
+            "ccxt_id": "binance",
+        },
+    }
+DEFAULT_EXCHANGE_KEY = "bybit" if "bybit" in SUPPORTED_EXCHANGES else next(iter(SUPPORTED_EXCHANGES.keys()))
 SUPPORTED_SYMBOLS = ("BTC/USDT", "ETH/USDT", "SOL/USDT")
 DEFAULT_PRICE_MIN = 0.01
 DEFAULT_PRICE_MAX = 1_000_000
@@ -248,7 +262,7 @@ def _normalize_timeframe(value, supported_timeframes=None):
 def _normalize_exchange(value):
     if value in SUPPORTED_EXCHANGES:
         return value
-    return "bybit"
+    return DEFAULT_EXCHANGE_KEY
 
 
 def _normalize_symbol(value):
