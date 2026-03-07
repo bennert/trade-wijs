@@ -378,7 +378,10 @@
             <div id="order-stop-price-group" class="order-stop-price-group" aria-hidden="true">
               <label class="order-input-field order-input-field--full" for="order-stop-price-input">
                 <span>Stop price</span>
-                <input id="order-stop-price-input" type="number" inputmode="decimal" step="{{ market_data.price_step or 'any' }}" data-price-precision="{{ market_data.price_precision or '' }}"{% if market_data.price_min %} min="{{ market_data.price_min }}"{% endif %}{% if market_data.price_max %} max="{{ market_data.price_max }}"{% endif %} placeholder="Stop price" />
+                <div class="order-input-with-suffix">
+                  <input id="order-stop-price-input" type="number" inputmode="decimal" step="{{ market_data.price_step or 'any' }}" data-price-precision="{{ market_data.price_precision or '' }}"{% if market_data.price_min %} min="{{ market_data.price_min }}"{% endif %}{% if market_data.price_max %} max="{{ market_data.price_max }}"{% endif %} placeholder="Stop price" />
+                  <span id="order-stop-price-quote" class="order-input-suffix">{{ market_data.symbol.split('/')[-1] }}</span>
+                </div>
               </label>
               <div class="order-price-fill-actions" role="group" aria-label="Fill stop price from market values">
                 <button type="button" class="order-fill-btn" data-order-fill-source="bid" data-order-fill-target="stop">Bid</button>
@@ -388,7 +391,10 @@
             </div>
             <label id="order-price-field" class="order-input-field order-input-field--full" for="order-price-input">
               <span>Order price</span>
-              <input id="order-price-input" type="number" inputmode="decimal" step="{{ market_data.price_step or 'any' }}" data-price-precision="{{ market_data.price_precision or '' }}"{% if market_data.price_min %} min="{{ market_data.price_min }}"{% endif %}{% if market_data.price_max %} max="{{ market_data.price_max }}"{% endif %} placeholder="Order price" />
+              <div class="order-input-with-suffix">
+                <input id="order-price-input" type="number" inputmode="decimal" step="{{ market_data.price_step or 'any' }}" data-price-precision="{{ market_data.price_precision or '' }}"{% if market_data.price_min %} min="{{ market_data.price_min }}"{% endif %}{% if market_data.price_max %} max="{{ market_data.price_max }}"{% endif %} placeholder="Order price" />
+                <span id="order-price-quote" class="order-input-suffix">{{ market_data.symbol.split('/')[-1] }}</span>
+              </div>
             </label>
             <div id="order-price-fill-actions" class="order-price-fill-actions" role="group" aria-label="Fill price from market values">
               <button type="button" class="order-fill-btn" data-order-fill-source="bid" data-order-fill-target="price">Bid</button>
@@ -397,11 +403,23 @@
             </div>
             <label class="order-input-field" for="order-amount-input">
               <span>Amount</span>
-              <input id="order-amount-input" type="number" inputmode="decimal" step="{{ market_data.amount_step or 'any' }}" data-amount-precision="{{ market_data.amount_precision or '' }}"{% if market_data.amount_min %} min="{{ market_data.amount_min }}"{% endif %} placeholder="Amount" />
+              <div class="order-input-with-lock">
+                <button id="order-amount-lock-btn" type="button" class="order-lock-btn" aria-label="Toggle amount lock" title="Toggle amount lock"></button>
+                <div class="order-input-with-suffix">
+                  <input id="order-amount-input" type="number" inputmode="decimal" step="{{ market_data.amount_step or 'any' }}" data-amount-precision="{{ market_data.amount_precision or '' }}"{% if market_data.amount_min %} min="{{ market_data.amount_min }}"{% endif %} placeholder="Amount" />
+                  <span id="order-amount-base" class="order-input-suffix">{{ market_data.symbol.split('/')[0] }}</span>
+                </div>
+              </div>
             </label>
             <label class="order-input-field" for="order-total-input">
               <span>Total</span>
-              <input id="order-total-input" type="number" inputmode="decimal" step="any"{% if market_data.total_min %} min="{{ market_data.total_min }}"{% endif %} placeholder="Total" />
+              <div class="order-input-with-lock">
+                <button id="order-total-lock-btn" type="button" class="order-lock-btn" aria-label="Toggle total lock" title="Toggle total lock"></button>
+                <div class="order-input-with-suffix">
+                  <input id="order-total-input" type="number" inputmode="decimal" step="any"{% if market_data.total_min %} min="{{ market_data.total_min }}"{% endif %} placeholder="Total" />
+                  <span id="order-total-quote" class="order-input-suffix">{{ market_data.symbol.split('/')[-1] }}</span>
+                </div>
+              </div>
             </label>
           </div>
         </div>
@@ -573,6 +591,12 @@
       const orderStopPriceInputElement = document.getElementById("order-stop-price-input");
       const orderAmountInputElement = document.getElementById("order-amount-input");
       const orderTotalInputElement = document.getElementById("order-total-input");
+      const orderAmountBaseElement = document.getElementById("order-amount-base");
+      const orderStopPriceQuoteElement = document.getElementById("order-stop-price-quote");
+      const orderPriceQuoteElement = document.getElementById("order-price-quote");
+      const orderTotalQuoteElement = document.getElementById("order-total-quote");
+      const orderAmountLockButtonElement = document.getElementById("order-amount-lock-btn");
+      const orderTotalLockButtonElement = document.getElementById("order-total-lock-btn");
       const orderStopPriceGroupElement = document.getElementById("order-stop-price-group");
       const orderActionStatusElement = document.getElementById("order-action-status");
       const orderActionButtonElements = Array.from(document.querySelectorAll("#panel-order .trade-btn"));
@@ -738,6 +762,7 @@
       let activeOrderSide = "buy";
       let isDraggingChartOrderPreview = false;
       let isDraggingChartStopPreview = false;
+      let lockedOrderValueField = "total";
 
       const clamp = (value, min, max) => Math.max(min, Math.min(max, value));
 
@@ -3193,6 +3218,58 @@
         return fixed.replace(/\.0+$/, "").replace(/(\.\d*?[1-9])0+$/, "$1");
       };
 
+      const getQuoteCurrencyFromSymbol = (symbol) => {
+        if (typeof symbol !== "string" || symbol.trim().length === 0) {
+          return "";
+        }
+
+        if (symbol.includes("/")) {
+          const parts = symbol.split("/");
+          return String(parts[parts.length - 1] || "").trim().toUpperCase();
+        }
+
+        const knownQuoteCurrencies = ["USDT", "USDC", "BUSD", "BTC", "ETH", "EUR", "USD", "GBP", "JPY"];
+        const upperSymbol = symbol.toUpperCase();
+        const matchedQuote = knownQuoteCurrencies.find((quote) => upperSymbol.endsWith(quote));
+        return matchedQuote || "";
+      };
+
+      const getBaseCurrencyFromSymbol = (symbol) => {
+        if (typeof symbol !== "string" || symbol.trim().length === 0) {
+          return "";
+        }
+
+        if (symbol.includes("/")) {
+          const parts = symbol.split("/");
+          return String(parts[0] || "").trim().toUpperCase();
+        }
+
+        const quoteCurrency = getQuoteCurrencyFromSymbol(symbol);
+        const upperSymbol = symbol.toUpperCase();
+        if (quoteCurrency && upperSymbol.endsWith(quoteCurrency)) {
+          return upperSymbol.slice(0, upperSymbol.length - quoteCurrency.length);
+        }
+
+        return "";
+      };
+
+      const updateOrderInputQuoteCurrency = () => {
+        const quoteCurrency = getQuoteCurrencyFromSymbol(currentSymbol);
+        const baseCurrency = getBaseCurrencyFromSymbol(currentSymbol);
+
+        if (baseCurrency && orderAmountBaseElement) {
+          orderAmountBaseElement.textContent = baseCurrency;
+        }
+
+        if (quoteCurrency) {
+          [orderStopPriceQuoteElement, orderPriceQuoteElement, orderTotalQuoteElement].forEach((suffixElement) => {
+            if (suffixElement) {
+              suffixElement.textContent = quoteCurrency;
+            }
+          });
+        }
+      };
+
       const isStopLimitOrderTypeSelected = () => Boolean(orderTypeStopLimitElement?.checked);
       const isMarketOrderTypeSelected = () => Boolean(orderTypeMarketElement?.checked);
       const isStopMarketOrderTypeSelected = () => Boolean(orderTypeStopMarketElement?.checked);
@@ -3217,6 +3294,32 @@
         }
 
         return Number.NaN;
+      };
+
+      const renderOrderValueLocks = () => {
+        const isAmountLocked = lockedOrderValueField === "amount";
+        const isTotalLocked = lockedOrderValueField === "total";
+
+        if (orderAmountLockButtonElement) {
+          orderAmountLockButtonElement.textContent = isAmountLocked ? "🔒" : "🔓";
+          orderAmountLockButtonElement.classList.toggle("is-locked", isAmountLocked);
+          orderAmountLockButtonElement.setAttribute("aria-pressed", isAmountLocked ? "true" : "false");
+          orderAmountLockButtonElement.setAttribute("aria-label", isAmountLocked ? "Amount locked" : "Amount unlocked");
+          orderAmountLockButtonElement.title = isAmountLocked ? "Amount locked" : "Amount unlocked";
+        }
+
+        if (orderTotalLockButtonElement) {
+          orderTotalLockButtonElement.textContent = isTotalLocked ? "🔒" : "🔓";
+          orderTotalLockButtonElement.classList.toggle("is-locked", isTotalLocked);
+          orderTotalLockButtonElement.setAttribute("aria-pressed", isTotalLocked ? "true" : "false");
+          orderTotalLockButtonElement.setAttribute("aria-label", isTotalLocked ? "Total locked" : "Total unlocked");
+          orderTotalLockButtonElement.title = isTotalLocked ? "Total locked" : "Total unlocked";
+        }
+      };
+
+      const setLockedOrderValueField = (fieldName) => {
+        lockedOrderValueField = fieldName === "amount" ? "amount" : "total";
+        renderOrderValueLocks();
       };
 
       const applyOrderTypeInputsVisibility = () => {
@@ -3593,6 +3696,15 @@
       };
 
       const formatOrderTotalInputValue = (value) => formatNumberWithDecimals(value, getOrderTotalDisplayDecimals());
+
+      const getDefaultOrderTotalAutofillValue = () => {
+        const minTotalValue = getOrderTotalMinValue();
+        if (Number.isFinite(minTotalValue) && minTotalValue > 0) {
+          return minTotalValue;
+        }
+
+        return 1;
+      };
 
       const normalizeValueByPrecision = (value, precisionValue) => {
         const numericValue = Number(value);
@@ -6714,6 +6826,7 @@
         currentDisplaySymbol = marketData.display_symbol || currentDisplaySymbol;
         currentExchangeKey = marketData.exchange_key || currentExchangeKey;
         currentExchangeLabel = marketData.exchange || currentExchangeLabel;
+        updateOrderInputQuoteCurrency();
 
         if (pairSelectorButtonElement) {
           pairSelectorButtonElement.textContent = currentDisplaySymbol;
@@ -7798,6 +7911,14 @@
               return;
             }
 
+            if (target === "price" && orderTotalInputElement && String(orderTotalInputElement.value || "").trim().length === 0) {
+              const defaultTotalValue = getDefaultOrderTotalAutofillValue();
+              const formattedTotalValue = formatOrderTotalInputValue(defaultTotalValue);
+              if (formattedTotalValue) {
+                orderTotalInputElement.value = formattedTotalValue;
+              }
+            }
+
             targetInputElement.value = formattedValue;
             targetInputElement.dispatchEvent(new Event("input", { bubbles: true }));
           });
@@ -7813,6 +7934,18 @@
             updateOrderTotalFromAmount();
             updateOrderActionButtonsState();
           });
+        });
+      }
+
+      if (orderAmountLockButtonElement) {
+        orderAmountLockButtonElement.addEventListener("click", () => {
+          setLockedOrderValueField(lockedOrderValueField === "amount" ? "total" : "amount");
+        });
+      }
+
+      if (orderTotalLockButtonElement) {
+        orderTotalLockButtonElement.addEventListener("click", () => {
+          setLockedOrderValueField(lockedOrderValueField === "total" ? "amount" : "total");
         });
       }
 
@@ -7841,6 +7974,11 @@
 
       if (orderPriceInputElement) {
         orderPriceInputElement.addEventListener("input", () => {
+          if (lockedOrderValueField === "total") {
+            updateOrderAmountFromTotal();
+            return;
+          }
+
           updateOrderTotalFromAmount();
         });
 
@@ -8128,6 +8266,8 @@
       setRefreshStatus("Live", "is-live");
       updateScrollToRecentButtonVisibility();
       setOrderActionSide("buy");
+      updateOrderInputQuoteCurrency();
+      renderOrderValueLocks();
       applyOrderTypeInputsVisibility();
       validateStopPriceLimits();
       updateOrderActionButtonsState();
