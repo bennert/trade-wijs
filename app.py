@@ -27,6 +27,119 @@ SUPPORTED_EXCHANGES = {
     },
 }
 SUPPORTED_SYMBOLS = ("BTC/USDT", "ETH/USDT", "SOL/USDT")
+DEFAULT_PRICE_MIN = 0.01
+DEFAULT_PRICE_MAX = 1_000_000
+
+
+def _format_number_for_input(value):
+    if value is None:
+        return None
+
+    try:
+        number = float(value)
+    except (TypeError, ValueError):
+        return None
+
+    if not math.isfinite(number) or number <= 0:
+        return None
+
+    if number >= 1:
+        return str(number).rstrip("0").rstrip(".")
+
+    formatted = f"{number:.16f}".rstrip("0").rstrip(".")
+    return formatted or None
+
+
+def _resolve_market_amount_constraints(exchange, symbol):
+    market = None
+
+    try:
+        market = exchange.market(symbol)
+    except (KeyError, TypeError, ValueError, AttributeError):
+        market = None
+
+    if not market and isinstance(getattr(exchange, "markets", None), dict):
+        market = exchange.markets.get(symbol)
+
+    if not isinstance(market, dict):
+        return None, None, None, None, None
+
+    market_limits = market.get("limits") or {}
+    limits_amount = market_limits.get("amount") or {}
+    limits_cost = market_limits.get("cost") or {}
+    limits_price = market_limits.get("price") or {}
+    min_amount = limits_amount.get("min")
+    min_cost = limits_cost.get("min")
+    min_price = limits_price.get("min")
+    max_price = limits_price.get("max")
+
+    min_price_raw = min_price if isinstance(min_price, (int, float, str)) else None
+    max_price_raw = max_price if isinstance(max_price, (int, float, str)) else None
+
+    min_price_value = None
+    if min_price_raw is not None:
+        try:
+            min_price_value = float(min_price_raw)
+        except (TypeError, ValueError):
+            min_price_value = None
+
+    max_price_value = None
+    if max_price_raw is not None:
+        try:
+            max_price_value = float(max_price_raw)
+        except (TypeError, ValueError):
+            max_price_value = None
+
+    if min_price_value is None or not math.isfinite(min_price_value) or min_price_value <= 0:
+        min_price_value = DEFAULT_PRICE_MIN
+
+    if max_price_value is None or not math.isfinite(max_price_value) or max_price_value <= 0:
+        max_price_value = DEFAULT_PRICE_MAX
+
+    if max_price_value < min_price_value:
+        max_price_value = max(min_price_value, DEFAULT_PRICE_MAX)
+
+    precision_amount = (market.get("precision") or {}).get("amount")
+    precision_mode = getattr(exchange, "precisionMode", None)
+
+    amount_step = None
+    if precision_amount is not None:
+        try:
+            precision_value = float(precision_amount)
+        except (TypeError, ValueError):
+            precision_value = None
+
+        if precision_value is not None and math.isfinite(precision_value) and precision_value > 0:
+            if precision_mode == getattr(ccxt, "TICK_SIZE", object()):
+                amount_step = precision_value
+            elif precision_mode == getattr(ccxt, "DECIMAL_PLACES", object()):
+                decimals = int(precision_value)
+                if decimals >= 0:
+                    amount_step = 10 ** (-decimals)
+            else:
+                if precision_value < 1:
+                    amount_step = precision_value
+                elif precision_value.is_integer() and int(precision_value) >= 0:
+                    amount_step = 10 ** (-int(precision_value))
+
+    if amount_step is None:
+        min_candidate_raw = min_amount if isinstance(min_amount, (int, float, str)) else None
+        min_candidate = None
+        if min_candidate_raw is not None:
+            try:
+                min_candidate = float(min_candidate_raw)
+            except (TypeError, ValueError):
+                min_candidate = None
+        if min_candidate is not None and math.isfinite(min_candidate) and min_candidate > 0:
+            amount_step = min_candidate
+
+    return (
+        _format_number_for_input(amount_step),
+        _format_number_for_input(min_amount),
+        _format_number_for_input(min_cost),
+        _format_number_for_input(min_price_value),
+        _format_number_for_input(max_price_value),
+    )
 
 
 def _timeframe_to_seconds(timeframe):
@@ -324,11 +437,17 @@ def _fetch_chart_payload(timeframe=None, exchange_key=None, symbol=None):
     exchange_class = getattr(ccxt, selected_exchange["ccxt_id"])
     exchange = None
     supported_timeframes = list(DEFAULT_SUPPORTED_TIMEFRAMES)
+    amount_step = None
+    amount_min = None
+    total_min = None
+    price_min = None
+    price_max = None
 
     try:
         exchange = exchange_class({"enableRateLimit": True})
         exchange.load_markets()
         supported_timeframes = _get_supported_timeframes(exchange)
+        amount_step, amount_min, total_min, price_min, price_max = _resolve_market_amount_constraints(exchange, selected_symbol)
     except (
         ccxt.RequestTimeout,
         ccxt.NetworkError,
@@ -366,6 +485,11 @@ def _fetch_chart_payload(timeframe=None, exchange_key=None, symbol=None):
         "quote_volume_compact": "-",
         "timestamp": None,
         "timestamp_unix": None,
+        "amount_step": amount_step,
+        "amount_min": amount_min,
+        "total_min": total_min,
+        "price_min": price_min,
+        "price_max": price_max,
         "error": None,
     }
     candles = []
@@ -376,6 +500,23 @@ def _fetch_chart_payload(timeframe=None, exchange_key=None, symbol=None):
         if exchange is None:
             exchange = exchange_class({"enableRateLimit": True})
             exchange.load_markets()
+        if (
+            market_data["amount_step"] is None
+            and market_data["amount_min"] is None
+            and market_data["total_min"] is None
+            and market_data["price_min"] is None
+            and market_data["price_max"] is None
+        ):
+            (
+                market_data["amount_step"],
+                market_data["amount_min"],
+                market_data["total_min"],
+                market_data["price_min"],
+                market_data["price_max"],
+            ) = _resolve_market_amount_constraints(
+                exchange,
+                market_data["symbol"],
+            )
         ticker = exchange.fetch_ticker(market_data["symbol"])
         ohlcv_rows = _get_cached_ohlcv(
             exchange,
@@ -446,6 +587,11 @@ def _fetch_market_quote_payload(exchange_key=None, symbol=None, timeframe=None):
         "quote_volume_compact": "-",
         "timestamp": None,
         "timestamp_unix": int(datetime.now(tz=timezone.utc).timestamp()),
+        "amount_step": None,
+        "amount_min": None,
+        "total_min": None,
+        "price_min": None,
+        "price_max": None,
         "error": None,
     }
 
