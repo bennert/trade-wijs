@@ -581,8 +581,8 @@
       const settingsExchangeLabelElement = document.getElementById("settings-exchange-label");
       const settingsExchangeTabElements = Array.from(document.querySelectorAll("[data-settings-exchange]"));
       const settingsExchangeToggleElements = Array.from(document.querySelectorAll("[data-settings-enabled-exchange]"));
-      const settingsTimeframeToggleElements = Array.from(document.querySelectorAll("[data-settings-enabled-timeframe]"));
-      const settingsQuoteCurrencyToggleElements = Array.from(document.querySelectorAll("[data-settings-enabled-quote-currency]"));
+      let settingsTimeframeToggleElements = Array.from(document.querySelectorAll("[data-settings-enabled-timeframe]"));
+      let settingsQuoteCurrencyToggleElements = Array.from(document.querySelectorAll("[data-settings-enabled-quote-currency]"));
       const settingsToggleTimeframesButtonElement = document.getElementById("settings-toggle-timeframes-btn");
       const settingsToggleQuoteCurrenciesButtonElement = document.getElementById("settings-toggle-quote-currencies-btn");
       const settingsIndicatorToggleElements = Array.from(document.querySelectorAll("[data-settings-enabled-indicator]"));
@@ -682,13 +682,13 @@
       const enabledIndicatorsStorageKey = "trade-wijs-enabled-indicators";
       const enabledToolsStorageKey = "trade-wijs-enabled-tools";
       const exchangeApiSettingsStorageKey = "trade-wijs-exchange-api-settings";
-      const validTimeframes = new Set(timeframeButtonElements.map((button) => button.dataset.timeframe).filter(Boolean));
-      const validQuoteCurrencies = new Set(
+      let validTimeframes = new Set(timeframeButtonElements.map((button) => button.dataset.timeframe).filter(Boolean));
+      let validQuoteCurrencies = new Set(
         settingsQuoteCurrencyToggleElements.map((checkbox) => checkbox.dataset.settingsEnabledQuoteCurrency).filter(Boolean),
       );
       const validIndicators = new Set(indicatorButtonElements.map((button) => button.dataset.indicator).filter(Boolean));
       const validTools = new Set(["horizontal-line", "trend-line"]);
-      const validSymbols = new Set(
+      let validSymbols = new Set(
         Array.from(pairSelectorMenuElement?.querySelectorAll("[data-symbol]") || []).map((button) => button.dataset.symbol).filter(Boolean),
       );
       const validExchangeKeys = new Set(
@@ -939,7 +939,9 @@
               return;
             }
 
-            const sanitizedEnabledTimeframes = configuredTimeframes.filter((timeframe) => validTimeframes.has(timeframe));
+            const sanitizedEnabledTimeframes = configuredTimeframes
+              .map((timeframe) => String(timeframe || "").trim())
+              .filter(Boolean);
             nextEnabledTimeframesByExchange[exchangeKey] = Array.from(new Set(sanitizedEnabledTimeframes));
           });
 
@@ -964,7 +966,9 @@
               return;
             }
 
-            const sanitizedEnabledQuoteCurrencies = configuredQuoteCurrencies.filter((quoteCurrency) => validQuoteCurrencies.has(quoteCurrency));
+            const sanitizedEnabledQuoteCurrencies = configuredQuoteCurrencies
+              .map((quoteCurrency) => String(quoteCurrency || "").trim().toUpperCase())
+              .filter(Boolean);
             nextEnabledQuoteCurrenciesByExchange[exchangeKey] = Array.from(new Set(sanitizedEnabledQuoteCurrencies));
           });
 
@@ -3330,6 +3334,199 @@
         return "";
       };
 
+      const renderPairSelectorMenuOptions = (supportedSymbols) => {
+        if (!pairSelectorMenuElement) {
+          return;
+        }
+
+        const normalizedSymbols = (Array.isArray(supportedSymbols) ? supportedSymbols : [])
+          .map((item) => {
+            if (typeof item === "string") {
+              const symbol = item.trim();
+              return symbol ? { symbol, display_symbol: symbol.replace("/", "") } : null;
+            }
+
+            if (item && typeof item === "object") {
+              const symbol = String(item.symbol || "").trim();
+              if (!symbol) {
+                return null;
+              }
+
+              const displaySymbol = String(item.display_symbol || symbol.replace("/", "")).trim();
+              return { symbol, display_symbol: displaySymbol || symbol.replace("/", "") };
+            }
+
+            return null;
+          })
+          .filter(Boolean);
+
+        if (normalizedSymbols.length === 0) {
+          return;
+        }
+
+        const fragment = document.createDocumentFragment();
+        normalizedSymbols.forEach((item) => {
+          const symbolButton = document.createElement("button");
+          symbolButton.type = "button";
+          symbolButton.className = "market-selector-menu-item";
+          symbolButton.dataset.symbol = item.symbol;
+          symbolButton.dataset.symbolQuote = getQuoteCurrencyFromSymbol(item.symbol);
+          symbolButton.setAttribute("role", "menuitem");
+          symbolButton.textContent = item.display_symbol;
+          fragment.appendChild(symbolButton);
+        });
+
+        pairSelectorMenuElement.innerHTML = "";
+        pairSelectorMenuElement.appendChild(fragment);
+        validSymbols = new Set(normalizedSymbols.map((item) => item.symbol));
+      };
+
+      const renderSettingsQuoteCurrencyOptions = (quoteCurrencies) => {
+        const quoteCurrencyGroupElement = settingsExchangeTimeframesPanelElement?.querySelector("[aria-label='Quote currency options']");
+        if (!quoteCurrencyGroupElement) {
+          return;
+        }
+
+        const normalizedQuoteCurrencies = Array.from(new Set(
+          (Array.isArray(quoteCurrencies) ? quoteCurrencies : [])
+            .map((quoteCurrency) => String(quoteCurrency || "").trim().toUpperCase())
+            .filter(Boolean),
+        ));
+
+        if (normalizedQuoteCurrencies.length === 0) {
+          return;
+        }
+
+        const fragment = document.createDocumentFragment();
+        normalizedQuoteCurrencies.forEach((quoteCurrency) => {
+          const safeIdPart = quoteCurrency.replace(/[^a-zA-Z0-9_-]/g, "-");
+          const checkboxId = `settings-quote-currency-${safeIdPart}`;
+          const optionLabelElement = document.createElement("label");
+          optionLabelElement.className = "settings-exchange-option";
+          optionLabelElement.setAttribute("for", checkboxId);
+
+          const checkboxElement = document.createElement("input");
+          checkboxElement.id = checkboxId;
+          checkboxElement.type = "checkbox";
+          checkboxElement.dataset.settingsEnabledQuoteCurrency = quoteCurrency;
+          checkboxElement.checked = true;
+
+          const labelTextElement = document.createElement("span");
+          labelTextElement.textContent = quoteCurrency;
+
+          optionLabelElement.appendChild(checkboxElement);
+          optionLabelElement.appendChild(labelTextElement);
+          fragment.appendChild(optionLabelElement);
+        });
+
+        quoteCurrencyGroupElement.innerHTML = "";
+        quoteCurrencyGroupElement.appendChild(fragment);
+        settingsQuoteCurrencyToggleElements = Array.from(quoteCurrencyGroupElement.querySelectorAll("[data-settings-enabled-quote-currency]"));
+        validQuoteCurrencies = new Set(
+          settingsQuoteCurrencyToggleElements.map((checkbox) => checkbox.dataset.settingsEnabledQuoteCurrency).filter(Boolean),
+        );
+      };
+
+      const renderSettingsTimeframeOptions = (timeframes) => {
+        const timeframeGroupElement = settingsExchangeTimeframesPanelElement?.querySelector("[aria-label='Timeframes options']");
+        if (!timeframeGroupElement) {
+          return;
+        }
+
+        const normalizedTimeframes = Array.from(new Set(
+          (Array.isArray(timeframes) ? timeframes : [])
+            .map((timeframe) => String(timeframe || "").trim())
+            .filter(Boolean),
+        ));
+
+        if (normalizedTimeframes.length === 0) {
+          return;
+        }
+
+        const fragment = document.createDocumentFragment();
+        normalizedTimeframes.forEach((timeframe) => {
+          const safeIdPart = timeframe.replace(/[^a-zA-Z0-9_-]/g, "-");
+          const checkboxId = `settings-timeframe-${safeIdPart}`;
+          const optionLabelElement = document.createElement("label");
+          optionLabelElement.className = "settings-exchange-option";
+          optionLabelElement.setAttribute("for", checkboxId);
+
+          const checkboxElement = document.createElement("input");
+          checkboxElement.id = checkboxId;
+          checkboxElement.type = "checkbox";
+          checkboxElement.dataset.settingsEnabledTimeframe = timeframe;
+          checkboxElement.checked = true;
+
+          const labelTextElement = document.createElement("span");
+          labelTextElement.textContent = timeframe;
+
+          optionLabelElement.appendChild(checkboxElement);
+          optionLabelElement.appendChild(labelTextElement);
+          fragment.appendChild(optionLabelElement);
+        });
+
+        timeframeGroupElement.innerHTML = "";
+        timeframeGroupElement.appendChild(fragment);
+        settingsTimeframeToggleElements = Array.from(timeframeGroupElement.querySelectorAll("[data-settings-enabled-timeframe]"));
+        validTimeframes = new Set(
+          settingsTimeframeToggleElements.map((checkbox) => checkbox.dataset.settingsEnabledTimeframe).filter(Boolean),
+        );
+      };
+
+      const applyPairSelectorQuoteCurrencyFilter = (options = {}) => {
+        if (!pairSelectorMenuElement) {
+          return false;
+        }
+
+        const selectedQuoteCurrencies = enabledQuoteCurrencies.size > 0
+          ? enabledQuoteCurrencies
+          : getEnabledQuoteCurrenciesForExchange(currentExchangeKey);
+        const symbolButtonElements = Array.from(pairSelectorMenuElement.querySelectorAll("[data-symbol]"));
+
+        symbolButtonElements.forEach((button) => {
+          const symbolQuote = (button.dataset.symbolQuote || getQuoteCurrencyFromSymbol(button.dataset.symbol || "")).toUpperCase();
+          button.hidden = selectedQuoteCurrencies.size > 0 && !selectedQuoteCurrencies.has(symbolQuote);
+        });
+
+        const visibleSymbols = symbolButtonElements
+          .filter((button) => !button.hidden)
+          .map((button) => button.dataset.symbol)
+          .filter(Boolean);
+        validSymbols = new Set(visibleSymbols);
+
+        const shouldSyncCurrentSymbol = options.syncCurrentSymbol !== false;
+        if (!shouldSyncCurrentSymbol || visibleSymbols.length === 0) {
+          setActiveSelectorMenuItem(pairSelectorMenuElement, "data-symbol", currentSymbol);
+          return false;
+        }
+
+        if (validSymbols.has(currentSymbol)) {
+          setActiveSelectorMenuItem(pairSelectorMenuElement, "data-symbol", currentSymbol);
+          return false;
+        }
+
+        const nextSymbol = visibleSymbols[0];
+        if (!nextSymbol) {
+          setActiveSelectorMenuItem(pairSelectorMenuElement, "data-symbol", currentSymbol);
+          return false;
+        }
+
+        currentSymbol = nextSymbol;
+        currentDisplaySymbol = nextSymbol.replace("/", "");
+        if (pairSelectorButtonElement) {
+          pairSelectorButtonElement.textContent = currentDisplaySymbol;
+        }
+
+        if (options.persistSymbol !== false) {
+          localStorage.setItem(symbolStorageKey, currentSymbol);
+          setPreferenceCookie("trade_wijs_symbol", currentSymbol);
+        }
+
+        setActiveSelectorMenuItem(pairSelectorMenuElement, "data-symbol", currentSymbol);
+        updateOrderInputQuoteCurrency();
+        return true;
+      };
+
       const updateOrderInputQuoteCurrency = () => {
         const quoteCurrency = getQuoteCurrencyFromSymbol(currentSymbol);
         const baseCurrency = getBaseCurrencyFromSymbol(currentSymbol);
@@ -4693,10 +4890,12 @@
         });
 
         if (!enabledTimeframes.has(currentTimeframe)) {
-          const fallbackTimeframe = Array.from(enabledTimeframes)[0] || currentTimeframe;
-          currentTimeframe = fallbackTimeframe;
-          localStorage.setItem(timeframeStorageKey, currentTimeframe);
-          setPreferenceCookie("trade_wijs_timeframe", currentTimeframe);
+          const fallbackTimeframe = Array.from(enabledTimeframes)[0];
+          if (fallbackTimeframe) {
+            currentTimeframe = fallbackTimeframe;
+            localStorage.setItem(timeframeStorageKey, currentTimeframe);
+            setPreferenceCookie("trade_wijs_timeframe", currentTimeframe);
+          }
         }
 
         setActiveTimeframeButton(currentTimeframe);
@@ -4811,12 +5010,22 @@
 
         enabledQuoteCurrenciesByExchange[targetExchangeKey] = Array.from(nextEnabledQuoteCurrencies);
 
+        let didChangeCurrentSymbol = false;
         if (targetExchangeKey === currentExchangeKey) {
           enabledQuoteCurrencies = nextEnabledQuoteCurrencies;
+          didChangeCurrentSymbol = applyPairSelectorQuoteCurrencyFilter();
         }
 
         persistEnabledQuoteCurrencies();
         applyEnabledQuoteCurrenciesToUI();
+
+        if (targetExchangeKey === currentExchangeKey && didChangeCurrentSymbol && options.refresh !== false) {
+          pendingRestoreLogicalRange = null;
+          hasFitContent = false;
+          setLoadingTimeframeButton(currentTimeframe);
+          refreshChartData({ priority: true, showUpdatingStatus: true });
+          scheduleNextRefresh();
+        }
       };
 
       const toggleAllQuoteCurrenciesForActiveExchange = () => {
@@ -7068,6 +7277,45 @@
         currentDisplaySymbol = marketData.display_symbol || currentDisplaySymbol;
         currentExchangeKey = marketData.exchange_key || currentExchangeKey;
         currentExchangeLabel = marketData.exchange || currentExchangeLabel;
+        if (Array.isArray(marketData.supported_timeframes)) {
+          renderSettingsTimeframeOptions(marketData.supported_timeframes);
+          enabledTimeframes = getEnabledTimeframesForExchange(currentExchangeKey);
+          if (enabledTimeframes.size === 0 && validTimeframes.size > 0) {
+            const defaultTimeframe = validTimeframes.has("1m") ? "1m" : Array.from(validTimeframes)[0];
+            if (defaultTimeframe) {
+              setEnabledTimeframes([defaultTimeframe], {
+                exchangeKey: currentExchangeKey,
+                refresh: false,
+              });
+              enabledTimeframes = getEnabledTimeframesForExchange(currentExchangeKey);
+            }
+          }
+
+          if (!enabledTimeframes.has(currentTimeframe) && enabledTimeframes.size > 0) {
+            currentTimeframe = enabledTimeframes.has("1m") ? "1m" : Array.from(enabledTimeframes)[0];
+            localStorage.setItem(timeframeStorageKey, currentTimeframe);
+            setPreferenceCookie("trade_wijs_timeframe", currentTimeframe);
+          }
+        }
+        if (Array.isArray(marketData.supported_symbols)) {
+          renderPairSelectorMenuOptions(marketData.supported_symbols);
+        }
+        if (Array.isArray(marketData.supported_quote_currencies)) {
+          renderSettingsQuoteCurrencyOptions(marketData.supported_quote_currencies);
+          enabledQuoteCurrencies = getEnabledQuoteCurrenciesForExchange(currentExchangeKey);
+          if (enabledQuoteCurrencies.size === 0 && validQuoteCurrencies.size > 0) {
+            const defaultQuoteCurrency = validQuoteCurrencies.has("USDT") ? "USDT" : Array.from(validQuoteCurrencies)[0];
+            if (defaultQuoteCurrency) {
+              setEnabledQuoteCurrencies([defaultQuoteCurrency], {
+                exchangeKey: currentExchangeKey,
+                refresh: false,
+              });
+            }
+          } else {
+            applyEnabledQuoteCurrenciesToUI();
+          }
+        }
+        applyPairSelectorQuoteCurrencyFilter({ syncCurrentSymbol: false, persistSymbol: false });
         updateOrderInputQuoteCurrency();
 
         if (pairSelectorButtonElement) {
@@ -7082,6 +7330,8 @@
 
         setActiveSelectorMenuItem(pairSelectorMenuElement, "data-symbol", currentSymbol);
         setActiveSelectorMenuItem(exchangeSelectorMenuElement, "data-exchange", currentExchangeKey);
+        applyEnabledTimeframesToUI();
+        applyEnabledQuoteCurrenciesToUI();
 
         if (marketTitleElement) {
           marketTitleElement.textContent = `${currentDisplaySymbol} Info`;
@@ -7318,7 +7568,9 @@
 
           currentExchangeKey = nextExchange;
           enabledTimeframes = getEnabledTimeframesForExchange(currentExchangeKey);
+          enabledQuoteCurrencies = getEnabledQuoteCurrenciesForExchange(currentExchangeKey);
           applyEnabledTimeframesToUI();
+          applyEnabledQuoteCurrenciesToUI();
           syncSettingsExchangeWithCurrentExchange();
           localStorage.setItem(exchangeStorageKey, currentExchangeKey);
           setPreferenceCookie("trade_wijs_exchange", currentExchangeKey);
@@ -8555,6 +8807,7 @@
       updateRsiDividerLabel(false);
       applyEnabledTimeframesToUI();
       applyEnabledQuoteCurrenciesToUI();
+      applyPairSelectorQuoteCurrencyFilter({ syncCurrentSymbol: false, persistSymbol: false });
       applyEnabledIndicatorsToUI();
       applyEnabledToolsToUI();
       applyDisplayTheme(activeDisplayTheme, { persist: false });

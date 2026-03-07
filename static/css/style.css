@@ -157,6 +157,22 @@ body {
 
 #pair-selector-menu {
   left: 168px;
+  max-height: 320px;
+  overflow-y: auto;
+  scrollbar-gutter: stable;
+}
+
+#pair-selector-menu::-webkit-scrollbar {
+  width: 8px;
+}
+
+#pair-selector-menu::-webkit-scrollbar-track {
+  background: var(--panel-2);
+}
+
+#pair-selector-menu::-webkit-scrollbar-thumb {
+  background: var(--border);
+  border-radius: 8px;
 }
 
 #exchange-selector-menu {
