@@ -11,7 +11,11 @@
   <div class="app-shell">
     <header class="topbar">
       <div class="brand">
-        <span class="brand-title">Trade Wijs</span>
+        <span class="brand-title-row">
+          <span class="brand-title">Trade Wijs</span>
+          <span class="brand-separator" aria-hidden="true">|</span>
+          <span id="refresh-status" class="refresh-status">Live</span>
+        </span>
         <span class="brand-version">v{{ app_version }}</span>
       </div>
       <div class="market-selectors">
@@ -56,7 +60,6 @@
             <path d="M6.5 3.5L11 8l-4.5 4.5" />
           </svg>
         </button>
-        <span id="refresh-status" class="refresh-status">Live</span>
       </div>
     </header>
 
@@ -5939,6 +5942,7 @@
             }
           }
 
+          const wasIndicatorActive = Boolean(indicatorState[indicatorName]);
           indicatorState[indicatorName] = !indicatorState[indicatorName];
           setIndicatorButtonState();
           redrawChart();
@@ -5946,6 +5950,11 @@
           updateScaleDividerLabel(false);
           updateStochDividerLabel(false);
           updateRsiDividerLabel(false);
+
+          const activeIndicatorCount = Object.values(indicatorState).filter(Boolean).length;
+          if (wasIndicatorActive && activeIndicatorCount === 0) {
+            refreshChartData({ priority: true, showUpdatingStatus: true });
+          }
         });
       }
 
