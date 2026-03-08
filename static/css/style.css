@@ -1155,6 +1155,34 @@ body {
   opacity: 0.98;
 }
 
+.chart-order-preview-clear-btn {
+  margin-left: auto;
+  width: 16px;
+  height: 16px;
+  border: 1px solid currentColor;
+  border-radius: 50%;
+  background: transparent;
+  color: inherit;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 10px;
+  font-weight: 700;
+  line-height: 1;
+  cursor: pointer;
+  opacity: 0.9;
+  padding: 0;
+}
+
+.chart-order-preview-clear-btn:hover {
+  opacity: 1;
+}
+
+.chart-order-preview-clear-btn:focus-visible {
+  outline: 2px solid currentColor;
+  outline-offset: 1px;
+}
+
 .chart-order-preview.is-warning {
   color: #d7a94b;
   background: rgba(215, 169, 75, 0.2);

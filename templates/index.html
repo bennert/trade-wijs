@@ -357,6 +357,7 @@
           <span id="chart-order-preview-side" class="chart-order-preview-side">Buy</span>
           <span id="chart-order-preview-details" class="chart-order-preview-details"></span>
           <span id="chart-order-preview-help" class="chart-order-preview-help"></span>
+          <button id="chart-order-preview-clear-btn" type="button" class="chart-order-preview-clear-btn" aria-label="Clear order price" title="Clear order price">x</button>
         </div>
         <div id="chart-stop-preview" class="chart-stop-preview" aria-hidden="true">
           <span class="chart-stop-preview-side">Stop</span>
@@ -558,6 +559,7 @@
       const chartOrderPreviewSideElement = document.getElementById("chart-order-preview-side");
       const chartOrderPreviewDetailsElement = document.getElementById("chart-order-preview-details");
       const chartOrderPreviewHelpElement = document.getElementById("chart-order-preview-help");
+      const chartOrderPreviewClearButtonElement = document.getElementById("chart-order-preview-clear-btn");
       const chartStopPreviewElement = document.getElementById("chart-stop-preview");
       const chartStopPreviewDetailsElement = document.getElementById("chart-stop-preview-details");
       const chartStopPreviewHelpElement = document.getElementById("chart-stop-preview-help");
@@ -2750,6 +2752,10 @@
         };
 
         chartOrderPreviewElement.addEventListener("mousedown", (event) => {
+          if (event.target instanceof Element && event.target.closest("#chart-order-preview-clear-btn")) {
+            return;
+          }
+
           if (!chartOrderPreviewElement.classList.contains("is-visible")) {
             return;
           }
@@ -2771,6 +2777,26 @@
 
         window.addEventListener("mouseup", stopChartOrderPreviewDrag);
         window.addEventListener("mouseleave", stopChartOrderPreviewDrag);
+      }
+
+      if (chartOrderPreviewClearButtonElement && orderPriceInputElement) {
+        chartOrderPreviewClearButtonElement.addEventListener("mousedown", (event) => {
+          event.preventDefault();
+          event.stopPropagation();
+        });
+
+        chartOrderPreviewClearButtonElement.addEventListener("click", (event) => {
+          event.preventDefault();
+          event.stopPropagation();
+
+          if (String(orderPriceInputElement.value || "").trim() === "") {
+            return;
+          }
+
+          orderPriceInputElement.value = "";
+          orderPriceInputElement.dispatchEvent(new Event("input", { bubbles: true }));
+          renderChartOrderPreview();
+        });
       }
 
       if (chartStopPreviewElement) {
