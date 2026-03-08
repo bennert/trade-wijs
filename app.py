@@ -15,6 +15,8 @@ app = Flask(__name__)
 MAX_CANDLES = 5000
 CACHE_TTL_SECONDS = 20
 _ohlcv_cache = {}
+SYMBOL_VOLUME_CACHE_TTL_SECONDS = 120
+_symbol_volume_cache = {}
 DEFAULT_SUPPORTED_TIMEFRAMES = ("1m", "3m", "5m", "15m", "1h", "4h", "1d", "1w", "1M")
 SUPPORTED_EXCHANGES = {
     exchange_id: {
@@ -72,6 +74,23 @@ def _extract_quote_currency_from_symbol(symbol):
 
     if "-" in normalized_symbol:
         return _normalize_quote_currency_candidate(normalized_symbol.rsplit("-", 1)[1])
+
+    return None
+
+
+def _extract_base_currency_from_symbol(symbol):
+    if not isinstance(symbol, str):
+        return None
+
+    normalized_symbol = symbol.strip().upper()
+    if not normalized_symbol:
+        return None
+
+    if "/" in normalized_symbol:
+        return _normalize_quote_currency_candidate(normalized_symbol.split("/", 1)[0])
+
+    if "-" in normalized_symbol:
+        return _normalize_quote_currency_candidate(normalized_symbol.rsplit("-", 1)[0])
 
     return None
 
@@ -430,6 +449,211 @@ def _format_compact_volume(value):
     return f"{number:.2f}"
 
 
+def _as_positive_finite_float(value):
+    try:
+        number = float(value)
+    except (TypeError, ValueError):
+        return None
+
+    if not math.isfinite(number) or number <= 0:
+        return None
+
+    return number
+
+
+def _fetch_symbol_quote_volume_usdt(exchange, supported_symbols):
+    exchange_id = getattr(exchange, "id", "exchange")
+    cache_key = f"{exchange_id}:symbol-quote-volume-usdt"
+    now = time.monotonic()
+    cached = _symbol_volume_cache.get(cache_key)
+    usdt_symbols = [
+        symbol
+        for symbol in supported_symbols
+        if _extract_quote_currency_from_symbol(symbol) == "USDT"
+    ]
+
+    if not usdt_symbols:
+        return {}
+
+    usdt_symbol_set = set(usdt_symbols)
+
+    def _normalize_symbol_token(value):
+        if not isinstance(value, str):
+            return ""
+        return re.sub(r"[^A-Z0-9]", "", value.upper())
+
+    normalized_symbol_lookup = {
+        _normalize_symbol_token(symbol): symbol
+        for symbol in usdt_symbols
+    }
+
+    markets_by_id = getattr(exchange, "markets_by_id", None)
+    markets = getattr(exchange, "markets", None)
+
+    def _resolve_supported_symbol(candidate):
+        if not isinstance(candidate, str):
+            return None
+
+        if candidate in usdt_symbol_set:
+            return candidate
+
+        mapped_market = None
+        if isinstance(markets_by_id, dict):
+            mapped_market = markets_by_id.get(candidate)
+            if isinstance(mapped_market, list):
+                mapped_market = mapped_market[0] if mapped_market else None
+            if isinstance(mapped_market, dict):
+                mapped_symbol = mapped_market.get("symbol")
+                if isinstance(mapped_symbol, str) and mapped_symbol in usdt_symbol_set:
+                    return mapped_symbol
+
+        if isinstance(markets, dict):
+            market_entry = markets.get(candidate)
+            if isinstance(market_entry, dict):
+                market_symbol = market_entry.get("symbol")
+                if isinstance(market_symbol, str) and market_symbol in usdt_symbol_set:
+                    return market_symbol
+
+        normalized = _normalize_symbol_token(candidate)
+        return normalized_symbol_lookup.get(normalized)
+
+    def _extract_quote_volume_from_ticker(ticker):
+        if not isinstance(ticker, dict):
+            return None
+
+        quote_volume = _as_positive_finite_float(ticker.get("quoteVolume"))
+        if quote_volume is not None:
+            return quote_volume
+
+        info = ticker.get("info")
+        if isinstance(info, dict):
+            for key in ("turnover24h", "quoteVolume", "quote_volume", "volCcy24h", "volumeQuote"):
+                quote_volume = _as_positive_finite_float(info.get(key))
+                if quote_volume is not None:
+                    return quote_volume
+
+        base_volume = _as_positive_finite_float(ticker.get("baseVolume"))
+        last_price = _as_positive_finite_float(ticker.get("last"))
+        if last_price is None:
+            last_price = _as_positive_finite_float(ticker.get("close"))
+
+        if base_volume is not None and last_price is not None:
+            return base_volume * last_price
+
+        return None
+
+    if cached and (now - cached["fetched_at"] < SYMBOL_VOLUME_CACHE_TTL_SECONDS):
+        cached_volumes = cached.get("volumes") or {}
+        return {
+            symbol: cached_volumes.get(symbol)
+            for symbol in usdt_symbols
+            if cached_volumes.get(symbol) is not None
+        }
+
+    volumes_by_symbol = {}
+    tickers = {}
+
+    try:
+        tickers = exchange.fetch_tickers(list(usdt_symbols))
+    except (TypeError, ccxt.ExchangeError, ccxt.NetworkError, ccxt.RequestTimeout, OSError):
+        try:
+            tickers = exchange.fetch_tickers()
+        except (TypeError, ccxt.ExchangeError, ccxt.NetworkError, ccxt.RequestTimeout, OSError):
+            tickers = {}
+
+    if isinstance(tickers, dict):
+        for key, ticker in tickers.items():
+            candidate_symbols = []
+            if isinstance(key, str):
+                candidate_symbols.append(key)
+
+            if isinstance(ticker, dict):
+                for candidate in (
+                    ticker.get("symbol"),
+                    (ticker.get("info") or {}).get("symbol") if isinstance(ticker.get("info"), dict) else None,
+                    (ticker.get("info") or {}).get("market") if isinstance(ticker.get("info"), dict) else None,
+                ):
+                    if isinstance(candidate, str):
+                        candidate_symbols.append(candidate)
+
+            resolved_symbol = None
+            for candidate in candidate_symbols:
+                resolved_symbol = _resolve_supported_symbol(candidate)
+                if resolved_symbol:
+                    break
+
+            if not resolved_symbol:
+                continue
+
+            quote_volume = _extract_quote_volume_from_ticker(ticker)
+            if quote_volume is None:
+                continue
+
+            existing_volume = _as_positive_finite_float(volumes_by_symbol.get(resolved_symbol))
+            if existing_volume is None or quote_volume > existing_volume:
+                volumes_by_symbol[resolved_symbol] = quote_volume
+
+    if not volumes_by_symbol and cached:
+        cached_volumes = cached.get("volumes") or {}
+        return {
+            symbol: cached_volumes.get(symbol)
+            for symbol in usdt_symbols
+            if cached_volumes.get(symbol) is not None
+        }
+
+    _symbol_volume_cache[cache_key] = {
+        "fetched_at": now,
+        "volumes": volumes_by_symbol,
+    }
+
+    return {
+        symbol: volumes_by_symbol.get(symbol)
+        for symbol in usdt_symbols
+        if volumes_by_symbol.get(symbol) is not None
+    }
+
+
+def _build_supported_symbol_items(supported_symbols, quote_volumes_by_symbol=None):
+    volumes = quote_volumes_by_symbol if isinstance(quote_volumes_by_symbol, dict) else {}
+    items = []
+    best_volume_by_pair = {}
+
+    for symbol, volume_value in volumes.items():
+        normalized_volume = _as_positive_finite_float(volume_value)
+        if normalized_volume is None:
+            continue
+
+        base_currency = _extract_base_currency_from_symbol(symbol)
+        quote_currency = _extract_quote_currency_from_symbol(symbol)
+        if not base_currency or not quote_currency:
+            continue
+
+        pair_key = (base_currency, quote_currency)
+        existing_best = best_volume_by_pair.get(pair_key)
+        if existing_best is None or normalized_volume > existing_best:
+            best_volume_by_pair[pair_key] = normalized_volume
+
+    for supported_symbol in supported_symbols:
+        volume_24h_usdt = volumes.get(supported_symbol)
+        if _as_positive_finite_float(volume_24h_usdt) is None:
+            base_currency = _extract_base_currency_from_symbol(supported_symbol)
+            quote_currency = _extract_quote_currency_from_symbol(supported_symbol)
+            if base_currency and quote_currency:
+                volume_24h_usdt = best_volume_by_pair.get((base_currency, quote_currency))
+
+        normalized_volume = _as_positive_finite_float(volume_24h_usdt)
+        items.append(
+            {
+                "symbol": supported_symbol,
+                "display_symbol": supported_symbol.replace("/", ""),
+                "quote_volume_24h_usdt": normalized_volume,
+                "quote_volume_24h_usdt_compact": _format_compact_volume(normalized_volume) if normalized_volume else "-",
+            }
+        )
+
+    return items
+
+
 def _get_git_version():
     env_version = (os.getenv("APP_VERSION") or "").strip()
     if env_version:
@@ -604,6 +828,7 @@ def _fetch_chart_payload(timeframe=None, exchange_key=None, symbol=None):
     price_step = None
     amount_precision = None
     price_precision = None
+    symbol_quote_volumes_usdt = {}
 
     try:
         exchange = exchange_class({"enableRateLimit": True})
@@ -614,6 +839,7 @@ def _fetch_chart_payload(timeframe=None, exchange_key=None, symbol=None):
         if quote_currencies:
             supported_quote_currencies = quote_currencies
         selected_symbol = _normalize_symbol(symbol, supported_symbols)
+        symbol_quote_volumes_usdt = _fetch_symbol_quote_volume_usdt(exchange, supported_symbols)
         (
             amount_step,
             amount_min,
@@ -647,8 +873,8 @@ def _fetch_chart_payload(timeframe=None, exchange_key=None, symbol=None):
             for key, metadata in SUPPORTED_EXCHANGES.items()
         ],
         "supported_symbols": [
-            {"symbol": supported_symbol, "display_symbol": supported_symbol.replace("/", "")}
-            for supported_symbol in supported_symbols
+            item
+            for item in _build_supported_symbol_items(supported_symbols, symbol_quote_volumes_usdt)
         ],
         "supported_timeframes": supported_timeframes,
         "supported_quote_currencies": supported_quote_currencies,
@@ -838,6 +1064,7 @@ def _fetch_exchange_settings_options_payload(exchange_key=None):
             if isinstance(supported_symbol, str) and "/" in supported_symbol
         }
     )
+    symbol_quote_volumes_usdt = {}
     error = None
 
     try:
@@ -848,6 +1075,7 @@ def _fetch_exchange_settings_options_payload(exchange_key=None):
         quote_currencies = _get_supported_quote_currencies(exchange, supported_symbols)
         if quote_currencies:
             supported_quote_currencies = quote_currencies
+        symbol_quote_volumes_usdt = _fetch_symbol_quote_volume_usdt(exchange, supported_symbols)
     except (
         ccxt.RequestTimeout,
         ccxt.NetworkError,
@@ -860,7 +1088,7 @@ def _fetch_exchange_settings_options_payload(exchange_key=None):
 
     return {
         "exchange_key": selected_exchange_key,
-        "supported_symbols": supported_symbols,
+        "supported_symbols": _build_supported_symbol_items(supported_symbols, symbol_quote_volumes_usdt),
         "supported_timeframes": supported_timeframes,
         "supported_quote_currencies": supported_quote_currencies,
         "error": error,

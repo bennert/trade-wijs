@@ -47,6 +47,8 @@
               type="button"
               class="market-selector-menu-item{% if item.symbol == market_data.symbol %} is-active{% endif %}"
               data-symbol="{{ item.symbol }}"
+              data-symbol-volume-24h-usdt="{{ item.quote_volume_24h_usdt if item.quote_volume_24h_usdt is not none else '' }}"
+              data-symbol-volume-24h-usdt-compact="{{ item.quote_volume_24h_usdt_compact if item.quote_volume_24h_usdt_compact else '-' }}"
               role="menuitem"
             >
               {{ item.display_symbol }}
@@ -87,13 +89,6 @@
     <section id="settings-panel" class="settings-panel" aria-label="Settings panel">
       <div class="settings-shell">
         <aside class="settings-categories" aria-label="Settings categories">
-          <button type="button" class="settings-category-tab" data-settings-category="general">
-            <svg class="settings-category-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
-              <circle cx="12" cy="12" r="3"></circle>
-              <path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 0 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 0 1-4 0v-.2a1.7 1.7 0 0 0-1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 0 1 0-4h.2a1.7 1.7 0 0 0 1.5-1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 0 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3h.1a1.7 1.7 0 0 0 1-1.5V3a2 2 0 0 1 4 0v.2a1.7 1.7 0 0 0 1 1.5h.1a1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 0 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8v.1a1.7 1.7 0 0 0 1.5 1H21a2 2 0 0 1 0 4h-.2a1.7 1.7 0 0 0-1.5 1Z"></path>
-            </svg>
-            <span>General</span>
-          </button>
           <button type="button" class="settings-category-tab is-active" aria-current="page" data-settings-category="exchanges">
             <svg class="settings-category-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
               <rect x="4" y="6" width="16" height="5" rx="1"></rect>
@@ -102,6 +97,13 @@
               <circle cx="15" cy="15.5" r="1"></circle>
             </svg>
             <span>Exchanges</span>
+          </button>
+          <button type="button" class="settings-category-tab" data-settings-category="general">
+            <svg class="settings-category-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+              <circle cx="12" cy="12" r="3"></circle>
+              <path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 0 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 0 1-4 0v-.2a1.7 1.7 0 0 0-1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 0 1 0-4h.2a1.7 1.7 0 0 0 1.5-1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 0 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3h.1a1.7 1.7 0 0 0 1-1.5V3a2 2 0 0 1 4 0v.2a1.7 1.7 0 0 0 1 1.5h.1a1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 0 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8v.1a1.7 1.7 0 0 0 1.5 1H21a2 2 0 0 1 0 4h-.2a1.7 1.7 0 0 0-1.5 1Z"></path>
+            </svg>
+            <span>General</span>
           </button>
         </aside>
         <aside class="settings-tabs settings-middle-section is-active" aria-label="Exchange tabs" data-settings-middle-section="exchanges">
@@ -252,9 +254,10 @@
                 </div>
                 <div class="settings-checkbox-list settings-pairs-list" role="group" aria-label="Pairs options">
                   {% for symbol_item in market_data.supported_symbols %}
-                    <label class="settings-exchange-option settings-exchange-option--inline" for="settings-pair-{{ symbol_item.symbol|replace('/', '-') }}" title="{{ symbol_item.symbol }}">
+                    <label class="settings-exchange-option settings-exchange-option--inline" for="settings-pair-{{ symbol_item.symbol|replace('/', '-') }}" title="{{ symbol_item.symbol }}" data-settings-pair-volume-sort="{% if symbol_item.quote_volume_24h_usdt is not none and symbol_item.quote_volume_24h_usdt > 0 %}{{ -symbol_item.quote_volume_24h_usdt }}{% endif %}">
                       <input id="settings-pair-{{ symbol_item.symbol|replace('/', '-') }}" type="checkbox" data-settings-enabled-pair="{{ symbol_item.symbol }}" checked />
-                      <span>{{ symbol_item.display_symbol }}</span>
+                      <span class="settings-pair-label">{{ symbol_item.display_symbol }}</span>
+                      <span class="settings-pair-volume">{% if symbol_item.quote_volume_24h_usdt is not none and symbol_item.quote_volume_24h_usdt > 0 %}{{ "{:,.0f}".format(symbol_item.quote_volume_24h_usdt) }} USDT{% else %}-{% endif %}</span>
                     </label>
                   {% endfor %}
                 </div>
@@ -3090,6 +3093,15 @@
         refreshStatusElement.classList.add(state);
       };
 
+      const formatUpdatingStatusText = (itemLabel) => {
+        const normalizedLabel = String(itemLabel || "").trim();
+        if (!normalizedLabel) {
+          return "Updating...";
+        }
+
+        return `Updating ${normalizedLabel}`;
+      };
+
       const formatPriceGuideValue = (value) => {
         const numericValue = Number(value);
         if (!Number.isFinite(numericValue)) {
@@ -3564,6 +3576,8 @@
               symbol,
               display_symbol: symbol.replace("/", ""),
               quote: getQuoteCurrencyFromSymbol(symbol),
+              quote_volume_24h_usdt: null,
+              quote_volume_24h_usdt_compact: "-",
             };
           }
 
@@ -3574,10 +3588,16 @@
             }
 
             const displaySymbol = String(item.display_symbol || symbol.replace("/", "")).trim();
+            const quoteVolumeUsdt = Number(item.quote_volume_24h_usdt);
+            const quoteVolumeCompactCandidate = String(item.quote_volume_24h_usdt_compact || "").trim();
+            const quoteVolumeCompact = quoteVolumeCompactCandidate
+              || (Number.isFinite(quoteVolumeUsdt) && quoteVolumeUsdt > 0 ? formatCompactVolume(quoteVolumeUsdt) : "-");
             return {
               symbol,
               display_symbol: displaySymbol || symbol.replace("/", ""),
               quote: getQuoteCurrencyFromSymbol(symbol),
+              quote_volume_24h_usdt: Number.isFinite(quoteVolumeUsdt) && quoteVolumeUsdt > 0 ? quoteVolumeUsdt : null,
+              quote_volume_24h_usdt_compact: quoteVolumeCompact,
             };
           }
 
@@ -3585,10 +3605,21 @@
         })
         .filter(Boolean);
 
+      const formatPairVolumeLabel = (symbolOption) => {
+        const volumeValue = Number(symbolOption?.quote_volume_24h_usdt);
+        if (Number.isFinite(volumeValue) && volumeValue > 0) {
+          return `${Math.round(volumeValue).toLocaleString("en-US")} USDT`;
+        }
+
+        return "-";
+      };
+
       availableSymbolsByExchange[currentExchangeKey] = normalizeSupportedSymbolOptions(
         Array.from(pairSelectorMenuElement?.querySelectorAll("[data-symbol]") || []).map((button) => ({
           symbol: button.dataset.symbol,
           display_symbol: (button.textContent || "").trim(),
+          quote_volume_24h_usdt: button.dataset.symbolVolume24hUsdt,
+          quote_volume_24h_usdt_compact: button.dataset.symbolVolume24hUsdtCompact,
         })),
       );
 
@@ -3671,7 +3702,17 @@
           settingsTogglePairsButtonElement.disabled = !isSettingsExchangeEnabled || validSettingsPairs.size === 0;
         }
 
-        sortSettingsOptionRows(settingsPairsListElement, "[data-settings-enabled-pair]");
+        sortSettingsOptionRows(settingsPairsListElement, "[data-settings-enabled-pair]", {
+          prioritizeChecked: false,
+          getSortValue: (_labelText, rowElement) => {
+            const rawSortValue = rowElement?.dataset?.settingsPairVolumeSort;
+            const numericSortValue = Number(rawSortValue);
+            return Number.isFinite(numericSortValue)
+              ? numericSortValue
+              : Number.POSITIVE_INFINITY;
+          },
+          getTieBreakValue: (_labelText, rowElement) => String(rowElement?.title || "").toLowerCase(),
+        });
       };
 
       const setEnabledPairs = (pairs, options = {}) => {
@@ -3711,7 +3752,7 @@
           pendingRestoreLogicalRange = null;
           hasFitContent = false;
           setLoadingTimeframeButton(currentTimeframe);
-          refreshChartData({ priority: true, showUpdatingStatus: true });
+          refreshChartData({ priority: true, showUpdatingStatus: true, updatingLabel: "pairs" });
           scheduleNextRefresh();
         }
       };
@@ -3756,6 +3797,10 @@
           const checkboxId = `settings-pair-${item.symbol.replace(/[^a-zA-Z0-9_-]/g, "-")}`;
           optionLabelElement.setAttribute("for", checkboxId);
           optionLabelElement.title = item.symbol;
+          const pairVolumeSortValue = Number(item.quote_volume_24h_usdt);
+          optionLabelElement.dataset.settingsPairVolumeSort = Number.isFinite(pairVolumeSortValue) && pairVolumeSortValue > 0
+            ? String(-pairVolumeSortValue)
+            : "";
 
           const checkboxElement = document.createElement("input");
           checkboxElement.id = checkboxId;
@@ -3764,10 +3809,16 @@
           checkboxElement.checked = enabledPairsForExchange.has(item.symbol);
 
           const labelTextElement = document.createElement("span");
+          labelTextElement.className = "settings-pair-label";
           labelTextElement.textContent = item.display_symbol;
+
+          const volumeTextElement = document.createElement("span");
+          volumeTextElement.className = "settings-pair-volume";
+          volumeTextElement.textContent = formatPairVolumeLabel(item);
 
           optionLabelElement.appendChild(checkboxElement);
           optionLabelElement.appendChild(labelTextElement);
+          optionLabelElement.appendChild(volumeTextElement);
           fragment.appendChild(optionLabelElement);
         });
 
@@ -3789,10 +3840,12 @@
         renderSettingsPairsForExchange(exchangeKey);
       };
 
-      const loadSettingsOptionsForExchange = async (exchangeKey) => {
+      const loadSettingsOptionsForExchange = async (exchangeKey, options = {}) => {
         if (!validExchangeKeys.has(exchangeKey)) {
           return;
         }
+
+        const forceReload = options.forceReload === true;
 
         const hasCachedTimeframes = Array.isArray(availableTimeframesByExchange[exchangeKey])
           && availableTimeframesByExchange[exchangeKey].length > 0;
@@ -3800,8 +3853,13 @@
           && availableQuoteCurrenciesByExchange[exchangeKey].length > 0;
         const hasCachedSymbols = Array.isArray(availableSymbolsByExchange[exchangeKey])
           && availableSymbolsByExchange[exchangeKey].length > 0;
-        if (hasCachedTimeframes && hasCachedQuoteCurrencies && hasCachedSymbols) {
+        if (!forceReload && hasCachedTimeframes && hasCachedQuoteCurrencies && hasCachedSymbols) {
           return;
+        }
+
+        const shouldShowUpdatingStatus = options.showUpdatingStatus === true;
+        if (shouldShowUpdatingStatus) {
+          setRefreshStatus(formatUpdatingStatusText(options.updatingLabel || "exchange settings"), "is-updating");
         }
 
         const requestId = ++settingsOptionsRequestId;
@@ -3826,6 +3884,10 @@
             applyEnabledQuoteCurrenciesToUI();
           }
         } catch (_error) {
+        } finally {
+          if (shouldShowUpdatingStatus) {
+            setRefreshStatus("Live", "is-live");
+          }
         }
       };
 
@@ -3847,6 +3909,8 @@
           symbolButton.className = "market-selector-menu-item";
           symbolButton.dataset.symbol = item.symbol;
           symbolButton.dataset.symbolQuote = getQuoteCurrencyFromSymbol(item.symbol);
+          symbolButton.dataset.symbolVolume24hUsdt = item.quote_volume_24h_usdt || "";
+          symbolButton.dataset.symbolVolume24hUsdtCompact = item.quote_volume_24h_usdt_compact || "-";
           symbolButton.setAttribute("role", "menuitem");
           symbolButton.textContent = item.display_symbol;
           fragment.appendChild(symbolButton);
@@ -5277,7 +5341,10 @@
         applyEnabledTimeframesToUI();
         applyEnabledQuoteCurrenciesToUI();
         applySettingsExchangeEditableState();
-        loadSettingsOptionsForExchange(activeSettingsExchangeKey);
+        loadSettingsOptionsForExchange(activeSettingsExchangeKey, {
+          showUpdatingStatus: currentAppViewMode === "settings",
+          updatingLabel: "exchange settings",
+        });
 
         try {
           localStorage.setItem(settingsExchangeStorageKey, activeSettingsExchangeKey);
@@ -5401,8 +5468,14 @@
           return;
         }
 
+        const prioritizeChecked = options.prioritizeChecked !== false;
+
         const getSortValue = typeof options.getSortValue === "function"
           ? options.getSortValue
+          : (labelText) => String(labelText || "").trim().toLowerCase();
+
+        const getTieBreakValue = typeof options.getTieBreakValue === "function"
+          ? options.getTieBreakValue
           : (labelText) => String(labelText || "").trim().toLowerCase();
 
         const optionRows = Array.from(containerElement.querySelectorAll("label"));
@@ -5412,7 +5485,7 @@
           const leftChecked = Boolean(leftCheckbox?.checked);
           const rightChecked = Boolean(rightCheckbox?.checked);
 
-          if (leftChecked !== rightChecked) {
+          if (prioritizeChecked && leftChecked !== rightChecked) {
             return leftChecked ? -1 : 1;
           }
 
@@ -5420,8 +5493,8 @@
           const rightLabelRaw = (rightRow.querySelector("span")?.textContent || rightRow.textContent || "").trim();
           const leftLabel = leftLabelRaw.toLowerCase();
           const rightLabel = rightLabelRaw.toLowerCase();
-          const leftSortValue = getSortValue(leftLabelRaw);
-          const rightSortValue = getSortValue(rightLabelRaw);
+          const leftSortValue = getSortValue(leftLabelRaw, leftRow);
+          const rightSortValue = getSortValue(rightLabelRaw, rightRow);
 
           const leftNumber = Number(leftSortValue);
           const rightNumber = Number(rightSortValue);
@@ -5432,6 +5505,12 @@
 
           if (String(leftSortValue) !== String(rightSortValue)) {
             return String(leftSortValue).localeCompare(String(rightSortValue));
+          }
+
+          const leftTieBreakValue = String(getTieBreakValue(leftLabelRaw, leftRow) || "").trim().toLowerCase();
+          const rightTieBreakValue = String(getTieBreakValue(rightLabelRaw, rightRow) || "").trim().toLowerCase();
+          if (leftTieBreakValue !== rightTieBreakValue) {
+            return leftTieBreakValue.localeCompare(rightTieBreakValue);
           }
 
           return leftLabel.localeCompare(rightLabel);
@@ -5501,7 +5580,7 @@
           pendingRestoreLogicalRange = null;
           hasFitContent = false;
           setLoadingTimeframeButton(currentTimeframe);
-          refreshChartData({ priority: true, showUpdatingStatus: true });
+          refreshChartData({ priority: true, showUpdatingStatus: true, updatingLabel: "exchanges" });
           scheduleNextRefresh();
         }
       };
@@ -5632,7 +5711,7 @@
           }
 
           setLoadingTimeframeButton(currentTimeframe);
-          refreshChartData({ priority: true, showUpdatingStatus: true });
+          refreshChartData({ priority: true, showUpdatingStatus: true, updatingLabel: "timeframes" });
           scheduleNextRefresh();
         }
       };
@@ -5697,11 +5776,23 @@
         persistEnabledPairs();
         applyEnabledQuoteCurrenciesToUI();
 
+        if (
+          targetExchangeKey === activeSettingsExchangeKey
+          && currentAppViewMode === "settings"
+          && !didChangeCurrentSymbol
+        ) {
+          loadSettingsOptionsForExchange(targetExchangeKey, {
+            forceReload: true,
+            showUpdatingStatus: true,
+            updatingLabel: "24h volumes",
+          });
+        }
+
         if (targetExchangeKey === currentExchangeKey && didChangeCurrentSymbol && options.refresh !== false) {
           pendingRestoreLogicalRange = null;
           hasFitContent = false;
           setLoadingTimeframeButton(currentTimeframe);
-          refreshChartData({ priority: true, showUpdatingStatus: true });
+          refreshChartData({ priority: true, showUpdatingStatus: true, updatingLabel: "quote currencies" });
           scheduleNextRefresh();
         }
       };
@@ -8077,6 +8168,7 @@
       const refreshChartData = async (options = {}) => {
         const isPriority = options.priority === true;
         const showUpdatingStatus = options.showUpdatingStatus === true;
+        const updatingLabel = options.updatingLabel;
 
         if (!isPriority && drawLineMode) {
           return;
@@ -8095,7 +8187,7 @@
         const requestedTimeframe = currentTimeframe;
         setLoadingTimeframeButton(requestedTimeframe);
         if (showUpdatingStatus) {
-          setRefreshStatus("Updating...", "is-updating");
+          setRefreshStatus(formatUpdatingStatusText(updatingLabel), "is-updating");
         }
 
         try {

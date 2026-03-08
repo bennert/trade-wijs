@@ -660,7 +660,20 @@ body {
 }
 
 .settings-exchange-option--inline {
+  width: 100%;
   white-space: nowrap;
+}
+
+.settings-pair-label {
+  min-width: 0;
+}
+
+.settings-pair-volume {
+  margin-left: auto;
+  text-align: right;
+  min-width: 96px;
+  font-variant-numeric: tabular-nums;
+  color: var(--text);
 }
 
 .settings-exchange-option input[type="checkbox"] {
