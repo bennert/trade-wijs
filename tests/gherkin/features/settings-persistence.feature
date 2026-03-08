@@ -36,3 +36,22 @@ Feature: Settings persistence after reload
       | generalTab | settingType |
       | indicators | indicator   |
       | tools      | tool        |
+
+  Scenario Outline: Pair 24h volumes remain visible after reload
+    Given the Trade Wijs homepage
+    When I open the homepage
+    And I open the settings view
+    And I open the exchanges settings category
+    And I open the exchange settings tab for <exchangeKey>
+    Then at least 1 pair 24h volume label is visible
+    And I remember the pair 24h volume snapshot
+    When I reload the page
+    And I open the settings view
+    And I open the exchanges settings category
+    And I open the exchange settings tab for <exchangeKey>
+    Then at least 1 pair 24h volume label is visible
+    And the remembered pair 24h volume snapshot is still visible
+
+    Examples:
+      | exchangeKey |
+      | binance     |

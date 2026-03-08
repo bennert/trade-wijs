@@ -83,9 +83,23 @@ When('I toggle one {word} setting option', async function (settingType) {
   let options = this.page.locator(config.selector);
 
   if (['pair', 'quote', 'timeframe'].includes(settingType)) {
-    await this.page.waitForFunction(({ selector }) => {
-      return document.querySelectorAll(selector).length > 0;
-    }, { selector: config.selector }, { timeout: 20000 });
+    const waitForOptions = async (timeoutMs) => {
+      await this.page.waitForFunction(({ selector }) => {
+        return document.querySelectorAll(selector).length > 0;
+      }, { selector: config.selector }, { timeout: timeoutMs });
+    };
+
+    try {
+      await waitForOptions(10000);
+    } catch (_error) {
+      const activeExchangeTab = this.page.locator('[data-settings-exchange].is-active').first();
+      if (await activeExchangeTab.count()) {
+        await activeExchangeTab.click();
+        await this.page.waitForTimeout(250);
+      }
+      await waitForOptions(20000);
+    }
+
     options = this.page.locator(config.selector);
   }
 
@@ -293,4 +307,77 @@ Then('the {word} setting option remains changed after reload', async function (s
     toggledSetting.expectedChecked,
     `Expected ${settingType} setting '${toggledSetting.key}' to persist as ${toggledSetting.expectedChecked}, got ${isChecked}.`,
   );
+});
+
+Then('at least {int} pair 24h volume label is visible', async function (minimumCount) {
+  await this.page.waitForFunction((targetMinimumCount) => {
+    const volumeLabels = Array.from(document.querySelectorAll('.settings-pair-volume'));
+    return volumeLabels.length >= targetMinimumCount;
+  }, minimumCount, { timeout: 30000 });
+
+  const labels = this.page.locator('.settings-pair-volume');
+  const count = await labels.count();
+  assert.ok(count >= minimumCount, `Expected at least ${minimumCount} pair volume label(s), got ${count}.`);
+});
+
+Then('I remember the pair 24h volume snapshot', async function () {
+  const snapshot = await this.page.evaluate(() => {
+    const rows = Array.from(document.querySelectorAll('[data-settings-enabled-pair]'));
+    return rows
+      .map((checkbox) => {
+        const symbol = checkbox.getAttribute('data-settings-enabled-pair');
+        if (!symbol) {
+          return null;
+        }
+
+        const rowLabel = checkbox.closest('label.settings-exchange-option--inline');
+        const volumeElement = rowLabel ? rowLabel.querySelector('.settings-pair-volume') : null;
+        const volumeText = volumeElement ? (volumeElement.textContent || '').trim() : '';
+        if (!volumeText) {
+          return null;
+        }
+
+        return {
+          symbol,
+          volumeText,
+        };
+      })
+      .filter(Boolean)
+      .slice(0, 10);
+  });
+
+  assert.ok(Array.isArray(snapshot) && snapshot.length > 0, 'Expected to capture at least one pair 24h volume snapshot entry.');
+  this.pairVolumeSnapshot = snapshot;
+});
+
+Then('the remembered pair 24h volume snapshot is still visible', async function () {
+  const snapshot = this.pairVolumeSnapshot;
+  assert.ok(Array.isArray(snapshot) && snapshot.length > 0, 'No remembered pair volume snapshot to validate.');
+
+  const currentSnapshot = await this.page.evaluate(() => {
+    const rows = Array.from(document.querySelectorAll('[data-settings-enabled-pair]'));
+    const map = {};
+    rows.forEach((checkbox) => {
+      const symbol = checkbox.getAttribute('data-settings-enabled-pair');
+      if (!symbol) {
+        return;
+      }
+
+      const rowLabel = checkbox.closest('label.settings-exchange-option--inline');
+      const volumeElement = rowLabel ? rowLabel.querySelector('.settings-pair-volume') : null;
+      const volumeText = volumeElement ? (volumeElement.textContent || '').trim() : '';
+      map[symbol] = volumeText;
+    });
+    return map;
+  });
+
+  let matches = 0;
+  for (const entry of snapshot) {
+    const currentValue = String(currentSnapshot?.[entry.symbol] || '').trim();
+    if (currentValue && currentValue === entry.volumeText) {
+      matches += 1;
+    }
+  }
+
+  assert.ok(matches >= 1, `Expected at least 1 remembered pair volume entry to match after reload, got ${matches}.`);
 });
