@@ -592,6 +592,7 @@
       const settingsExchangeLabelElement = document.getElementById("settings-exchange-label");
       const settingsExchangeTabElements = Array.from(document.querySelectorAll("[data-settings-exchange]"));
       const settingsExchangeToggleElements = Array.from(document.querySelectorAll("[data-settings-enabled-exchange]"));
+      const settingsExchangesListElement = settingsPanelElement?.querySelector(".settings-exchanges-list") || null;
       let settingsTimeframeToggleElements = Array.from(document.querySelectorAll("[data-settings-enabled-timeframe]"));
       let settingsQuoteCurrencyToggleElements = Array.from(document.querySelectorAll("[data-settings-enabled-quote-currency]"));
       const settingsToggleTimeframesButtonElement = document.getElementById("settings-toggle-timeframes-btn");
@@ -5033,6 +5034,32 @@
         return (exchangeMenuItem?.dataset.exchangeLabel || exchangeMenuItem?.textContent || "").trim();
       };
 
+      const sortSettingsExchangeRows = () => {
+        if (!settingsExchangesListElement) {
+          return;
+        }
+
+        const exchangeRows = Array.from(settingsExchangesListElement.querySelectorAll("[data-settings-exchange-row]"));
+        exchangeRows.sort((leftRow, rightRow) => {
+          const leftCheckbox = leftRow.querySelector("[data-settings-enabled-exchange]");
+          const rightCheckbox = rightRow.querySelector("[data-settings-enabled-exchange]");
+          const leftChecked = Boolean(leftCheckbox?.checked);
+          const rightChecked = Boolean(rightCheckbox?.checked);
+
+          if (leftChecked !== rightChecked) {
+            return leftChecked ? -1 : 1;
+          }
+
+          const leftLabel = (leftRow.querySelector("[data-settings-exchange]")?.textContent || "").trim().toLowerCase();
+          const rightLabel = (rightRow.querySelector("[data-settings-exchange]")?.textContent || "").trim().toLowerCase();
+          return leftLabel.localeCompare(rightLabel);
+        });
+
+        exchangeRows.forEach((rowElement) => {
+          settingsExchangesListElement.appendChild(rowElement);
+        });
+      };
+
       const applyEnabledExchangesToUI = () => {
         const previousExchangeKey = currentExchangeKey;
 
@@ -5044,6 +5071,7 @@
         settingsExchangeToggleElements.forEach((checkbox) => {
           checkbox.checked = enabledExchangeKeys.has(checkbox.dataset.settingsEnabledExchange);
         });
+        sortSettingsExchangeRows();
 
         if (!enabledExchangeKeys.has(currentExchangeKey)) {
           const fallbackExchangeKey = Array.from(enabledExchangeKeys)[0] || currentExchangeKey;
