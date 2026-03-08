@@ -64,13 +64,14 @@ def ensure_schema():
             )
             cursor.execute(
                 """
-                CREATE TABLE IF NOT EXISTS chart_payload_cache (
+                CREATE TABLE IF NOT EXISTS chart_payload_cache_v2 (
                     exchange_key TEXT NOT NULL,
                     symbol TEXT NOT NULL,
                     timeframe TEXT NOT NULL,
+                    payload_mode TEXT NOT NULL,
                     payload_json TEXT NOT NULL,
                     updated_at_unix BIGINT NOT NULL,
-                    PRIMARY KEY (exchange_key, symbol, timeframe)
+                    PRIMARY KEY (exchange_key, symbol, timeframe, payload_mode)
                 )
                 """
             )
@@ -195,7 +196,7 @@ def get_exchange_settings_payload(exchange_key, max_age_seconds=120):
     return payload if isinstance(payload, dict) else None
 
 
-def upsert_chart_payload(exchange_key, symbol, timeframe, payload):
+def upsert_chart_payload(exchange_key, symbol, timeframe, payload, payload_mode="full"):
     if not is_enabled() or not exchange_key or not symbol or not timeframe:
         return
 
@@ -207,19 +208,19 @@ def upsert_chart_payload(exchange_key, symbol, timeframe, payload):
         with connection.cursor() as cursor:
             cursor.execute(
                 """
-                INSERT INTO chart_payload_cache (exchange_key, symbol, timeframe, payload_json, updated_at_unix)
-                VALUES (%s, %s, %s, %s, %s)
-                ON CONFLICT (exchange_key, symbol, timeframe)
+                INSERT INTO chart_payload_cache_v2 (exchange_key, symbol, timeframe, payload_mode, payload_json, updated_at_unix)
+                VALUES (%s, %s, %s, %s, %s, %s)
+                ON CONFLICT (exchange_key, symbol, timeframe, payload_mode)
                 DO UPDATE SET
                     payload_json = EXCLUDED.payload_json,
                     updated_at_unix = EXCLUDED.updated_at_unix
                 """,
-                (exchange_key, symbol, timeframe, payload_json, updated_at_unix),
+                (exchange_key, symbol, timeframe, payload_mode, payload_json, updated_at_unix),
             )
         connection.commit()
 
 
-def get_chart_payload(exchange_key, symbol, timeframe, max_age_seconds=15):
+def get_chart_payload(exchange_key, symbol, timeframe, max_age_seconds=15, payload_mode="full"):
     if not is_enabled() or not exchange_key or not symbol or not timeframe:
         return None
 
@@ -230,10 +231,10 @@ def get_chart_payload(exchange_key, symbol, timeframe, max_age_seconds=15):
             cursor.execute(
                 """
                 SELECT payload_json, updated_at_unix
-                FROM chart_payload_cache
-                WHERE exchange_key = %s AND symbol = %s AND timeframe = %s
+                FROM chart_payload_cache_v2
+                WHERE exchange_key = %s AND symbol = %s AND timeframe = %s AND payload_mode = %s
                 """,
-                (exchange_key, symbol, timeframe),
+                (exchange_key, symbol, timeframe, payload_mode),
             )
             row = cursor.fetchone()
 

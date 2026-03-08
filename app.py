@@ -858,6 +858,7 @@ def _fetch_chart_payload(
     symbol=None,
     include_symbol_volumes=True,
     prefer_cached_chart=True,
+    payload_mode="full",
 ):
     selected_exchange_key = _normalize_exchange(exchange_key)
     selected_exchange = SUPPORTED_EXCHANGES[selected_exchange_key]
@@ -871,6 +872,8 @@ def _fetch_chart_payload(
     })
     selected_symbol = _normalize_symbol(symbol, supported_symbols)
 
+    normalized_payload_mode = "delta" if str(payload_mode).lower() == "delta" else "full"
+
     if is_db_cache_enabled() and include_symbol_volumes is False and prefer_cached_chart:
         cache_lookup_symbol = str(symbol).strip() if isinstance(symbol, str) and symbol.strip() else selected_symbol
         cached_chart_payload = get_chart_payload(
@@ -878,6 +881,7 @@ def _fetch_chart_payload(
             cache_lookup_symbol,
             _normalize_timeframe(timeframe, supported_timeframes),
             max_age_seconds=CHART_PAYLOAD_MAX_AGE_SECONDS,
+            payload_mode=normalized_payload_mode,
         )
         if isinstance(cached_chart_payload, dict):
             return cached_chart_payload
@@ -1030,11 +1034,20 @@ def _fetch_chart_payload(
             count=market_data["max_candles"],
         )
 
+    output_candles = candles
+    output_axis_levels = axis_levels
+    output_footer_points = footer_points
+    if normalized_payload_mode == "delta":
+        output_candles = candles[-3:]
+        output_axis_levels = []
+        output_footer_points = []
+
     payload = {
         "market_data": market_data,
-        "candles": candles,
-        "axis_levels": axis_levels,
-        "footer_points": footer_points,
+        "candles": output_candles,
+        "axis_levels": output_axis_levels,
+        "footer_points": output_footer_points,
+        "payload_mode": normalized_payload_mode,
     }
 
     if is_db_cache_enabled() and include_symbol_volumes is False and market_data.get("error") is None:
@@ -1043,6 +1056,7 @@ def _fetch_chart_payload(
             market_data.get("symbol") or selected_symbol,
             market_data.get("timeframe") or selected_timeframe,
             payload,
+            payload_mode=normalized_payload_mode,
         )
 
     return payload
@@ -1225,12 +1239,15 @@ def index():
 @app.route("/api/chart-data")
 def chart_data():
     """ API route for fetching chart data as JSON. """
+    requested_mode = _decode_request_value(request.args.get("mode"))
+    normalized_mode = "delta" if str(requested_mode).lower() == "delta" else "full"
     return jsonify(
         _fetch_chart_payload(
             _decode_request_value(request.args.get("timeframe")),
             _decode_request_value(request.args.get("exchange")),
             _decode_request_value(request.args.get("symbol")),
             include_symbol_volumes=False,
+            payload_mode=normalized_mode,
         )
     )
 

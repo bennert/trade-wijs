@@ -738,6 +738,8 @@
       let isRefreshing = false;
       let refreshRequestCounter = 0;
       let pendingPriorityRefresh = false;
+      let forceFullChartRefresh = true;
+      let lastChartContextKey = null;
       let loadingTimeframe = null;
       let refreshTimerId = null;
       const renderCandleLimit = 5000;
@@ -8293,6 +8295,8 @@
         pendingPriorityRefresh = false;
         const requestId = ++refreshRequestCounter;
         const requestedTimeframe = currentTimeframe;
+        const requestedChartContextKey = `${currentExchangeKey}__${currentSymbol}__${requestedTimeframe}`;
+        const requestMode = forceFullChartRefresh || requestedChartContextKey !== lastChartContextKey ? "full" : "delta";
         setLoadingTimeframeButton(requestedTimeframe);
         if (showUpdatingStatus) {
           setRefreshStatus(formatUpdatingStatusText(updatingLabel), "is-updating");
@@ -8303,6 +8307,7 @@
             timeframe: requestedTimeframe,
             symbol: currentSymbol,
             exchange: currentExchangeKey,
+            mode: requestMode,
           });
           const response = await fetchWithExchangeRetrievalStatus(`/api/chart-data?${query.toString()}`, { cache: "no-store" });
           if (!response.ok) {
@@ -8317,6 +8322,7 @@
           }
 
           const payload = await response.json();
+          const payloadMode = payload.payload_mode === "delta" ? "delta" : "full";
 
           if (requestId !== refreshRequestCounter || requestedTimeframe !== currentTimeframe) {
             isRefreshing = false;
@@ -8330,7 +8336,15 @@
 
           const nextCandles = Array.isArray(payload.candles) ? payload.candles : [];
 
-          if (nextCandles.length === 0) {
+          if (payloadMode === "delta" && nextCandles.length === 0) {
+            forceFullChartRefresh = true;
+            isRefreshing = false;
+            setLoadingTimeframeButton(null);
+            refreshChartData({ priority: true });
+            return;
+          }
+
+          if (payloadMode === "full" && nextCandles.length === 0) {
             refreshMarketInfo(payload.market_data);
             setRefreshStatus("Live", "is-live");
             isRefreshing = false;
@@ -8342,10 +8356,47 @@
             return;
           }
 
-          allCandles = nextCandles;
+          if (payloadMode === "delta") {
+            if (!Array.isArray(allCandles) || allCandles.length === 0) {
+              forceFullChartRefresh = true;
+              isRefreshing = false;
+              setLoadingTimeframeButton(null);
+              refreshChartData({ priority: true });
+              return;
+            }
+
+            const mergedCandles = Array.isArray(allCandles) ? allCandles.slice() : [];
+            const candleIndexByTime = new Map();
+            mergedCandles.forEach((candle, index) => {
+              const candleTime = Number(candle?.time);
+              if (Number.isFinite(candleTime)) {
+                candleIndexByTime.set(candleTime, index);
+              }
+            });
+
+            nextCandles.forEach((candle) => {
+              const candleTime = Number(candle?.time);
+              if (!Number.isFinite(candleTime)) {
+                return;
+              }
+
+              const existingIndex = candleIndexByTime.get(candleTime);
+              if (Number.isInteger(existingIndex)) {
+                mergedCandles[existingIndex] = candle;
+              } else {
+                mergedCandles.push(candle);
+                candleIndexByTime.set(candleTime, mergedCandles.length - 1);
+              }
+            });
+
+            mergedCandles.sort((left, right) => Number(left?.time) - Number(right?.time));
+            allCandles = mergedCandles.length > renderCandleLimit * 2 ? mergedCandles.slice(-renderCandleLimit * 2) : mergedCandles;
+          } else {
+            allCandles = nextCandles;
+          }
 
           if (drawLineMode) {
-            deferredCandlesForRedraw = nextCandles;
+            deferredCandlesForRedraw = allCandles;
             deferredMarketDataForRefresh = payload.market_data || null;
             setLoadingTimeframeButton(null);
             isRefreshing = false;
@@ -8360,9 +8411,12 @@
           if (Number.isFinite(refreshedCurrentPrice) && refreshedCurrentPrice > 0) {
             applyLiveCurrentPriceToLatestCandle(refreshedCurrentPrice);
           }
+          forceFullChartRefresh = false;
+          lastChartContextKey = requestedChartContextKey;
           setRefreshStatus("Live", "is-live");
           setLoadingTimeframeButton(null);
         } catch (_error) {
+          forceFullChartRefresh = true;
           setRefreshStatus("Retrying", "is-error");
           setLoadingTimeframeButton(null);
         }
