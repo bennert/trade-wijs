@@ -17,6 +17,8 @@ CACHE_TTL_SECONDS = 20
 _ohlcv_cache = {}
 SYMBOL_VOLUME_CACHE_TTL_SECONDS = 120
 _symbol_volume_cache = {}
+EXCHANGE_CACHE_TTL_SECONDS = 300
+_exchange_cache = {}
 DEFAULT_SUPPORTED_TIMEFRAMES = ("1m", "3m", "5m", "15m", "1h", "4h", "1d", "1w", "1M")
 SUPPORTED_EXCHANGES = {
     exchange_id: {
@@ -45,6 +47,39 @@ DEFAULT_EXCHANGE_KEY = "bybit" if "bybit" in SUPPORTED_EXCHANGES else next(iter(
 DEFAULT_SUPPORTED_SYMBOLS = ("BTC/USDT", "ETH/USDT", "SOL/USDT")
 DEFAULT_PRICE_MIN = 0.01
 DEFAULT_PRICE_MAX = 1_000_000
+
+
+def _get_cached_exchange(exchange_key):
+    selected_exchange_key = _normalize_exchange(exchange_key)
+    selected_exchange = SUPPORTED_EXCHANGES[selected_exchange_key]
+    now = time.monotonic()
+    cached = _exchange_cache.get(selected_exchange_key)
+
+    if cached and (now - cached["loaded_at"] < EXCHANGE_CACHE_TTL_SECONDS):
+        return cached["exchange"]
+
+    exchange_class = getattr(ccxt, selected_exchange["ccxt_id"])
+    try:
+        exchange = exchange_class({"enableRateLimit": True})
+        exchange.load_markets()
+    except (
+        ccxt.RequestTimeout,
+        ccxt.NetworkError,
+        ccxt.ExchangeNotAvailable,
+        ccxt.BadSymbol,
+        ccxt.ExchangeError,
+        OSError,
+    ):
+        # Keep serving with stale markets when a refresh fails.
+        if cached:
+            return cached["exchange"]
+        raise
+
+    _exchange_cache[selected_exchange_key] = {
+        "loaded_at": now,
+        "exchange": exchange,
+    }
+    return exchange
 
 
 def _normalize_quote_currency_candidate(value):
@@ -804,10 +839,9 @@ def _get_cached_ohlcv(exchange, symbol, timeframe, target_limit):
     return rows
 
 
-def _fetch_chart_payload(timeframe=None, exchange_key=None, symbol=None):
+def _fetch_chart_payload(timeframe=None, exchange_key=None, symbol=None, include_symbol_volumes=True):
     selected_exchange_key = _normalize_exchange(exchange_key)
     selected_exchange = SUPPORTED_EXCHANGES[selected_exchange_key]
-    exchange_class = getattr(ccxt, selected_exchange["ccxt_id"])
     exchange = None
     supported_timeframes = list(DEFAULT_SUPPORTED_TIMEFRAMES)
     supported_symbols = list(DEFAULT_SUPPORTED_SYMBOLS)
@@ -828,15 +862,15 @@ def _fetch_chart_payload(timeframe=None, exchange_key=None, symbol=None):
     symbol_quote_volumes_usdt = {}
 
     try:
-        exchange = exchange_class({"enableRateLimit": True})
-        exchange.load_markets()
+        exchange = _get_cached_exchange(selected_exchange_key)
         supported_symbols = _get_supported_symbols(exchange)
         supported_timeframes = _get_supported_timeframes(exchange)
         quote_currencies = _get_supported_quote_currencies(exchange, supported_symbols)
         if quote_currencies:
             supported_quote_currencies = quote_currencies
         selected_symbol = _normalize_symbol(symbol, supported_symbols)
-        symbol_quote_volumes_usdt = _fetch_symbol_quote_volume_usdt(exchange, supported_symbols)
+        if include_symbol_volumes:
+            symbol_quote_volumes_usdt = _fetch_symbol_quote_volume_usdt(exchange, supported_symbols)
         (
             amount_step,
             amount_min,
@@ -901,8 +935,7 @@ def _fetch_chart_payload(timeframe=None, exchange_key=None, symbol=None):
 
     try:
         if exchange is None:
-            exchange = exchange_class({"enableRateLimit": True})
-            exchange.load_markets()
+            exchange = _get_cached_exchange(selected_exchange_key)
         if (
             market_data["amount_step"] is None
             and market_data["amount_min"] is None
@@ -1008,9 +1041,7 @@ def _fetch_market_quote_payload(exchange_key=None, symbol=None, timeframe=None):
     }
 
     try:
-        exchange_class = getattr(ccxt, selected_exchange["ccxt_id"])
-        exchange = exchange_class({"enableRateLimit": True})
-        exchange.load_markets()
+        exchange = _get_cached_exchange(selected_exchange_key)
         selected_symbol = _normalize_symbol(symbol, _get_supported_symbols(exchange))
         market_data["symbol"] = selected_symbol
         market_data["display_symbol"] = selected_symbol.replace("/", "")
@@ -1049,8 +1080,6 @@ def _fetch_market_quote_payload(exchange_key=None, symbol=None, timeframe=None):
 
 def _fetch_exchange_settings_options_payload(exchange_key=None):
     selected_exchange_key = _normalize_exchange(exchange_key)
-    selected_exchange = SUPPORTED_EXCHANGES[selected_exchange_key]
-    exchange_class = getattr(ccxt, selected_exchange["ccxt_id"])
 
     supported_symbols = list(DEFAULT_SUPPORTED_SYMBOLS)
     supported_timeframes = list(DEFAULT_SUPPORTED_TIMEFRAMES)
@@ -1065,8 +1094,7 @@ def _fetch_exchange_settings_options_payload(exchange_key=None):
     error = None
 
     try:
-        exchange = exchange_class({"enableRateLimit": True})
-        exchange.load_markets()
+        exchange = _get_cached_exchange(selected_exchange_key)
         supported_symbols = _get_supported_symbols(exchange)
         supported_timeframes = _get_supported_timeframes(exchange)
         quote_currencies = _get_supported_quote_currencies(exchange, supported_symbols)
@@ -1128,6 +1156,7 @@ def chart_data():
             _decode_request_value(request.args.get("timeframe")),
             _decode_request_value(request.args.get("exchange")),
             _decode_request_value(request.args.get("symbol")),
+            include_symbol_volumes=False,
         )
     )
 

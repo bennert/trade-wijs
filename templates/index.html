@@ -794,6 +794,12 @@
       let currentPriceCountdownIntervalId = null;
       let liveQuotePollIntervalId = null;
       let liveQuoteRequestInFlight = false;
+      const LIVE_QUOTE_POLL_INTERVAL_MS = 3000;
+      const EXCHANGE_RETRIEVAL_STATUS_DELAY_MS = 1000;
+      const EXCHANGE_RETRIEVAL_STATUS_TEXT = "Updating: Retrieving data from exchange";
+      let pendingExchangeRetrievalRequests = 0;
+      let exchangeRetrievalStatusTimerId = null;
+      let exchangeRetrievalStatusShown = false;
       let lastObservedCurrentPrice = Number(valueLastElement?.textContent || "");
       let countdownAnchorCandleTime = null;
       let countdownAnchorSetAtMs = Date.now();
@@ -3103,6 +3109,58 @@
         return `Updating ${normalizedLabel}`;
       };
 
+      const beginExchangeRetrievalRequest = () => {
+        pendingExchangeRetrievalRequests += 1;
+        if (pendingExchangeRetrievalRequests !== 1) {
+          return;
+        }
+
+        exchangeRetrievalStatusShown = false;
+        if (exchangeRetrievalStatusTimerId) {
+          window.clearTimeout(exchangeRetrievalStatusTimerId);
+          exchangeRetrievalStatusTimerId = null;
+        }
+
+        exchangeRetrievalStatusTimerId = window.setTimeout(() => {
+          exchangeRetrievalStatusTimerId = null;
+          if (pendingExchangeRetrievalRequests > 0) {
+            exchangeRetrievalStatusShown = true;
+            setRefreshStatus(EXCHANGE_RETRIEVAL_STATUS_TEXT, "is-updating");
+          }
+        }, EXCHANGE_RETRIEVAL_STATUS_DELAY_MS);
+      };
+
+      const endExchangeRetrievalRequest = () => {
+        pendingExchangeRetrievalRequests = Math.max(0, pendingExchangeRetrievalRequests - 1);
+        if (pendingExchangeRetrievalRequests > 0) {
+          return;
+        }
+
+        if (exchangeRetrievalStatusTimerId) {
+          window.clearTimeout(exchangeRetrievalStatusTimerId);
+          exchangeRetrievalStatusTimerId = null;
+        }
+
+        if (
+          exchangeRetrievalStatusShown
+          && refreshStatusElement
+          && String(refreshStatusElement.textContent || "").trim() === EXCHANGE_RETRIEVAL_STATUS_TEXT
+        ) {
+          setRefreshStatus("Live", "is-live");
+        }
+
+        exchangeRetrievalStatusShown = false;
+      };
+
+      const fetchWithExchangeRetrievalStatus = async (resource, init) => {
+        beginExchangeRetrievalRequest();
+        try {
+          return await fetch(resource, init);
+        } finally {
+          endExchangeRetrievalRequest();
+        }
+      };
+
       const formatPriceGuideValue = (value) => {
         const numericValue = Number(value);
         if (!Number.isFinite(numericValue)) {
@@ -3608,6 +3666,46 @@
         })
         .filter(Boolean);
 
+      const mergeSupportedSymbolOptionsBySymbol = (incomingSymbols, existingSymbols) => {
+        const normalizedIncoming = normalizeSupportedSymbolOptions(incomingSymbols);
+        const normalizedExisting = normalizeSupportedSymbolOptions(existingSymbols);
+        if (!normalizedIncoming.length) {
+          return normalizedIncoming;
+        }
+
+        const existingBySymbol = new Map(
+          normalizedExisting
+            .filter((item) => typeof item?.symbol === "string" && item.symbol)
+            .map((item) => [item.symbol, item]),
+        );
+
+        return normalizedIncoming.map((item) => {
+          const previousItem = existingBySymbol.get(item.symbol);
+          if (!previousItem) {
+            return item;
+          }
+
+          const hasIncomingVolume = Number.isFinite(Number(item.quote_volume_24h_usdt))
+            && Number(item.quote_volume_24h_usdt) > 0;
+          if (hasIncomingVolume) {
+            return item;
+          }
+
+          const hasPreviousVolume = Number.isFinite(Number(previousItem.quote_volume_24h_usdt))
+            && Number(previousItem.quote_volume_24h_usdt) > 0;
+          if (!hasPreviousVolume) {
+            return item;
+          }
+
+          return {
+            ...item,
+            quote_volume_24h_usdt: previousItem.quote_volume_24h_usdt,
+            quote_volume_24h_usdt_compact: previousItem.quote_volume_24h_usdt_compact || item.quote_volume_24h_usdt_compact,
+            quote_volume_24h_currency: previousItem.quote_volume_24h_currency || item.quote_volume_24h_currency,
+          };
+        });
+      };
+
       const formatPairVolumeLabel = (symbolOption) => {
         const volumeValue = Number(symbolOption?.quote_volume_24h_usdt);
         if (Number.isFinite(volumeValue) && volumeValue > 0) {
@@ -3648,7 +3746,11 @@
         }
 
         if (Array.isArray(options.supported_symbols)) {
-          availableSymbolsByExchange[exchangeKey] = normalizeSupportedSymbolOptions(options.supported_symbols);
+          const previousSymbols = availableSymbolsByExchange[exchangeKey];
+          availableSymbolsByExchange[exchangeKey] = mergeSupportedSymbolOptionsBySymbol(
+            options.supported_symbols,
+            previousSymbols,
+          );
         }
       };
 
@@ -3870,7 +3972,7 @@
         const requestId = ++settingsOptionsRequestId;
         try {
           const query = new URLSearchParams({ exchange: exchangeKey });
-          const response = await fetch(`/api/exchange-settings-options?${query.toString()}`, { cache: "no-store" });
+          const response = await fetchWithExchangeRetrievalStatus(`/api/exchange-settings-options?${query.toString()}`, { cache: "no-store" });
           if (!response.ok) {
             return;
           }
@@ -7853,7 +7955,7 @@
             symbol: requestedSymbol,
             exchange: requestedExchangeKey,
           });
-          const response = await fetch(`/api/market-quote?${query.toString()}`, { cache: "no-store" });
+          const response = await fetchWithExchangeRetrievalStatus(`/api/market-quote?${query.toString()}`, { cache: "no-store" });
           if (!response.ok) {
             return;
           }
@@ -8085,7 +8187,7 @@
         }
         if (Array.isArray(marketData.supported_symbols)) {
           cacheSettingsOptionsForExchange(currentExchangeKey, { supported_symbols: marketData.supported_symbols });
-          renderPairSelectorMenuOptions(marketData.supported_symbols);
+          renderPairSelectorMenuOptions(getSymbolOptionsForExchange(currentExchangeKey));
           if (activeSettingsExchangeKey === currentExchangeKey) {
             renderSettingsPairsForExchange(currentExchangeKey);
           }
@@ -8202,7 +8304,7 @@
             symbol: currentSymbol,
             exchange: currentExchangeKey,
           });
-          const response = await fetch(`/api/chart-data?${query.toString()}`, { cache: "no-store" });
+          const response = await fetchWithExchangeRetrievalStatus(`/api/chart-data?${query.toString()}`, { cache: "no-store" });
           if (!response.ok) {
             setRefreshStatus("Retrying", "is-error");
             isRefreshing = false;
@@ -9661,7 +9763,7 @@
       if (liveQuotePollIntervalId === null) {
         liveQuotePollIntervalId = window.setInterval(() => {
           refreshLiveQuote();
-        }, 1000);
+        }, LIVE_QUOTE_POLL_INTERVAL_MS);
       }
 
       window.addEventListener("beforeunload", () => {
