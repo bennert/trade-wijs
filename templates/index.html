@@ -736,6 +736,13 @@
       let enabledTimeframesByExchange = {};
       let enabledQuoteCurrencies = new Set(validQuoteCurrencies);
       let enabledQuoteCurrenciesByExchange = {};
+      let availableTimeframesByExchange = {
+        [currentExchangeKey]: Array.from(validTimeframes),
+      };
+      let availableQuoteCurrenciesByExchange = {
+        [currentExchangeKey]: Array.from(validQuoteCurrencies),
+      };
+      let settingsOptionsRequestId = 0;
       let enabledIndicators = new Set(validIndicators);
       let enabledTools = new Set(validTools);
       let marketInfoHasError =
@@ -3334,6 +3341,88 @@
         return "";
       };
 
+      const normalizeTimeframeOptions = (timeframes) => Array.from(new Set(
+        (Array.isArray(timeframes) ? timeframes : [])
+          .map((timeframe) => String(timeframe || "").trim())
+          .filter(Boolean),
+      ));
+
+      const normalizeQuoteCurrencyOptions = (quoteCurrencies) => Array.from(new Set(
+        (Array.isArray(quoteCurrencies) ? quoteCurrencies : [])
+          .map((quoteCurrency) => String(quoteCurrency || "").trim().toUpperCase())
+          .filter(Boolean),
+      ));
+
+      const cacheSettingsOptionsForExchange = (exchangeKey, options = {}) => {
+        if (!validExchangeKeys.has(exchangeKey)) {
+          return;
+        }
+
+        if (Array.isArray(options.supported_timeframes)) {
+          const normalizedTimeframes = normalizeTimeframeOptions(options.supported_timeframes);
+          if (normalizedTimeframes.length > 0) {
+            availableTimeframesByExchange[exchangeKey] = normalizedTimeframes;
+          }
+        }
+
+        if (Array.isArray(options.supported_quote_currencies)) {
+          const normalizedQuoteCurrencies = normalizeQuoteCurrencyOptions(options.supported_quote_currencies);
+          if (normalizedQuoteCurrencies.length > 0) {
+            availableQuoteCurrenciesByExchange[exchangeKey] = normalizedQuoteCurrencies;
+          }
+        }
+      };
+
+      const applyCachedSettingsOptionsForExchange = (exchangeKey) => {
+        const cachedTimeframes = availableTimeframesByExchange[exchangeKey];
+        if (Array.isArray(cachedTimeframes) && cachedTimeframes.length > 0) {
+          renderSettingsTimeframeOptions(cachedTimeframes);
+        }
+
+        const cachedQuoteCurrencies = availableQuoteCurrenciesByExchange[exchangeKey];
+        if (Array.isArray(cachedQuoteCurrencies) && cachedQuoteCurrencies.length > 0) {
+          renderSettingsQuoteCurrencyOptions(cachedQuoteCurrencies);
+        }
+      };
+
+      const loadSettingsOptionsForExchange = async (exchangeKey) => {
+        if (!validExchangeKeys.has(exchangeKey)) {
+          return;
+        }
+
+        const hasCachedTimeframes = Array.isArray(availableTimeframesByExchange[exchangeKey])
+          && availableTimeframesByExchange[exchangeKey].length > 0;
+        const hasCachedQuoteCurrencies = Array.isArray(availableQuoteCurrenciesByExchange[exchangeKey])
+          && availableQuoteCurrenciesByExchange[exchangeKey].length > 0;
+        if (hasCachedTimeframes && hasCachedQuoteCurrencies) {
+          return;
+        }
+
+        const requestId = ++settingsOptionsRequestId;
+        try {
+          const query = new URLSearchParams({ exchange: exchangeKey });
+          const response = await fetch(`/api/exchange-settings-options?${query.toString()}`, { cache: "no-store" });
+          if (!response.ok) {
+            return;
+          }
+
+          const payload = await response.json();
+          const payloadExchangeKey = String(payload?.exchange_key || exchangeKey);
+          if (!validExchangeKeys.has(payloadExchangeKey)) {
+            return;
+          }
+
+          cacheSettingsOptionsForExchange(payloadExchangeKey, payload);
+
+          if (activeSettingsExchangeKey === payloadExchangeKey && requestId === settingsOptionsRequestId) {
+            applyCachedSettingsOptionsForExchange(payloadExchangeKey);
+            applyEnabledTimeframesToUI();
+            applyEnabledQuoteCurrenciesToUI();
+          }
+        } catch (_error) {
+        }
+      };
+
       const renderPairSelectorMenuOptions = (supportedSymbols) => {
         if (!pairSelectorMenuElement) {
           return;
@@ -3387,11 +3476,7 @@
           return;
         }
 
-        const normalizedQuoteCurrencies = Array.from(new Set(
-          (Array.isArray(quoteCurrencies) ? quoteCurrencies : [])
-            .map((quoteCurrency) => String(quoteCurrency || "").trim().toUpperCase())
-            .filter(Boolean),
-        ));
+        const normalizedQuoteCurrencies = normalizeQuoteCurrencyOptions(quoteCurrencies);
 
         if (normalizedQuoteCurrencies.length === 0) {
           return;
@@ -3433,11 +3518,7 @@
           return;
         }
 
-        const normalizedTimeframes = Array.from(new Set(
-          (Array.isArray(timeframes) ? timeframes : [])
-            .map((timeframe) => String(timeframe || "").trim())
-            .filter(Boolean),
-        ));
+        const normalizedTimeframes = normalizeTimeframeOptions(timeframes);
 
         if (normalizedTimeframes.length === 0) {
           return;
@@ -4737,9 +4818,11 @@
           settingsSaveStatusElement.textContent = "";
         }
 
+        applyCachedSettingsOptionsForExchange(activeSettingsExchangeKey);
         applyEnabledTimeframesToUI();
         applyEnabledQuoteCurrenciesToUI();
         applySettingsExchangeEditableState();
+        loadSettingsOptionsForExchange(activeSettingsExchangeKey);
 
         try {
           localStorage.setItem(settingsExchangeStorageKey, activeSettingsExchangeKey);
@@ -7278,10 +7361,15 @@
         currentExchangeKey = marketData.exchange_key || currentExchangeKey;
         currentExchangeLabel = marketData.exchange || currentExchangeLabel;
         if (Array.isArray(marketData.supported_timeframes)) {
-          renderSettingsTimeframeOptions(marketData.supported_timeframes);
+          const normalizedTimeframes = normalizeTimeframeOptions(marketData.supported_timeframes);
+          cacheSettingsOptionsForExchange(currentExchangeKey, { supported_timeframes: normalizedTimeframes });
+          if (activeSettingsExchangeKey === currentExchangeKey) {
+            renderSettingsTimeframeOptions(normalizedTimeframes);
+          }
+
           enabledTimeframes = getEnabledTimeframesForExchange(currentExchangeKey);
-          if (enabledTimeframes.size === 0 && validTimeframes.size > 0) {
-            const defaultTimeframe = validTimeframes.has("1m") ? "1m" : Array.from(validTimeframes)[0];
+          if (enabledTimeframes.size === 0 && normalizedTimeframes.length > 0) {
+            const defaultTimeframe = normalizedTimeframes.includes("1m") ? "1m" : normalizedTimeframes[0];
             if (defaultTimeframe) {
               setEnabledTimeframes([defaultTimeframe], {
                 exchangeKey: currentExchangeKey,
@@ -7296,22 +7384,31 @@
             localStorage.setItem(timeframeStorageKey, currentTimeframe);
             setPreferenceCookie("trade_wijs_timeframe", currentTimeframe);
           }
+
+          if (activeSettingsExchangeKey === currentExchangeKey) {
+            applyEnabledTimeframesToUI();
+          }
         }
         if (Array.isArray(marketData.supported_symbols)) {
           renderPairSelectorMenuOptions(marketData.supported_symbols);
         }
         if (Array.isArray(marketData.supported_quote_currencies)) {
-          renderSettingsQuoteCurrencyOptions(marketData.supported_quote_currencies);
+          const normalizedQuoteCurrencies = normalizeQuoteCurrencyOptions(marketData.supported_quote_currencies);
+          cacheSettingsOptionsForExchange(currentExchangeKey, { supported_quote_currencies: normalizedQuoteCurrencies });
+          if (activeSettingsExchangeKey === currentExchangeKey) {
+            renderSettingsQuoteCurrencyOptions(normalizedQuoteCurrencies);
+          }
+
           enabledQuoteCurrencies = getEnabledQuoteCurrenciesForExchange(currentExchangeKey);
-          if (enabledQuoteCurrencies.size === 0 && validQuoteCurrencies.size > 0) {
-            const defaultQuoteCurrency = validQuoteCurrencies.has("USDT") ? "USDT" : Array.from(validQuoteCurrencies)[0];
+          if (enabledQuoteCurrencies.size === 0 && normalizedQuoteCurrencies.length > 0) {
+            const defaultQuoteCurrency = normalizedQuoteCurrencies.includes("USDT") ? "USDT" : normalizedQuoteCurrencies[0];
             if (defaultQuoteCurrency) {
               setEnabledQuoteCurrencies([defaultQuoteCurrency], {
                 exchangeKey: currentExchangeKey,
                 refresh: false,
               });
             }
-          } else {
+          } else if (activeSettingsExchangeKey === currentExchangeKey) {
             applyEnabledQuoteCurrenciesToUI();
           }
         }

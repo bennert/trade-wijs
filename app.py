@@ -45,6 +45,37 @@ DEFAULT_PRICE_MIN = 0.01
 DEFAULT_PRICE_MAX = 1_000_000
 
 
+def _normalize_quote_currency_candidate(value):
+    if not isinstance(value, str):
+        return None
+
+    token = value.strip().upper()
+    if not token:
+        return None
+
+    # Drop CCXT derivatives suffixes like USDT:USDT and keep ticker-like characters only.
+    token = token.split(":", 1)[0].strip()
+    token = re.sub(r"[^A-Z0-9._-]", "", token)
+    return token or None
+
+
+def _extract_quote_currency_from_symbol(symbol):
+    if not isinstance(symbol, str):
+        return None
+
+    normalized_symbol = symbol.strip().upper()
+    if not normalized_symbol:
+        return None
+
+    if "/" in normalized_symbol:
+        return _normalize_quote_currency_candidate(normalized_symbol.split("/", 1)[1])
+
+    if "-" in normalized_symbol:
+        return _normalize_quote_currency_candidate(normalized_symbol.rsplit("-", 1)[1])
+
+    return None
+
+
 def _format_number_for_input(value):
     if value is None:
         return None
@@ -283,27 +314,43 @@ def _get_supported_timeframes(exchange):
     return list(DEFAULT_SUPPORTED_TIMEFRAMES)
 
 
-def _get_supported_quote_currencies(exchange):
+def _get_supported_quote_currencies(exchange, supported_symbols=None):
     markets = getattr(exchange, "markets", None)
+    symbols = list(supported_symbols or [])
     if not isinstance(markets, dict):
-        return []
+        fallback_quote_currencies = {
+            quote_currency
+            for quote_currency in (_extract_quote_currency_from_symbol(symbol) for symbol in symbols)
+            if quote_currency
+        }
+        return sorted(fallback_quote_currencies)
 
     quote_currencies = set()
     for market in markets.values():
         if not isinstance(market, dict):
             continue
 
-        quote_currency = market.get("quote")
-        if isinstance(quote_currency, str) and quote_currency.strip():
-            quote_currencies.add(quote_currency.strip().upper())
-            continue
+        # Exchanges expose quote metadata under different keys.
+        quote_candidates = (
+            market.get("quote"),
+            market.get("quoteId"),
+            market.get("settle"),
+            market.get("settleId"),
+        )
 
-        symbol = market.get("symbol")
-        if isinstance(symbol, str) and "/" in symbol:
-            symbol_parts = symbol.split("/")
-            fallback_quote = symbol_parts[-1].strip().upper()
-            if fallback_quote:
-                quote_currencies.add(fallback_quote)
+        for candidate in quote_candidates:
+            normalized_quote_currency = _normalize_quote_currency_candidate(candidate)
+            if normalized_quote_currency:
+                quote_currencies.add(normalized_quote_currency)
+
+        symbol_quote_currency = _extract_quote_currency_from_symbol(market.get("symbol"))
+        if symbol_quote_currency:
+            quote_currencies.add(symbol_quote_currency)
+
+    for symbol in symbols:
+        symbol_quote_currency = _extract_quote_currency_from_symbol(symbol)
+        if symbol_quote_currency:
+            quote_currencies.add(symbol_quote_currency)
 
     return sorted(quote_currencies)
 
@@ -563,7 +610,7 @@ def _fetch_chart_payload(timeframe=None, exchange_key=None, symbol=None):
         exchange.load_markets()
         supported_symbols = _get_supported_symbols(exchange)
         supported_timeframes = _get_supported_timeframes(exchange)
-        quote_currencies = _get_supported_quote_currencies(exchange)
+        quote_currencies = _get_supported_quote_currencies(exchange, supported_symbols)
         if quote_currencies:
             supported_quote_currencies = quote_currencies
         selected_symbol = _normalize_symbol(symbol, supported_symbols)
@@ -777,6 +824,48 @@ def _fetch_market_quote_payload(exchange_key=None, symbol=None, timeframe=None):
     }
 
 
+def _fetch_exchange_settings_options_payload(exchange_key=None):
+    selected_exchange_key = _normalize_exchange(exchange_key)
+    selected_exchange = SUPPORTED_EXCHANGES[selected_exchange_key]
+    exchange_class = getattr(ccxt, selected_exchange["ccxt_id"])
+
+    supported_symbols = list(DEFAULT_SUPPORTED_SYMBOLS)
+    supported_timeframes = list(DEFAULT_SUPPORTED_TIMEFRAMES)
+    supported_quote_currencies = sorted(
+        {
+            supported_symbol.split("/")[-1].strip().upper()
+            for supported_symbol in DEFAULT_SUPPORTED_SYMBOLS
+            if isinstance(supported_symbol, str) and "/" in supported_symbol
+        }
+    )
+    error = None
+
+    try:
+        exchange = exchange_class({"enableRateLimit": True})
+        exchange.load_markets()
+        supported_symbols = _get_supported_symbols(exchange)
+        supported_timeframes = _get_supported_timeframes(exchange)
+        quote_currencies = _get_supported_quote_currencies(exchange, supported_symbols)
+        if quote_currencies:
+            supported_quote_currencies = quote_currencies
+    except (
+        ccxt.RequestTimeout,
+        ccxt.NetworkError,
+        ccxt.ExchangeNotAvailable,
+        ccxt.BadSymbol,
+        ccxt.ExchangeError,
+        OSError,
+    ) as fetch_error:
+        error = str(fetch_error)
+
+    return {
+        "exchange_key": selected_exchange_key,
+        "supported_timeframes": supported_timeframes,
+        "supported_quote_currencies": supported_quote_currencies,
+        "error": error,
+    }
+
+
 @app.route("/")
 def index():
     """ Main page route. """
@@ -825,6 +914,16 @@ def market_quote():
             _decode_request_value(request.args.get("exchange")),
             _decode_request_value(request.args.get("symbol")),
             _decode_request_value(request.args.get("timeframe")),
+        )
+    )
+
+
+@app.route("/api/exchange-settings-options")
+def exchange_settings_options():
+    """ API route for fetching exchange-specific settings options as JSON. """
+    return jsonify(
+        _fetch_exchange_settings_options_payload(
+            _decode_request_value(request.args.get("exchange")),
         )
     )
 

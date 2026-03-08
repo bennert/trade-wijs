@@ -544,6 +544,26 @@ body {
   gap: 6px 12px;
 }
 
+.settings-exchange-options-column [aria-label="Quote currency options"] {
+  max-height: 260px;
+  overflow-y: auto;
+  scrollbar-gutter: stable;
+  padding-right: 2px;
+}
+
+.settings-exchange-options-column [aria-label="Quote currency options"]::-webkit-scrollbar {
+  width: 8px;
+}
+
+.settings-exchange-options-column [aria-label="Quote currency options"]::-webkit-scrollbar-track {
+  background: var(--panel-2);
+}
+
+.settings-exchange-options-column [aria-label="Quote currency options"]::-webkit-scrollbar-thumb {
+  background: var(--border);
+  border-radius: 8px;
+}
+
 .settings-section-title {
   margin: 14px 0 8px;
   font-size: 12px;
@@ -2065,6 +2085,10 @@ body.is-dragging-pane-order {
   .settings-exchange-options-grid {
     grid-template-columns: 1fr;
     gap: 12px;
+  }
+
+  .settings-exchange-options-column [aria-label="Quote currency options"] {
+    max-height: 180px;
   }
 
   .settings-category-tab,
