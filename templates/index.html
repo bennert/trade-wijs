@@ -338,10 +338,12 @@
         <div id="chart-order-preview" class="chart-order-preview" aria-hidden="true">
           <span id="chart-order-preview-side" class="chart-order-preview-side">Buy</span>
           <span id="chart-order-preview-details" class="chart-order-preview-details"></span>
+          <span id="chart-order-preview-help" class="chart-order-preview-help"></span>
         </div>
         <div id="chart-stop-preview" class="chart-stop-preview" aria-hidden="true">
           <span class="chart-stop-preview-side">Stop</span>
           <span id="chart-stop-preview-details" class="chart-stop-preview-details"></span>
+          <span id="chart-stop-preview-help" class="chart-stop-preview-help"></span>
         </div>
         <div id="chart-order-preview-line" class="chart-order-preview-line" aria-hidden="true"></div>
         <div id="chart-stop-preview-line" class="chart-stop-preview-line" aria-hidden="true"></div>
@@ -537,8 +539,10 @@
       const chartOrderPreviewElement = document.getElementById("chart-order-preview");
       const chartOrderPreviewSideElement = document.getElementById("chart-order-preview-side");
       const chartOrderPreviewDetailsElement = document.getElementById("chart-order-preview-details");
+      const chartOrderPreviewHelpElement = document.getElementById("chart-order-preview-help");
       const chartStopPreviewElement = document.getElementById("chart-stop-preview");
       const chartStopPreviewDetailsElement = document.getElementById("chart-stop-preview-details");
+      const chartStopPreviewHelpElement = document.getElementById("chart-stop-preview-help");
       const chartOrderPreviewLineElement = document.getElementById("chart-order-preview-line");
       const chartStopPreviewLineElement = document.getElementById("chart-stop-preview-line");
       const priceHoverGuideLineElement = document.getElementById("price-hover-guide-line");
@@ -3855,8 +3859,11 @@
           return;
         }
 
-        chartOrderPreviewElement.classList.remove("is-visible", "is-buy", "is-sell");
+        chartOrderPreviewElement.classList.remove("is-visible", "is-buy", "is-sell", "is-warning");
         chartOrderPreviewElement.setAttribute("aria-hidden", "true");
+        if (chartOrderPreviewHelpElement) {
+          chartOrderPreviewHelpElement.textContent = "";
+        }
 
         if (chartOrderPreviewLineElement) {
           chartOrderPreviewLineElement.classList.remove("is-visible", "is-buy", "is-sell");
@@ -3864,8 +3871,11 @@
         }
 
         if (chartStopPreviewElement) {
-          chartStopPreviewElement.classList.remove("is-visible", "is-buy", "is-sell");
+          chartStopPreviewElement.classList.remove("is-visible", "is-buy", "is-sell", "is-warning");
           chartStopPreviewElement.setAttribute("aria-hidden", "true");
+          if (chartStopPreviewHelpElement) {
+            chartStopPreviewHelpElement.textContent = "";
+          }
         }
 
         if (chartStopPreviewLineElement) {
@@ -3930,12 +3940,41 @@
             return;
           }
 
-          chartOrderPreviewElement.classList.remove("is-buy", "is-sell");
+          const isStopLimitOrder = isStopLimitOrderTypeSelected();
+          const askPriceValue = parseMarketPriceValue(valueAskElement?.textContent || "");
+          const bidPriceValue = parseMarketPriceValue(valueBidElement?.textContent || "");
+          const warningMessages = [];
+          if (!isStopLimitOrder) {
+            if (side === "buy" && Number.isFinite(askPriceValue) && priceValue > askPriceValue) {
+              warningMessages.push("Order price is above ask price");
+            } else if (side === "sell" && Number.isFinite(bidPriceValue) && priceValue < bidPriceValue) {
+              warningMessages.push("Order price is below bid price");
+            }
+          }
+
+          if (isStopLimitOrder && orderStopPriceInputElement) {
+            const stopPriceValue = parseOrderInputNumber(orderStopPriceInputElement);
+            if (Number.isFinite(stopPriceValue) && stopPriceValue > 0) {
+              if (side === "buy" && priceValue < stopPriceValue) {
+                warningMessages.push("Order price is below stop price");
+              } else if (side === "sell" && priceValue > stopPriceValue) {
+                warningMessages.push("Order price is above stop price");
+              }
+            }
+          }
+
+          const orderPreviewWarning = warningMessages.join(" | ");
+
+          chartOrderPreviewElement.classList.remove("is-buy", "is-sell", "is-warning");
           chartOrderPreviewElement.classList.add(side === "sell" ? "is-sell" : "is-buy", "is-visible");
+          chartOrderPreviewElement.classList.toggle("is-warning", orderPreviewWarning.length > 0);
           chartOrderPreviewElement.style.top = `${Math.round(yCoordinate)}px`;
           chartOrderPreviewElement.setAttribute("aria-hidden", "false");
           chartOrderPreviewSideElement.textContent = side === "sell" ? "Sell" : "Buy";
           chartOrderPreviewDetailsElement.textContent = `${formatOrderAmountInputValue(amountValue)} • ${formatOrderTotalInputValue(totalValue)}`;
+          if (chartOrderPreviewHelpElement) {
+            chartOrderPreviewHelpElement.textContent = orderPreviewWarning;
+          }
 
           if (chartOrderPreviewLineElement) {
             chartOrderPreviewLineElement.classList.remove("is-buy", "is-sell");
@@ -3946,8 +3985,11 @@
             chartOrderPreviewLineElement.setAttribute("aria-hidden", "false");
           }
         } else {
-          chartOrderPreviewElement.classList.remove("is-visible", "is-buy", "is-sell");
+          chartOrderPreviewElement.classList.remove("is-visible", "is-buy", "is-sell", "is-warning");
           chartOrderPreviewElement.setAttribute("aria-hidden", "true");
+          if (chartOrderPreviewHelpElement) {
+            chartOrderPreviewHelpElement.textContent = "";
+          }
           if (chartOrderPreviewLineElement) {
             chartOrderPreviewLineElement.classList.remove("is-visible", "is-buy", "is-sell");
             chartOrderPreviewLineElement.setAttribute("aria-hidden", "true");
@@ -3956,8 +3998,11 @@
 
         if (!isStopOrderTypeSelected() || !chartStopPreviewElement || !chartStopPreviewDetailsElement || !orderStopPriceInputElement) {
           if (chartStopPreviewElement) {
-            chartStopPreviewElement.classList.remove("is-visible", "is-buy", "is-sell");
+            chartStopPreviewElement.classList.remove("is-visible", "is-buy", "is-sell", "is-warning");
             chartStopPreviewElement.setAttribute("aria-hidden", "true");
+            if (chartStopPreviewHelpElement) {
+              chartStopPreviewHelpElement.textContent = "";
+            }
           }
           if (chartStopPreviewLineElement) {
             chartStopPreviewLineElement.classList.remove("is-visible", "is-buy", "is-sell");
@@ -3968,8 +4013,11 @@
 
         const stopPriceValue = parseOrderInputNumber(orderStopPriceInputElement);
         if (!Number.isFinite(stopPriceValue) || stopPriceValue <= 0 || orderStopPriceInputElement.classList.contains("is-below-min")) {
-          chartStopPreviewElement.classList.remove("is-visible", "is-buy", "is-sell");
+          chartStopPreviewElement.classList.remove("is-visible", "is-buy", "is-sell", "is-warning");
           chartStopPreviewElement.setAttribute("aria-hidden", "true");
+          if (chartStopPreviewHelpElement) {
+            chartStopPreviewHelpElement.textContent = "";
+          }
           if (chartStopPreviewLineElement) {
             chartStopPreviewLineElement.classList.remove("is-visible", "is-buy", "is-sell");
             chartStopPreviewLineElement.setAttribute("aria-hidden", "true");
@@ -3979,8 +4027,11 @@
 
         const stopYCoordinate = candleSeries.priceToCoordinate(stopPriceValue);
         if (!Number.isFinite(Number(stopYCoordinate)) || stopYCoordinate < candlePaneBounds.top || stopYCoordinate > candlePaneBounds.bottom) {
-          chartStopPreviewElement.classList.remove("is-visible", "is-buy", "is-sell");
+          chartStopPreviewElement.classList.remove("is-visible", "is-buy", "is-sell", "is-warning");
           chartStopPreviewElement.setAttribute("aria-hidden", "true");
+          if (chartStopPreviewHelpElement) {
+            chartStopPreviewHelpElement.textContent = "";
+          }
           if (chartStopPreviewLineElement) {
             chartStopPreviewLineElement.classList.remove("is-visible", "is-buy", "is-sell");
             chartStopPreviewLineElement.setAttribute("aria-hidden", "true");
@@ -3988,11 +4039,25 @@
           return;
         }
 
-        chartStopPreviewElement.classList.remove("is-buy", "is-sell");
+        const stopWarningMessages = [];
+        const askPriceValue = parseMarketPriceValue(valueAskElement?.textContent || "");
+        const bidPriceValue = parseMarketPriceValue(valueBidElement?.textContent || "");
+        if (side === "sell" && Number.isFinite(bidPriceValue) && stopPriceValue > bidPriceValue) {
+          stopWarningMessages.push("Stop price is above bid price");
+        } else if (side === "buy" && Number.isFinite(askPriceValue) && stopPriceValue < askPriceValue) {
+          stopWarningMessages.push("Stop price is below ask price");
+        }
+        const stopPreviewWarning = stopWarningMessages.join(" | ");
+
+        chartStopPreviewElement.classList.remove("is-buy", "is-sell", "is-warning");
         chartStopPreviewElement.classList.add(side === "sell" ? "is-sell" : "is-buy", "is-visible");
+        chartStopPreviewElement.classList.toggle("is-warning", stopPreviewWarning.length > 0);
         chartStopPreviewElement.style.top = `${Math.round(stopYCoordinate)}px`;
         chartStopPreviewElement.setAttribute("aria-hidden", "false");
         chartStopPreviewDetailsElement.textContent = formatOrderPriceInputValue(stopPriceValue);
+        if (chartStopPreviewHelpElement) {
+          chartStopPreviewHelpElement.textContent = stopPreviewWarning;
+        }
 
         if (chartStopPreviewLineElement) {
           chartStopPreviewLineElement.classList.remove("is-buy", "is-sell");

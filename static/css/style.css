@@ -1096,6 +1096,22 @@ body {
   opacity: 0.92;
 }
 
+.chart-order-preview-help {
+  display: none;
+  color: #f6c778;
+  opacity: 0.98;
+}
+
+.chart-order-preview.is-warning {
+  color: #d7a94b;
+  background: rgba(215, 169, 75, 0.2);
+  border-color: rgba(215, 169, 75, 0.65);
+}
+
+.chart-order-preview.is-warning .chart-order-preview-help {
+  display: inline;
+}
+
 .chart-stop-preview {
   position: absolute;
   right: 72px;
@@ -1149,6 +1165,22 @@ body {
 .chart-stop-preview-details {
   color: var(--text);
   opacity: 0.98;
+}
+
+.chart-stop-preview-help {
+  display: none;
+  color: #f6c778;
+  opacity: 0.98;
+}
+
+.chart-stop-preview.is-warning {
+  color: #d7a94b;
+  background: rgba(215, 169, 75, 0.2);
+  border-color: rgba(215, 169, 75, 0.65);
+}
+
+.chart-stop-preview.is-warning .chart-stop-preview-help {
+  display: inline;
 }
 
 .chart-stop-preview-line {
