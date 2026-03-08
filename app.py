@@ -463,14 +463,10 @@ def _as_positive_finite_float(value):
 
 def _fetch_symbol_quote_volume_usdt(exchange, supported_symbols):
     exchange_id = getattr(exchange, "id", "exchange")
-    cache_key = f"{exchange_id}:symbol-quote-volume-usdt"
+    cache_key = f"{exchange_id}:symbol-quote-volume"
     now = time.monotonic()
     cached = _symbol_volume_cache.get(cache_key)
-    usdt_symbols = [
-        symbol
-        for symbol in supported_symbols
-        if _extract_quote_currency_from_symbol(symbol) == "USDT"
-    ]
+    usdt_symbols = [symbol for symbol in supported_symbols if isinstance(symbol, str) and symbol.strip()]
 
     if not usdt_symbols:
         return {}
@@ -635,9 +631,9 @@ def _build_supported_symbol_items(supported_symbols, quote_volumes_by_symbol=Non
 
     for supported_symbol in supported_symbols:
         volume_24h_usdt = volumes.get(supported_symbol)
+        quote_currency = _extract_quote_currency_from_symbol(supported_symbol)
         if _as_positive_finite_float(volume_24h_usdt) is None:
             base_currency = _extract_base_currency_from_symbol(supported_symbol)
-            quote_currency = _extract_quote_currency_from_symbol(supported_symbol)
             if base_currency and quote_currency:
                 volume_24h_usdt = best_volume_by_pair.get((base_currency, quote_currency))
 
@@ -648,6 +644,7 @@ def _build_supported_symbol_items(supported_symbols, quote_volumes_by_symbol=Non
                 "display_symbol": supported_symbol.replace("/", ""),
                 "quote_volume_24h_usdt": normalized_volume,
                 "quote_volume_24h_usdt_compact": _format_compact_volume(normalized_volume) if normalized_volume else "-",
+                "quote_volume_24h_currency": quote_currency,
             }
         )
 

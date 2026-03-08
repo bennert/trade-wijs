@@ -49,6 +49,7 @@
               data-symbol="{{ item.symbol }}"
               data-symbol-volume-24h-usdt="{{ item.quote_volume_24h_usdt if item.quote_volume_24h_usdt is not none else '' }}"
               data-symbol-volume-24h-usdt-compact="{{ item.quote_volume_24h_usdt_compact if item.quote_volume_24h_usdt_compact else '-' }}"
+              data-symbol-volume-24h-currency="{{ item.quote_volume_24h_currency or '' }}"
               role="menuitem"
             >
               {{ item.display_symbol }}
@@ -257,7 +258,7 @@
                     <label class="settings-exchange-option settings-exchange-option--inline" for="settings-pair-{{ symbol_item.symbol|replace('/', '-') }}" title="{{ symbol_item.symbol }}" data-settings-pair-volume-sort="{% if symbol_item.quote_volume_24h_usdt is not none and symbol_item.quote_volume_24h_usdt > 0 %}{{ -symbol_item.quote_volume_24h_usdt }}{% endif %}">
                       <input id="settings-pair-{{ symbol_item.symbol|replace('/', '-') }}" type="checkbox" data-settings-enabled-pair="{{ symbol_item.symbol }}" checked />
                       <span class="settings-pair-label">{{ symbol_item.display_symbol }}</span>
-                      <span class="settings-pair-volume">{% if symbol_item.quote_volume_24h_usdt is not none and symbol_item.quote_volume_24h_usdt > 0 %}{{ "{:,.0f}".format(symbol_item.quote_volume_24h_usdt) }} USDT{% else %}-{% endif %}</span>
+                      <span class="settings-pair-volume">{% if symbol_item.quote_volume_24h_usdt is not none and symbol_item.quote_volume_24h_usdt > 0 %}{{ "{:,.0f}".format(symbol_item.quote_volume_24h_usdt) }} {{ symbol_item.quote_volume_24h_currency or '' }}{% else %}-{% endif %}</span>
                     </label>
                   {% endfor %}
                 </div>
@@ -3578,6 +3579,7 @@
               quote: getQuoteCurrencyFromSymbol(symbol),
               quote_volume_24h_usdt: null,
               quote_volume_24h_usdt_compact: "-",
+              quote_volume_24h_currency: getQuoteCurrencyFromSymbol(symbol),
             };
           }
 
@@ -3598,6 +3600,7 @@
               quote: getQuoteCurrencyFromSymbol(symbol),
               quote_volume_24h_usdt: Number.isFinite(quoteVolumeUsdt) && quoteVolumeUsdt > 0 ? quoteVolumeUsdt : null,
               quote_volume_24h_usdt_compact: quoteVolumeCompact,
+              quote_volume_24h_currency: String(item.quote_volume_24h_currency || getQuoteCurrencyFromSymbol(symbol) || "").trim().toUpperCase(),
             };
           }
 
@@ -3608,7 +3611,8 @@
       const formatPairVolumeLabel = (symbolOption) => {
         const volumeValue = Number(symbolOption?.quote_volume_24h_usdt);
         if (Number.isFinite(volumeValue) && volumeValue > 0) {
-          return `${Math.round(volumeValue).toLocaleString("en-US")} USDT`;
+          const quoteCurrency = String(symbolOption?.quote_volume_24h_currency || symbolOption?.quote || getQuoteCurrencyFromSymbol(symbolOption?.symbol) || "").trim().toUpperCase();
+          return `${Math.round(volumeValue).toLocaleString("en-US")}${quoteCurrency ? ` ${quoteCurrency}` : ""}`;
         }
 
         return "-";
@@ -3620,6 +3624,7 @@
           display_symbol: (button.textContent || "").trim(),
           quote_volume_24h_usdt: button.dataset.symbolVolume24hUsdt,
           quote_volume_24h_usdt_compact: button.dataset.symbolVolume24hUsdtCompact,
+          quote_volume_24h_currency: button.dataset.symbolVolume24hCurrency,
         })),
       );
 
@@ -3911,6 +3916,7 @@
           symbolButton.dataset.symbolQuote = getQuoteCurrencyFromSymbol(item.symbol);
           symbolButton.dataset.symbolVolume24hUsdt = item.quote_volume_24h_usdt || "";
           symbolButton.dataset.symbolVolume24hUsdtCompact = item.quote_volume_24h_usdt_compact || "-";
+          symbolButton.dataset.symbolVolume24hCurrency = item.quote_volume_24h_currency || getQuoteCurrencyFromSymbol(item.symbol) || "";
           symbolButton.setAttribute("role", "menuitem");
           symbolButton.textContent = item.display_symbol;
           fragment.appendChild(symbolButton);
