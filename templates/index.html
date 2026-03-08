@@ -1333,6 +1333,9 @@
         );
         const configured = enabledPairsByExchange[exchangeKey];
         if (Array.isArray(configured)) {
+          if (availableSymbols.size === 0) {
+            return new Set(configured.filter(Boolean));
+          }
           const sanitized = configured.filter((symbol) => availableSymbols.has(symbol));
           return new Set(sanitized);
         }
@@ -3768,7 +3771,10 @@
           .map((item) => item.symbol)
           .filter(Boolean);
         if (availableSymbols.length === 0) {
-          enabledPairsByExchange[exchangeKey] = [];
+          const configured = enabledPairsByExchange[exchangeKey];
+          if (Array.isArray(configured)) {
+            return new Set(configured.filter(Boolean));
+          }
           return new Set();
         }
 
@@ -3777,12 +3783,6 @@
         if (enabledSet.size === 0) {
           const fallbackPair = getDefaultEnabledPairForExchange(exchangeKey, visibleCandidates.length > 0 ? visibleCandidates : availableSymbols);
           if (fallbackPair) {
-            enabledSet.add(fallbackPair);
-          }
-        } else if (visibleCandidates.length > 0 && !visibleCandidates.some((symbol) => enabledSet.has(symbol))) {
-          const fallbackPair = getDefaultEnabledPairForExchange(exchangeKey, visibleCandidates);
-          if (fallbackPair) {
-            enabledSet.clear();
             enabledSet.add(fallbackPair);
           }
         }
