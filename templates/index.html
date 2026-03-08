@@ -3658,6 +3658,8 @@
           settingsTogglePairsButtonElement.title = areAllEnabled ? "Disable all pairs" : "Enable all pairs";
           settingsTogglePairsButtonElement.disabled = !isSettingsExchangeEnabled || validSettingsPairs.size === 0;
         }
+
+        sortSettingsOptionRows(settingsPairsListElement, "[data-settings-enabled-pair]");
       };
 
       const setEnabledPairs = (pairs, options = {}) => {
@@ -5359,6 +5361,84 @@
         });
       };
 
+      const parseTimeframeToMinutes = (timeframe) => {
+        const value = String(timeframe || "").trim();
+        const match = value.match(/^(\d+)([a-zA-Z]+)$/);
+        if (!match) {
+          return Number.POSITIVE_INFINITY;
+        }
+
+        const amount = Number.parseInt(match[1], 10);
+        const originalUnit = match[2];
+        if (!Number.isFinite(amount) || amount <= 0) {
+          return Number.POSITIVE_INFINITY;
+        }
+
+        if (originalUnit === "m") {
+          return amount;
+        }
+        if (originalUnit === "h") {
+          return amount * 60;
+        }
+        if (originalUnit === "d") {
+          return amount * 1440;
+        }
+        if (originalUnit === "w") {
+          return amount * 10080;
+        }
+        if (originalUnit === "M" || originalUnit === "mo" || originalUnit === "mon") {
+          return amount * 43200;
+        }
+
+        return Number.POSITIVE_INFINITY;
+      };
+
+      const sortSettingsOptionRows = (containerElement, checkboxSelector, options = {}) => {
+        if (!containerElement) {
+          return;
+        }
+
+        const getSortValue = typeof options.getSortValue === "function"
+          ? options.getSortValue
+          : (labelText) => String(labelText || "").trim().toLowerCase();
+
+        const optionRows = Array.from(containerElement.querySelectorAll("label"));
+        optionRows.sort((leftRow, rightRow) => {
+          const leftCheckbox = leftRow.querySelector(checkboxSelector);
+          const rightCheckbox = rightRow.querySelector(checkboxSelector);
+          const leftChecked = Boolean(leftCheckbox?.checked);
+          const rightChecked = Boolean(rightCheckbox?.checked);
+
+          if (leftChecked !== rightChecked) {
+            return leftChecked ? -1 : 1;
+          }
+
+          const leftLabelRaw = (leftRow.querySelector("span")?.textContent || leftRow.textContent || "").trim();
+          const rightLabelRaw = (rightRow.querySelector("span")?.textContent || rightRow.textContent || "").trim();
+          const leftLabel = leftLabelRaw.toLowerCase();
+          const rightLabel = rightLabelRaw.toLowerCase();
+          const leftSortValue = getSortValue(leftLabelRaw);
+          const rightSortValue = getSortValue(rightLabelRaw);
+
+          const leftNumber = Number(leftSortValue);
+          const rightNumber = Number(rightSortValue);
+          const bothNumeric = Number.isFinite(leftNumber) && Number.isFinite(rightNumber);
+          if (bothNumeric && leftNumber !== rightNumber) {
+            return leftNumber - rightNumber;
+          }
+
+          if (String(leftSortValue) !== String(rightSortValue)) {
+            return String(leftSortValue).localeCompare(String(rightSortValue));
+          }
+
+          return leftLabel.localeCompare(rightLabel);
+        });
+
+        optionRows.forEach((rowElement) => {
+          containerElement.appendChild(rowElement);
+        });
+      };
+
       const applyEnabledExchangesToUI = () => {
         const previousExchangeKey = currentExchangeKey;
 
@@ -5438,6 +5518,8 @@
       };
 
       const applyEnabledTimeframesToUI = () => {
+        const timeframeGroupElement = settingsExchangeTimeframesPanelElement?.querySelector("[aria-label='Timeframes options']") || null;
+
         timeframeButtonElements.forEach((button) => {
           const timeframe = button.dataset.timeframe;
           button.hidden = !enabledTimeframes.has(timeframe);
@@ -5451,6 +5533,9 @@
           const isEnabled = activeSettingsTimeframes.has(timeframe);
           checkbox.checked = isEnabled;
           checkbox.disabled = !isSettingsExchangeEnabled || (isEnabled && enabledTimeframeCount === 1);
+        });
+        sortSettingsOptionRows(timeframeGroupElement, "[data-settings-enabled-timeframe]", {
+          getSortValue: (timeframeLabel) => parseTimeframeToMinutes(timeframeLabel),
         });
 
         if (!enabledTimeframes.has(currentTimeframe)) {
@@ -5473,6 +5558,8 @@
       };
 
       const applyEnabledQuoteCurrenciesToUI = () => {
+        const quoteCurrencyGroupElement = settingsExchangeTimeframesPanelElement?.querySelector("[aria-label='Quote currency options']") || null;
+
         const activeSettingsQuoteCurrencies = getEnabledQuoteCurrenciesForExchange(activeSettingsExchangeKey);
         const isSettingsExchangeEnabled = enabledExchangeKeys.has(activeSettingsExchangeKey);
         const enabledQuoteCurrencyCount = activeSettingsQuoteCurrencies.size;
@@ -5483,6 +5570,7 @@
           checkbox.checked = isEnabled;
           checkbox.disabled = !isSettingsExchangeEnabled || (isEnabled && enabledQuoteCurrencyCount === 1);
         });
+        sortSettingsOptionRows(quoteCurrencyGroupElement, "[data-settings-enabled-quote-currency]");
 
         if (settingsToggleQuoteCurrenciesButtonElement) {
           const areAllEnabled = validQuoteCurrencies.size > 0 && activeSettingsQuoteCurrencies.size === validQuoteCurrencies.size;
