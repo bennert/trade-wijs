@@ -10,6 +10,7 @@ from app import (
     DEFAULT_SUPPORTED_SYMBOLS,
     SUPPORTED_EXCHANGES,
     _build_supported_symbol_items,
+    _fetch_chart_payload,
     _fetch_symbol_quote_volume_usdt,
     _get_supported_quote_currencies,
     _get_supported_symbols,
@@ -25,6 +26,8 @@ from db_cache import (
 
 POLL_SECONDS = 3
 SETTINGS_REFRESH_SECONDS = 60
+CHART_REFRESH_SECONDS = 15
+CHART_WARM_TIMEFRAMES = ("1m", "5m", "1h")
 
 
 def build_market_data(exchange_key, exchange_label, timeframe, symbol, ticker):
@@ -112,12 +115,26 @@ def refresh_settings_payloads():
         upsert_exchange_settings_payload(exchange_key, payload)
 
 
+def refresh_chart_payloads():
+    for exchange_key, _metadata in SUPPORTED_EXCHANGES.items():
+        for symbol in DEFAULT_SUPPORTED_SYMBOLS:
+            for timeframe in CHART_WARM_TIMEFRAMES:
+                _fetch_chart_payload(
+                    timeframe=timeframe,
+                    exchange_key=exchange_key,
+                    symbol=symbol,
+                    include_symbol_volumes=False,
+                    prefer_cached_chart=False,
+                )
+
+
 if __name__ == "__main__":
     if not is_enabled():
         raise SystemExit("DATABASE_URL is not configured, worker cannot start")
 
     ensure_schema()
     next_settings_refresh_unix = 0
+    next_chart_refresh_unix = 0
     while True:
         try:
             run_once()
@@ -125,6 +142,9 @@ if __name__ == "__main__":
             if now_unix >= next_settings_refresh_unix:
                 refresh_settings_payloads()
                 next_settings_refresh_unix = now_unix + SETTINGS_REFRESH_SECONDS
+            if now_unix >= next_chart_refresh_unix:
+                refresh_chart_payloads()
+                next_chart_refresh_unix = now_unix + CHART_REFRESH_SECONDS
         except (ccxt.BaseError, OSError, ValueError, TypeError):
             # Keep worker alive even if one cycle fails.
             pass

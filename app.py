@@ -11,9 +11,11 @@ import ccxt
 from flask import Flask, jsonify, make_response, render_template, request
 
 from db_cache import (
+    get_chart_payload,
     get_exchange_settings_payload,
     get_market_snapshot,
     is_enabled as is_db_cache_enabled,
+    upsert_chart_payload,
     upsert_exchange_settings_payload,
     upsert_market_snapshot,
 )
@@ -57,6 +59,7 @@ DEFAULT_PRICE_MIN = 0.01
 DEFAULT_PRICE_MAX = 1_000_000
 MARKET_SNAPSHOT_MAX_AGE_SECONDS = 5
 EXCHANGE_SETTINGS_MAX_AGE_SECONDS = 120
+CHART_PAYLOAD_MAX_AGE_SECONDS = 15
 
 
 def _get_cached_exchange(exchange_key):
@@ -849,7 +852,13 @@ def _get_cached_ohlcv(exchange, symbol, timeframe, target_limit):
     return rows
 
 
-def _fetch_chart_payload(timeframe=None, exchange_key=None, symbol=None, include_symbol_volumes=True):
+def _fetch_chart_payload(
+    timeframe=None,
+    exchange_key=None,
+    symbol=None,
+    include_symbol_volumes=True,
+    prefer_cached_chart=True,
+):
     selected_exchange_key = _normalize_exchange(exchange_key)
     selected_exchange = SUPPORTED_EXCHANGES[selected_exchange_key]
     exchange = None
@@ -861,6 +870,17 @@ def _fetch_chart_payload(timeframe=None, exchange_key=None, symbol=None, include
         if isinstance(supported_symbol, str) and "/" in supported_symbol
     })
     selected_symbol = _normalize_symbol(symbol, supported_symbols)
+
+    if is_db_cache_enabled() and include_symbol_volumes is False and prefer_cached_chart:
+        cache_lookup_symbol = str(symbol).strip() if isinstance(symbol, str) and symbol.strip() else selected_symbol
+        cached_chart_payload = get_chart_payload(
+            selected_exchange_key,
+            cache_lookup_symbol,
+            _normalize_timeframe(timeframe, supported_timeframes),
+            max_age_seconds=CHART_PAYLOAD_MAX_AGE_SECONDS,
+        )
+        if isinstance(cached_chart_payload, dict):
+            return cached_chart_payload
     amount_step = None
     amount_min = None
     total_min = None
@@ -1010,12 +1030,22 @@ def _fetch_chart_payload(timeframe=None, exchange_key=None, symbol=None, include
             count=market_data["max_candles"],
         )
 
-    return {
+    payload = {
         "market_data": market_data,
         "candles": candles,
         "axis_levels": axis_levels,
         "footer_points": footer_points,
     }
+
+    if is_db_cache_enabled() and include_symbol_volumes is False and market_data.get("error") is None:
+        upsert_chart_payload(
+            selected_exchange_key,
+            market_data.get("symbol") or selected_symbol,
+            market_data.get("timeframe") or selected_timeframe,
+            payload,
+        )
+
+    return payload
 
 
 def _fetch_market_quote_payload(exchange_key=None, symbol=None, timeframe=None):
