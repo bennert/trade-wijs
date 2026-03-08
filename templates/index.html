@@ -233,20 +233,6 @@
             <div class="settings-exchange-options-grid">
               <div class="settings-exchange-options-column">
                 <div class="settings-subpanel-title-row">
-                  <button id="settings-toggle-timeframes-btn" type="button" class="settings-section-toggle-btn" aria-label="Toggle all timeframes" title="Toggle all timeframes">☑</button>
-                  <h3 class="settings-subpanel-title">Timeframes</h3>
-                </div>
-                <div class="settings-checkbox-list" role="group" aria-label="Timeframes options">
-                  {% for timeframe in market_data.supported_timeframes %}
-                    <label class="settings-exchange-option" for="settings-timeframe-{{ timeframe|replace('/', '-') }}">
-                      <input id="settings-timeframe-{{ timeframe|replace('/', '-') }}" type="checkbox" data-settings-enabled-timeframe="{{ timeframe }}" checked />
-                      <span>{{ timeframe }}</span>
-                    </label>
-                  {% endfor %}
-                </div>
-              </div>
-              <div class="settings-exchange-options-column">
-                <div class="settings-subpanel-title-row">
                   <button id="settings-toggle-quote-currencies-btn" type="button" class="settings-section-toggle-btn" aria-label="Toggle all quote currencies" title="Toggle all quote currencies">☑</button>
                   <h3 class="settings-subpanel-title">Quote currencies</h3>
                 </div>
@@ -269,6 +255,20 @@
                     <label class="settings-exchange-option settings-exchange-option--inline" for="settings-pair-{{ symbol_item.symbol|replace('/', '-') }}" title="{{ symbol_item.symbol }}">
                       <input id="settings-pair-{{ symbol_item.symbol|replace('/', '-') }}" type="checkbox" data-settings-enabled-pair="{{ symbol_item.symbol }}" checked />
                       <span>{{ symbol_item.display_symbol }}</span>
+                    </label>
+                  {% endfor %}
+                </div>
+              </div>
+              <div class="settings-exchange-options-column">
+                <div class="settings-subpanel-title-row">
+                  <button id="settings-toggle-timeframes-btn" type="button" class="settings-section-toggle-btn" aria-label="Toggle all timeframes" title="Toggle all timeframes">☑</button>
+                  <h3 class="settings-subpanel-title">Timeframes</h3>
+                </div>
+                <div class="settings-checkbox-list" role="group" aria-label="Timeframes options">
+                  {% for timeframe in market_data.supported_timeframes %}
+                    <label class="settings-exchange-option" for="settings-timeframe-{{ timeframe|replace('/', '-') }}">
+                      <input id="settings-timeframe-{{ timeframe|replace('/', '-') }}" type="checkbox" data-settings-enabled-timeframe="{{ timeframe }}" checked />
+                      <span>{{ timeframe }}</span>
                     </label>
                   {% endfor %}
                 </div>
@@ -1278,6 +1278,18 @@
       const getSymbolOptionsForExchange = (exchangeKey) => {
         const configuredSymbols = availableSymbolsByExchange[exchangeKey];
         return Array.isArray(configuredSymbols) ? configuredSymbols : [];
+      };
+
+      const getFilteredPairOptionsForExchange = (exchangeKey) => {
+        const enabledQuotesForExchange = getEnabledQuoteCurrenciesForExchange(exchangeKey);
+        return getSymbolOptionsForExchange(exchangeKey).filter((item) => {
+          if (!enabledQuotesForExchange.size) {
+            return true;
+          }
+
+          const quoteCurrency = String(item.quote || getQuoteCurrencyFromSymbol(item.symbol || "")).toUpperCase();
+          return enabledQuotesForExchange.has(quoteCurrency);
+        });
       };
 
       const getDefaultEnabledPairForExchange = (exchangeKey, candidateSymbols = []) => {
@@ -3722,16 +3734,7 @@
           return;
         }
 
-        const supportedSymbolOptions = getSymbolOptionsForExchange(exchangeKey);
-        const enabledQuotes = getEnabledQuoteCurrenciesForExchange(exchangeKey);
-        const filteredPairs = supportedSymbolOptions.filter((item) => {
-          if (!enabledQuotes.size) {
-            return true;
-          }
-
-          const quoteCurrency = String(item.quote || "").toUpperCase();
-          return enabledQuotes.has(quoteCurrency);
-        });
+        const filteredPairs = getFilteredPairOptionsForExchange(exchangeKey);
 
         validSettingsPairs = new Set(filteredPairs.map((item) => item.symbol));
         const enabledPairsForExchange = ensureEnabledPairsForExchange(exchangeKey, Array.from(validSettingsPairs));
@@ -5665,13 +5668,33 @@
 
         enabledQuoteCurrenciesByExchange[targetExchangeKey] = Array.from(nextEnabledQuoteCurrencies);
 
+        const filteredPairSymbols = getFilteredPairOptionsForExchange(targetExchangeKey)
+          .map((item) => item.symbol)
+          .filter(Boolean);
+        const filteredPairSymbolSet = new Set(filteredPairSymbols);
+        const previouslyEnabledPairs = getEnabledPairsForExchange(targetExchangeKey);
+        const nextEnabledPairs = new Set(
+          Array.from(previouslyEnabledPairs).filter((symbol) => filteredPairSymbolSet.has(symbol)),
+        );
+
+        if (nextEnabledPairs.size === 0 && filteredPairSymbols.length > 0) {
+          const fallbackPair = getDefaultEnabledPairForExchange(targetExchangeKey, filteredPairSymbols);
+          if (fallbackPair) {
+            nextEnabledPairs.add(fallbackPair);
+          }
+        }
+
+        enabledPairsByExchange[targetExchangeKey] = Array.from(nextEnabledPairs);
+
         let didChangeCurrentSymbol = false;
         if (targetExchangeKey === currentExchangeKey) {
           enabledQuoteCurrencies = nextEnabledQuoteCurrencies;
+          enabledPairs = nextEnabledPairs;
           didChangeCurrentSymbol = applyPairSelectorQuoteCurrencyFilter();
         }
 
         persistEnabledQuoteCurrencies();
+        persistEnabledPairs();
         applyEnabledQuoteCurrenciesToUI();
 
         if (targetExchangeKey === currentExchangeKey && didChangeCurrentSymbol && options.refresh !== false) {
@@ -7969,6 +7992,12 @@
           if (activeSettingsExchangeKey === currentExchangeKey) {
             renderSettingsPairsForExchange(currentExchangeKey);
           }
+
+          enabledPairs = ensureEnabledPairsForExchange(
+            currentExchangeKey,
+            getFilteredPairOptionsForExchange(currentExchangeKey).map((item) => item.symbol),
+          );
+          persistEnabledPairs();
         }
         if (Array.isArray(marketData.supported_quote_currencies)) {
           const normalizedQuoteCurrencies = normalizeQuoteCurrencyOptions(marketData.supported_quote_currencies);
@@ -8244,6 +8273,7 @@
           currentExchangeKey = nextExchange;
           enabledTimeframes = getEnabledTimeframesForExchange(currentExchangeKey);
           enabledQuoteCurrencies = getEnabledQuoteCurrenciesForExchange(currentExchangeKey);
+          enabledPairs = getEnabledPairsForExchange(currentExchangeKey);
           applyEnabledTimeframesToUI();
           applyEnabledQuoteCurrenciesToUI();
           syncSettingsExchangeWithCurrentExchange();
