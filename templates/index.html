@@ -3711,6 +3711,12 @@
         });
       };
 
+      const countSymbolOptionsWithVolume = (symbolOptions) => normalizeSupportedSymbolOptions(symbolOptions)
+        .reduce((count, item) => {
+          const numericVolume = Number(item?.quote_volume_24h_usdt);
+          return Number.isFinite(numericVolume) && numericVolume > 0 ? count + 1 : count;
+        }, 0);
+
       const formatPairVolumeLabel = (symbolOption) => {
         const volumeValue = Number(symbolOption?.quote_volume_24h_usdt);
         if (Number.isFinite(volumeValue) && volumeValue > 0) {
@@ -3812,7 +3818,7 @@
         }
 
         sortSettingsOptionRows(settingsPairsListElement, "[data-settings-enabled-pair]", {
-          prioritizeChecked: false,
+          prioritizeChecked: true,
           getSortValue: (_labelText, rowElement) => {
             const rawSortValue = rowElement?.dataset?.settingsPairVolumeSort;
             const numericSortValue = Number(rawSortValue);
@@ -3962,7 +3968,8 @@
           && availableQuoteCurrenciesByExchange[exchangeKey].length > 0;
         const hasCachedSymbols = Array.isArray(availableSymbolsByExchange[exchangeKey])
           && availableSymbolsByExchange[exchangeKey].length > 0;
-        if (!forceReload && hasCachedTimeframes && hasCachedQuoteCurrencies && hasCachedSymbols) {
+        const hasCachedSymbolVolumes = countSymbolOptionsWithVolume(availableSymbolsByExchange[exchangeKey]) > 0;
+        if (!forceReload && hasCachedTimeframes && hasCachedQuoteCurrencies && hasCachedSymbols && hasCachedSymbolVolumes) {
           return;
         }
 

@@ -55,3 +55,4 @@ Feature: Settings persistence after reload
     Examples:
       | exchangeKey |
       | binance     |
+      | bybit       |

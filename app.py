@@ -699,6 +699,46 @@ def _build_supported_symbol_items(supported_symbols, quote_volumes_by_symbol=Non
     return items
 
 
+def _count_symbols_with_24h_volume(supported_symbols):
+    if not isinstance(supported_symbols, list):
+        return 0
+
+    count = 0
+    for item in supported_symbols:
+        if not isinstance(item, dict):
+            continue
+
+        volume = _as_positive_finite_float(item.get("quote_volume_24h_usdt"))
+        if volume is not None:
+            count += 1
+
+    return count
+
+
+def _extract_volume_map_from_supported_symbols(supported_symbols):
+    if not isinstance(supported_symbols, list):
+        return {}
+
+    volume_by_symbol = {}
+    for item in supported_symbols:
+        if not isinstance(item, dict):
+            continue
+
+        symbol = item.get("symbol")
+        if not isinstance(symbol, str) or not symbol.strip():
+            continue
+
+        normalized_volume = _as_positive_finite_float(item.get("quote_volume_24h_usdt"))
+        if normalized_volume is None:
+            continue
+
+        existing_volume = _as_positive_finite_float(volume_by_symbol.get(symbol))
+        if existing_volume is None or normalized_volume > existing_volume:
+            volume_by_symbol[symbol] = normalized_volume
+
+    return volume_by_symbol
+
+
 def _get_git_version():
     env_version = (os.getenv("APP_VERSION") or "").strip()
     if env_version:
@@ -905,6 +945,19 @@ def _fetch_chart_payload(
         selected_symbol = _normalize_symbol(symbol, supported_symbols)
         if include_symbol_volumes:
             symbol_quote_volumes_usdt = _fetch_symbol_quote_volume_usdt(exchange, supported_symbols)
+            if is_db_cache_enabled():
+                cached_settings_payload = get_exchange_settings_payload(
+                    selected_exchange_key,
+                    max_age_seconds=EXCHANGE_SETTINGS_MAX_AGE_SECONDS,
+                )
+                cached_volume_map = _extract_volume_map_from_supported_symbols(
+                    cached_settings_payload.get("supported_symbols") if isinstance(cached_settings_payload, dict) else None
+                )
+                if cached_volume_map:
+                    for supported_symbol, cached_volume in cached_volume_map.items():
+                        existing_volume = _as_positive_finite_float(symbol_quote_volumes_usdt.get(supported_symbol))
+                        if existing_volume is None or cached_volume > existing_volume:
+                            symbol_quote_volumes_usdt[supported_symbol] = cached_volume
         (
             amount_step,
             amount_min,
@@ -1155,6 +1208,7 @@ def _fetch_market_quote_payload(exchange_key=None, symbol=None, timeframe=None):
 
 def _fetch_exchange_settings_options_payload(exchange_key=None):
     selected_exchange_key = _normalize_exchange(exchange_key)
+    cached_settings_payload = None
 
     if is_db_cache_enabled():
         cached_settings_payload = get_exchange_settings_payload(
@@ -1162,7 +1216,10 @@ def _fetch_exchange_settings_options_payload(exchange_key=None):
             max_age_seconds=EXCHANGE_SETTINGS_MAX_AGE_SECONDS,
         )
         if isinstance(cached_settings_payload, dict):
-            return cached_settings_payload
+            cached_supported_symbols = cached_settings_payload.get("supported_symbols")
+            cached_volume_count = _count_symbols_with_24h_volume(cached_supported_symbols)
+            if cached_volume_count > 0:
+                return cached_settings_payload
 
     supported_symbols = list(DEFAULT_SUPPORTED_SYMBOLS)
     supported_timeframes = list(DEFAULT_SUPPORTED_TIMEFRAMES)
@@ -1192,6 +1249,9 @@ def _fetch_exchange_settings_options_payload(exchange_key=None):
         ccxt.ExchangeError,
         OSError,
     ) as fetch_error:
+        # If live refresh fails, return stale cache rather than dropping settings data.
+        if isinstance(cached_settings_payload, dict):
+            return cached_settings_payload
         error = str(fetch_error)
 
     payload = {
