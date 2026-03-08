@@ -3056,13 +3056,46 @@
       });
 
       chart.timeScale().subscribeVisibleTimeRangeChange(() => {
-        renderFvgOverlay();
-        renderSmcOverlay();
-        renderChartOrderPreview();
-        renderDynamicPriceScaleLines();
-        schedulePaneScaleOverlayRender();
-        updateScrollToRecentButtonVisibility();
+        scheduleVisibleRangeRender();
       });
+
+      const CHART_VIEW_STORAGE_DEBOUNCE_MS = 250;
+      let visibleRangeRenderRafId = null;
+      let chartViewStorageTimerId = null;
+
+      const persistChartViewToStorage = () => {
+        try {
+          localStorage.setItem(chartViewStorageKey, JSON.stringify(savedChartViewByTimeframe));
+        } catch (_error) {
+        }
+      };
+
+      const scheduleVisibleRangeRender = () => {
+        if (visibleRangeRenderRafId !== null) {
+          return;
+        }
+
+        visibleRangeRenderRafId = window.requestAnimationFrame(() => {
+          visibleRangeRenderRafId = null;
+          renderFvgOverlay();
+          renderSmcOverlay();
+          renderChartOrderPreview();
+          renderDynamicPriceScaleLines();
+          schedulePaneScaleOverlayRender();
+          updateScrollToRecentButtonVisibility();
+        });
+      };
+
+      const scheduleChartViewStoragePersist = () => {
+        if (chartViewStorageTimerId) {
+          window.clearTimeout(chartViewStorageTimerId);
+        }
+
+        chartViewStorageTimerId = window.setTimeout(() => {
+          chartViewStorageTimerId = null;
+          persistChartViewToStorage();
+        }, CHART_VIEW_STORAGE_DEBOUNCE_MS);
+      };
 
       chart.timeScale().subscribeVisibleLogicalRangeChange((range) => {
         if (!range || !Number.isFinite(Number(range.from)) || !Number.isFinite(Number(range.to))) {
@@ -3074,7 +3107,16 @@
           to: Number(range.to),
         };
 
-        localStorage.setItem(chartViewStorageKey, JSON.stringify(savedChartViewByTimeframe));
+        scheduleChartViewStoragePersist();
+      });
+
+      window.addEventListener("beforeunload", () => {
+        if (chartViewStorageTimerId) {
+          window.clearTimeout(chartViewStorageTimerId);
+          chartViewStorageTimerId = null;
+        }
+
+        persistChartViewToStorage();
       });
 
       const formatValue = (value) => (value === null || value === undefined ? "-" : String(value));
