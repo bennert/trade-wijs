@@ -132,6 +132,7 @@
           <button type="button" class="settings-tab is-active" aria-current="page" data-settings-general-item="indicators">Indicators</button>
           <button type="button" class="settings-tab" data-settings-general-item="display">Theme</button>
           <button type="button" class="settings-tab" data-settings-general-item="tools">Tools</button>
+          <button type="button" class="settings-tab" data-settings-general-item="factory-reset">Factory Reset</button>
         </aside>
         <div class="settings-content">
           <section id="settings-category-exchanges" class="settings-category-section is-active" data-settings-category-section="exchanges">
@@ -216,6 +217,12 @@
                   <span>Volume</span>
                 </label>
               </div>
+            </div>
+            <div class="settings-subpanel settings-general-subsection" data-settings-general-section="factory-reset">
+              <h3 class="settings-subpanel-title">Factory Reset</h3>
+              <p class="settings-subtitle">Clear all locally saved settings, drawings, and preferences, then start fresh.</p>
+              <button id="settings-factory-reset-btn" type="button" class="settings-save-btn settings-factory-reset-btn">Run Factory Reset</button>
+              <span id="settings-factory-reset-status" class="settings-save-status" aria-live="polite"></span>
             </div>
           </section>
           <div id="settings-actions" class="settings-actions">
@@ -594,6 +601,8 @@
       const settingsExchangeTimeframesPanelElement = document.getElementById("settings-exchange-timeframes-panel");
       const settingsSaveButtonElement = document.getElementById("settings-save-btn");
       const settingsSaveStatusElement = document.getElementById("settings-save-status");
+      const settingsFactoryResetButtonElement = document.getElementById("settings-factory-reset-btn");
+      const settingsFactoryResetStatusElement = document.getElementById("settings-factory-reset-status");
       const rightPanelTabsElement = document.getElementById("right-panel-tabs");
       const panelTabButtons = Array.from(document.querySelectorAll(".panel-tab"));
       const panelOrderElement = document.getElementById("panel-order");
@@ -913,6 +922,80 @@
         document.cookie = `${key}=${safeValue}; path=/; max-age=31536000; samesite=lax`;
       };
 
+      const clearPreferenceCookie = (key) => {
+        document.cookie = `${key}=; path=/; max-age=0; expires=Thu, 01 Jan 1970 00:00:00 GMT; samesite=lax`;
+      };
+
+      const clearTradeWijsStoredState = () => {
+        const knownStorageKeys = [
+          timeframeStorageKey,
+          symbolStorageKey,
+          exchangeStorageKey,
+          appViewModeStorageKey,
+          rightPanelCollapseStorageKey,
+          settingsCategoryStorageKey,
+          settingsExchangeStorageKey,
+          settingsGeneralItemStorageKey,
+          displayThemeStorageKey,
+          enabledExchangesStorageKey,
+          enabledTimeframesStorageKey,
+          enabledQuoteCurrenciesStorageKey,
+          enabledIndicatorsStorageKey,
+          enabledToolsStorageKey,
+          exchangeApiSettingsStorageKey,
+          chartSplitStorageKey,
+          stochSplitStorageKey,
+          rsiSplitStorageKey,
+          paneOrderStorageKey,
+          chartViewStorageKey,
+          indicatorStorageKey,
+          marketInfoCollapseStorageKey,
+          horizontalLineStorageKey,
+          trendLineStorageKey,
+          drawingUndoStackStorageKey,
+        ];
+
+        knownStorageKeys.forEach((storageKey) => {
+          try {
+            localStorage.removeItem(storageKey);
+          } catch (_error) {
+          }
+        });
+
+        try {
+          const dynamicPrefixes = [
+            "trade-wijs-",
+            "trade-wijs:",
+            "trade-wijs-horizontal-lines:",
+            "trade-wijs-trend-lines:",
+            "trade-wijs-drawing-undo-stack:",
+          ];
+          const keysToRemove = [];
+          for (let index = 0; index < localStorage.length; index += 1) {
+            const storageKey = localStorage.key(index);
+            if (!storageKey) {
+              continue;
+            }
+
+            if (dynamicPrefixes.some((prefix) => storageKey.startsWith(prefix))) {
+              keysToRemove.push(storageKey);
+            }
+          }
+
+          keysToRemove.forEach((storageKey) => {
+            try {
+              localStorage.removeItem(storageKey);
+            } catch (_error) {
+            }
+          });
+        } catch (_error) {
+        }
+
+        clearPreferenceCookie("trade_wijs_timeframe");
+        clearPreferenceCookie("trade_wijs_symbol");
+        clearPreferenceCookie("trade_wijs_exchange");
+      };
+
       try {
         const savedAppViewMode = localStorage.getItem(appViewModeStorageKey);
         if (savedAppViewMode === "trade" || savedAppViewMode === "settings") {
@@ -1026,7 +1109,12 @@
 
       try {
         const savedSettingsGeneralItem = localStorage.getItem(settingsGeneralItemStorageKey);
-        if (savedSettingsGeneralItem === "indicators" || savedSettingsGeneralItem === "display" || savedSettingsGeneralItem === "tools") {
+        if (
+          savedSettingsGeneralItem === "indicators"
+          || savedSettingsGeneralItem === "display"
+          || savedSettingsGeneralItem === "tools"
+          || savedSettingsGeneralItem === "factory-reset"
+        ) {
           activeSettingsGeneralItem = savedSettingsGeneralItem;
         }
       } catch (_error) {
@@ -5283,6 +5371,8 @@
           activeSettingsGeneralItem = "display";
         } else if (item === "tools") {
           activeSettingsGeneralItem = "tools";
+        } else if (item === "factory-reset") {
+          activeSettingsGeneralItem = "factory-reset";
         } else {
           activeSettingsGeneralItem = "indicators";
         }
@@ -7757,6 +7847,55 @@
           applyDisplayTheme(radioElement.value, { persist: true });
         });
       });
+
+      if (settingsFactoryResetButtonElement) {
+        settingsFactoryResetButtonElement.addEventListener("click", () => {
+          const shouldReset = window.confirm(
+            "Factory Reset clears all locally saved Trade Wijs data. Continue?",
+          );
+          if (!shouldReset) {
+            return;
+          }
+
+          if (settingsFactoryResetStatusElement) {
+            settingsFactoryResetStatusElement.textContent = "Resetting...";
+          }
+
+          clearTradeWijsStoredState();
+          const defaultExchangeKey = validExchangeKeys.has("bybit")
+            ? "bybit"
+            : (Array.from(validExchangeKeys)[0] || "");
+
+          if (defaultExchangeKey) {
+            const availableQuoteCurrencies = Array.isArray(availableQuoteCurrenciesByExchange[defaultExchangeKey])
+              ? availableQuoteCurrenciesByExchange[defaultExchangeKey]
+              : Array.from(validQuoteCurrencies);
+            const defaultQuoteCurrency = availableQuoteCurrencies.includes("USDT")
+              ? "USDT"
+              : (availableQuoteCurrencies[0] || "");
+
+            try {
+              localStorage.setItem(enabledExchangesStorageKey, JSON.stringify([defaultExchangeKey]));
+              localStorage.setItem(exchangeStorageKey, defaultExchangeKey);
+              localStorage.setItem(settingsExchangeStorageKey, defaultExchangeKey);
+              localStorage.setItem(chartSplitStorageKey, String(1 - minVisiblePaneHeightRatio));
+              localStorage.setItem(stochSplitStorageKey, String(minVisiblePaneHeightRatio));
+              localStorage.setItem(rsiSplitStorageKey, String(minVisiblePaneHeightRatio));
+              if (defaultQuoteCurrency) {
+                localStorage.setItem(
+                  enabledQuoteCurrenciesStorageKey,
+                  JSON.stringify({ [defaultExchangeKey]: [defaultQuoteCurrency] }),
+                );
+              }
+            } catch (_error) {
+            }
+
+            setPreferenceCookie("trade_wijs_exchange", defaultExchangeKey);
+          }
+
+          window.location.assign("/");
+        });
+      }
 
       const removeHorizontalLineEntry = (lineEntry) => {
         if (!lineEntry || lineEntry.removed) {

@@ -663,6 +663,22 @@ body {
   cursor: pointer;
 }
 
+.settings-factory-reset-btn {
+  border-color: rgba(207, 95, 107, 0.65);
+  color: #f3a2aa;
+  background: rgba(207, 95, 107, 0.12);
+}
+
+.settings-factory-reset-btn:hover {
+  border-color: #cf5f6b;
+  color: #ffd6db;
+}
+
+#settings-factory-reset-status {
+  display: inline-block;
+  margin-left: 10px;
+}
+
 .settings-save-btn:disabled {
   opacity: 0.45;
   cursor: not-allowed;

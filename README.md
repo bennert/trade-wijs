@@ -146,11 +146,11 @@ Behavior:
 - If git metadata is unavailable, the app falls back to semver only
 - In Docker/Podman, you can set `APP_VERSION` to override version resolution (the bundled `start.ps1` sets this automatically)
 
-### Gebruik: Horizontal Line
+### Usage: Horizontal Line
 
-- Klik op `Horizontal Line` in de chart toolbar
-- Klik in de chart om een horizontale lijn te plaatsen
-- Klik op `Undo` (of gebruik `Backspace`/`Delete`) om de laatste lijn te verwijderen
+- Click `Horizontal Line` in the chart toolbar
+- Click inside the chart to place a horizontal line
+- Click `Undo` (or use `Backspace`/`Delete`) to remove the last line
 
 ## Installer + auto-start (Windows, Linux, macOS)
 
