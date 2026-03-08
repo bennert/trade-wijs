@@ -10,7 +10,13 @@ from urllib.parse import unquote
 import ccxt
 from flask import Flask, jsonify, make_response, render_template, request
 
-from db_cache import get_market_snapshot, is_enabled as is_db_cache_enabled, upsert_market_snapshot
+from db_cache import (
+    get_exchange_settings_payload,
+    get_market_snapshot,
+    is_enabled as is_db_cache_enabled,
+    upsert_exchange_settings_payload,
+    upsert_market_snapshot,
+)
 
 app = Flask(__name__)
 
@@ -50,6 +56,7 @@ DEFAULT_SUPPORTED_SYMBOLS = ("BTC/USDT", "ETH/USDT", "SOL/USDT")
 DEFAULT_PRICE_MIN = 0.01
 DEFAULT_PRICE_MAX = 1_000_000
 MARKET_SNAPSHOT_MAX_AGE_SECONDS = 5
+EXCHANGE_SETTINGS_MAX_AGE_SECONDS = 120
 
 
 def _get_cached_exchange(exchange_key):
@@ -1105,6 +1112,14 @@ def _fetch_market_quote_payload(exchange_key=None, symbol=None, timeframe=None):
 def _fetch_exchange_settings_options_payload(exchange_key=None):
     selected_exchange_key = _normalize_exchange(exchange_key)
 
+    if is_db_cache_enabled():
+        cached_settings_payload = get_exchange_settings_payload(
+            selected_exchange_key,
+            max_age_seconds=EXCHANGE_SETTINGS_MAX_AGE_SECONDS,
+        )
+        if isinstance(cached_settings_payload, dict):
+            return cached_settings_payload
+
     supported_symbols = list(DEFAULT_SUPPORTED_SYMBOLS)
     supported_timeframes = list(DEFAULT_SUPPORTED_TIMEFRAMES)
     supported_quote_currencies = sorted(
@@ -1135,13 +1150,18 @@ def _fetch_exchange_settings_options_payload(exchange_key=None):
     ) as fetch_error:
         error = str(fetch_error)
 
-    return {
+    payload = {
         "exchange_key": selected_exchange_key,
         "supported_symbols": _build_supported_symbol_items(supported_symbols, symbol_quote_volumes_usdt),
         "supported_timeframes": supported_timeframes,
         "supported_quote_currencies": supported_quote_currencies,
         "error": error,
     }
+
+    if is_db_cache_enabled() and error is None:
+        upsert_exchange_settings_payload(selected_exchange_key, payload)
+
+    return payload
 
 
 @app.route("/")

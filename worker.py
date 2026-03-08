@@ -6,10 +6,25 @@ import time
 
 import ccxt
 
-from app import DEFAULT_SUPPORTED_SYMBOLS, SUPPORTED_EXCHANGES, _normalize_symbol
-from db_cache import ensure_schema, is_enabled, upsert_market_snapshot
+from app import (
+    DEFAULT_SUPPORTED_SYMBOLS,
+    SUPPORTED_EXCHANGES,
+    _build_supported_symbol_items,
+    _fetch_symbol_quote_volume_usdt,
+    _get_supported_quote_currencies,
+    _get_supported_symbols,
+    _get_supported_timeframes,
+    _normalize_symbol,
+)
+from db_cache import (
+    ensure_schema,
+    is_enabled,
+    upsert_exchange_settings_payload,
+    upsert_market_snapshot,
+)
 
 POLL_SECONDS = 3
+SETTINGS_REFRESH_SECONDS = 60
 
 
 def build_market_data(exchange_key, exchange_label, timeframe, symbol, ticker):
@@ -76,14 +91,40 @@ def run_once():
             upsert_market_snapshot(exchange_key, symbol, timeframe, market_data)
 
 
+def refresh_settings_payloads():
+    for exchange_key, metadata in SUPPORTED_EXCHANGES.items():
+        exchange_class = getattr(ccxt, metadata["ccxt_id"])
+        exchange = exchange_class({"enableRateLimit": True})
+        exchange.load_markets()
+
+        supported_symbols = _get_supported_symbols(exchange)
+        supported_timeframes = _get_supported_timeframes(exchange)
+        supported_quote_currencies = _get_supported_quote_currencies(exchange, supported_symbols)
+        symbol_volumes = _fetch_symbol_quote_volume_usdt(exchange, supported_symbols)
+
+        payload = {
+            "exchange_key": exchange_key,
+            "supported_symbols": _build_supported_symbol_items(supported_symbols, symbol_volumes),
+            "supported_timeframes": supported_timeframes,
+            "supported_quote_currencies": supported_quote_currencies,
+            "error": None,
+        }
+        upsert_exchange_settings_payload(exchange_key, payload)
+
+
 if __name__ == "__main__":
     if not is_enabled():
         raise SystemExit("DATABASE_URL is not configured, worker cannot start")
 
     ensure_schema()
+    next_settings_refresh_unix = 0
     while True:
         try:
             run_once()
+            now_unix = int(time.time())
+            if now_unix >= next_settings_refresh_unix:
+                refresh_settings_payloads()
+                next_settings_refresh_unix = now_unix + SETTINGS_REFRESH_SECONDS
         except (ccxt.BaseError, OSError, ValueError, TypeError):
             # Keep worker alive even if one cycle fails.
             pass
