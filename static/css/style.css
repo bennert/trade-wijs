@@ -532,7 +532,7 @@ body {
 
 .settings-exchange-options-grid {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 16px;
 }
 
@@ -551,7 +551,29 @@ body {
   padding-right: 2px;
 }
 
+.settings-exchange-options-column [aria-label="Timeframes options"] {
+  max-height: 260px;
+  overflow-y: auto;
+  scrollbar-gutter: stable;
+  padding-right: 2px;
+}
+
+.settings-exchange-options-column [aria-label="Pairs options"] {
+  max-height: 260px;
+  overflow-y: auto;
+  scrollbar-gutter: stable;
+  padding-right: 2px;
+}
+
 .settings-exchange-options-column [aria-label="Quote currency options"]::-webkit-scrollbar {
+  width: 8px;
+}
+
+.settings-exchange-options-column [aria-label="Timeframes options"]::-webkit-scrollbar {
+  width: 8px;
+}
+
+.settings-exchange-options-column [aria-label="Pairs options"]::-webkit-scrollbar {
   width: 8px;
 }
 
@@ -559,7 +581,25 @@ body {
   background: var(--panel-2);
 }
 
+.settings-exchange-options-column [aria-label="Timeframes options"]::-webkit-scrollbar-track {
+  background: var(--panel-2);
+}
+
+.settings-exchange-options-column [aria-label="Pairs options"]::-webkit-scrollbar-track {
+  background: var(--panel-2);
+}
+
 .settings-exchange-options-column [aria-label="Quote currency options"]::-webkit-scrollbar-thumb {
+  background: var(--border);
+  border-radius: 8px;
+}
+
+.settings-exchange-options-column [aria-label="Timeframes options"]::-webkit-scrollbar-thumb {
+  background: var(--border);
+  border-radius: 8px;
+}
+
+.settings-exchange-options-column [aria-label="Pairs options"]::-webkit-scrollbar-thumb {
   background: var(--border);
   border-radius: 8px;
 }
@@ -2136,6 +2176,14 @@ body.is-dragging-pane-order {
   }
 
   .settings-exchange-options-column [aria-label="Quote currency options"] {
+    max-height: 180px;
+  }
+
+  .settings-exchange-options-column [aria-label="Timeframes options"] {
+    max-height: 180px;
+  }
+
+  .settings-exchange-options-column [aria-label="Pairs options"] {
     max-height: 180px;
   }
 

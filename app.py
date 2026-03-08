@@ -860,6 +860,7 @@ def _fetch_exchange_settings_options_payload(exchange_key=None):
 
     return {
         "exchange_key": selected_exchange_key,
+        "supported_symbols": supported_symbols,
         "supported_timeframes": supported_timeframes,
         "supported_quote_currencies": supported_quote_currencies,
         "error": error,
