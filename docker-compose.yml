@@ -1,9 +1,43 @@
 services:
+  db:
+    image: postgres:16-alpine
+    container_name: trade-wijs-db
+    environment:
+      POSTGRES_DB: trade_wijs
+      POSTGRES_USER: trade_wijs
+      POSTGRES_PASSWORD: trade_wijs
+    volumes:
+      - trade-wijs-db-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U trade_wijs -d trade_wijs"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    restart: unless-stopped
+
   trade-wijs:
     build: .
     container_name: trade-wijs
     environment:
       APP_VERSION: ${APP_VERSION:-}
+      DATABASE_URL: postgresql://trade_wijs:trade_wijs@db:5432/trade_wijs
+    depends_on:
+      db:
+        condition: service_healthy
     ports:
       - "3175:3175"
     restart: unless-stopped
+
+  trade-wijs-worker:
+    build: .
+    container_name: trade-wijs-worker
+    command: ["python", "worker.py"]
+    environment:
+      DATABASE_URL: postgresql://trade_wijs:trade_wijs@db:5432/trade_wijs
+    depends_on:
+      db:
+        condition: service_healthy
+    restart: unless-stopped
+
+volumes:
+  trade-wijs-db-data:

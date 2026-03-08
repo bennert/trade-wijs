@@ -10,6 +10,8 @@ from urllib.parse import unquote
 import ccxt
 from flask import Flask, jsonify, make_response, render_template, request
 
+from db_cache import get_market_snapshot, is_enabled as is_db_cache_enabled, upsert_market_snapshot
+
 app = Flask(__name__)
 
 MAX_CANDLES = 5000
@@ -47,6 +49,7 @@ DEFAULT_EXCHANGE_KEY = "bybit" if "bybit" in SUPPORTED_EXCHANGES else next(iter(
 DEFAULT_SUPPORTED_SYMBOLS = ("BTC/USDT", "ETH/USDT", "SOL/USDT")
 DEFAULT_PRICE_MIN = 0.01
 DEFAULT_PRICE_MAX = 1_000_000
+MARKET_SNAPSHOT_MAX_AGE_SECONDS = 5
 
 
 def _get_cached_exchange(exchange_key):
@@ -1040,6 +1043,19 @@ def _fetch_market_quote_payload(exchange_key=None, symbol=None, timeframe=None):
         "error": None,
     }
 
+    # Cache-first path: serve a fresh snapshot when available.
+    requested_symbol = str(symbol).strip() if isinstance(symbol, str) else ""
+    cache_lookup_symbol = requested_symbol or selected_symbol
+    if is_db_cache_enabled() and cache_lookup_symbol:
+        cached_market_data = get_market_snapshot(
+            selected_exchange_key,
+            cache_lookup_symbol,
+            selected_timeframe,
+            max_age_seconds=MARKET_SNAPSHOT_MAX_AGE_SECONDS,
+        )
+        if isinstance(cached_market_data, dict):
+            return {"market_data": cached_market_data}
+
     try:
         exchange = _get_cached_exchange(selected_exchange_key)
         selected_symbol = _normalize_symbol(symbol, _get_supported_symbols(exchange))
@@ -1063,6 +1079,14 @@ def _fetch_market_quote_payload(exchange_key=None, symbol=None, timeframe=None):
 
         market_data["timestamp"] = updated_at.strftime("%Y-%m-%d %H:%M:%S UTC")
         market_data["timestamp_unix"] = int(updated_at.timestamp())
+
+        if is_db_cache_enabled():
+            upsert_market_snapshot(
+                selected_exchange_key,
+                market_data["symbol"],
+                market_data["timeframe"],
+                market_data,
+            )
     except (
         ccxt.RequestTimeout,
         ccxt.NetworkError,
