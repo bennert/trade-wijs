@@ -7,11 +7,21 @@ All notable changes to this project are documented in this file.
 ### Commit overview
 
 - `62dbbb6` `test: align timeframe minimum and add settings exchange controls coverage`
+- `635c181` `perf(chart): add full/delta payload mode with cache-aware refresh`
 
 ### Highlights
 
 - Timeframe feature expectation changed to at least 1 button instead of a fixed count.
 - Added new Gherkin coverage for exchange enable/disable behavior in Settings.
+- Added mode-aware chart payload flow (`full` / `delta`) end-to-end:
+	- Backend `/api/chart-data` supports `mode` and returns `payload_mode`.
+	- Delta payload sends only the latest candles and omits heavy axis/footer arrays.
+	- Frontend refresh is delta-first and safely falls back to full refresh when needed.
+	- Chart payload cache keys now include payload mode to prevent collisions.
+- Warm benchmark on local stack (`localhost:3175`, 8 runs):
+	- `full`: ~`2044 ms`, ~`1.53 MB`
+	- `delta`: ~`701 ms`, ~`0.45 MB`
+	- Improvement: about `65.7%` lower average latency and `70.2%` smaller payload.
 
 ### Verification
 
