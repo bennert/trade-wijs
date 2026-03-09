@@ -1342,7 +1342,12 @@
           return new Set(sanitized);
         }
 
-        const fallbackPair = getDefaultEnabledPairForExchange(exchangeKey, Array.from(availableSymbols));
+        const fallbackPairs = Array.from(availableSymbols).filter(Boolean);
+        if (fallbackPairs.length > 0) {
+          return new Set(fallbackPairs);
+        }
+
+        const fallbackPair = getDefaultEnabledPairForExchange(exchangeKey, fallbackPairs);
         return fallbackPair ? new Set([fallbackPair]) : new Set();
       };
 
@@ -4199,17 +4204,12 @@
         const selectedQuoteCurrencies = enabledQuoteCurrencies.size > 0
           ? enabledQuoteCurrencies
           : getEnabledQuoteCurrenciesForExchange(currentExchangeKey);
-        const selectedPairs = enabledPairs.size > 0
-          ? enabledPairs
-          : getEnabledPairsForExchange(currentExchangeKey);
         const symbolButtonElements = Array.from(pairSelectorMenuElement.querySelectorAll("[data-symbol]"));
 
         symbolButtonElements.forEach((button) => {
-          const symbolValue = button.dataset.symbol || "";
           const symbolQuote = (button.dataset.symbolQuote || getQuoteCurrencyFromSymbol(button.dataset.symbol || "")).toUpperCase();
           const hiddenByQuote = selectedQuoteCurrencies.size > 0 && !selectedQuoteCurrencies.has(symbolQuote);
-          const hiddenByPair = selectedPairs.size > 0 && !selectedPairs.has(symbolValue);
-          button.hidden = hiddenByQuote || hiddenByPair;
+          button.hidden = hiddenByQuote;
         });
 
         const visibleSymbols = symbolButtonElements

@@ -3,6 +3,98 @@ const { When, Then } = require('@cucumber/cucumber');
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
+const isPairMenuOpen = async (page) => {
+  return page.evaluate(() => {
+    const menu = document.querySelector('#pair-selector-menu');
+    return Boolean(menu && menu.classList.contains('is-visible'));
+  });
+};
+
+const ensurePairMenuOpen = async (page) => {
+  const open = await isPairMenuOpen(page);
+  if (!open) {
+    await page.locator('#pair-selector-btn').click();
+  }
+  await waitForPairMenuVisible(page);
+};
+
+const waitForPairMenuVisible = async (page) => {
+  await page.locator('#pair-selector-menu.is-visible').waitFor({ state: 'visible', timeout: 5000 });
+};
+
+const getPairMenuOptions = async (page, options = {}) => {
+  const includeHidden = options.includeHidden === true;
+  return page.evaluate(({ shouldIncludeHidden }) => {
+    const menu = document.querySelector('#pair-selector-menu');
+    if (!menu) {
+      return [];
+    }
+
+    return Array.from(menu.querySelectorAll('[data-symbol]'))
+      .map((button) => ({
+        symbol: button.getAttribute('data-symbol') || '',
+        label: (button.textContent || '').trim(),
+        isActive: button.classList.contains('is-active'),
+        isVisible: !button.hidden,
+      }))
+      .filter((item) => item.symbol)
+      .filter((item) => shouldIncludeHidden || item.isVisible);
+  }, { shouldIncludeHidden: includeHidden });
+};
+
+const findDifferentVisiblePairOption = async (page) => {
+  const currentLabel = ((await page.locator('#pair-selector-btn').textContent()) || '').trim();
+  const options = await getPairMenuOptions(page);
+
+  if (options.length === 0) {
+    return null;
+  }
+
+  const activeOption = options.find((option) => option.isActive);
+  const activeSymbol = activeOption?.symbol || null;
+  const currentLabelOption = options.find((option) => option.label === currentLabel);
+  const currentSymbol = currentLabelOption?.symbol || activeSymbol;
+
+  const alternative = options.find((option) => option.symbol !== currentSymbol);
+  if (!alternative) {
+    return null;
+  }
+
+  return alternative;
+};
+
+const clickAnyDifferentPairOption = async (page) => {
+  const currentLabel = ((await page.locator('#pair-selector-btn').textContent()) || '').trim();
+  const didClick = await page.evaluate(({ expectedCurrentLabel }) => {
+    const menu = document.querySelector('#pair-selector-menu');
+    if (!menu) {
+      return null;
+    }
+
+    const buttons = Array.from(menu.querySelectorAll('[data-symbol]'));
+    if (buttons.length === 0) {
+      return null;
+    }
+
+    const activeButton = buttons.find((button) => button.classList.contains('is-active'));
+    const currentLabelButton = buttons.find((button) => (button.textContent || '').trim() === expectedCurrentLabel);
+    const currentSymbol = (currentLabelButton || activeButton)?.getAttribute('data-symbol');
+    const nextButton = buttons.find((button) => {
+      const symbol = button.getAttribute('data-symbol');
+      return Boolean(symbol && symbol !== currentSymbol);
+    });
+
+    if (!nextButton) {
+      return null;
+    }
+
+    nextButton.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
+    return (nextButton.textContent || '').trim();
+  }, { expectedCurrentLabel: currentLabel });
+
+  return didClick;
+};
+
 const clickDifferentTimeframe = async (page) => {
   const activeButton = page.locator('#timeframe-buttons .timeframe-btn.is-active').first();
   const activeTimeframe = await activeButton.getAttribute('data-timeframe');
@@ -25,25 +117,16 @@ const clickDifferentTimeframe = async (page) => {
 };
 
 const clickDifferentPair = async (page) => {
-  await page.locator('#pair-selector-btn').click();
-  const selected = page.locator('#pair-selector-menu [data-symbol].is-active').first();
-  const selectedSymbol = await selected.getAttribute('data-symbol');
+  await ensurePairMenuOpen(page);
 
-  const options = page.locator('#pair-selector-menu [data-symbol]');
-  const optionCount = await options.count();
-
-  let targetOption = null;
-  for (let index = 0; index < optionCount; index += 1) {
-    const candidate = options.nth(index);
-    const symbol = await candidate.getAttribute('data-symbol');
-    if (symbol && symbol !== selectedSymbol) {
-      targetOption = candidate;
-      break;
-    }
+  const alternative = await findDifferentVisiblePairOption(page);
+  if (!alternative) {
+    const clickedLabel = await clickAnyDifferentPairOption(page);
+    assert.ok(clickedLabel, 'No alternative pair option available to select.');
+    return;
   }
 
-  assert.ok(targetOption, 'No alternative pair option available to select.');
-  await targetOption.click();
+  await page.locator(`#pair-selector-menu [data-symbol="${alternative.symbol}"]`).first().click();
 };
 
 const clickDifferentExchange = async (page) => {
@@ -161,26 +244,18 @@ Then('the pair selector menu is visible', async function () {
 });
 
 When('I select a different pair option', async function () {
-  const selected = await this.page.locator('#pair-selector-menu [data-symbol].is-active').first();
-  const selectedSymbol = await selected.getAttribute('data-symbol');
+  await ensurePairMenuOpen(this.page);
 
-  const options = this.page.locator('#pair-selector-menu [data-symbol]');
-  const optionCount = await options.count();
-
-  let targetOption = null;
-  for (let index = 0; index < optionCount; index += 1) {
-    const candidate = options.nth(index);
-    const symbol = await candidate.getAttribute('data-symbol');
-    if (symbol && symbol !== selectedSymbol) {
-      targetOption = candidate;
-      break;
-    }
+  const alternative = await findDifferentVisiblePairOption(this.page);
+  if (!alternative) {
+    const clickedLabel = await clickAnyDifferentPairOption(this.page);
+    assert.ok(clickedLabel, 'No alternative pair option available to select.');
+    this.selectedPairLabel = clickedLabel;
+    return;
   }
 
-  assert.ok(targetOption, 'No alternative pair option available to select.');
-  this.selectedPairLabel = (await targetOption.textContent() || '').trim();
-
-  await targetOption.click();
+  this.selectedPairLabel = alternative.label;
+  await this.page.locator(`#pair-selector-menu [data-symbol="${alternative.symbol}"]`).first().click();
 });
 
 Then('the pair selector button reflects the selected pair', async function () {

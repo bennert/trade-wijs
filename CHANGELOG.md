@@ -22,10 +22,15 @@ All notable changes to this project are documented in this file.
 	- `full`: ~`2044 ms`, ~`1.53 MB`
 	- `delta`: ~`701 ms`, ~`0.45 MB`
 	- Improvement: about `65.7%` lower average latency and `70.2%` smaller payload.
+- Stabilized flaky market selector and settings persistence scenarios:
+	- Pair selector flow now remains selectable under async UI refresh/filter transitions.
+	- Pair selector visibility defaults now keep alternative symbols available for manual switching.
+	- Settings persistence toggle waits now retry while exchange option lists finish loading.
 
 ### Verification
 
 - [x] CI-relevant tests passed locally (`17 scenarios`, `137 steps`).
+- [x] Full Gherkin suite passed locally (`24 scenarios`, `218 steps`).
 
 ---
 

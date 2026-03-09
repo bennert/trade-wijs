@@ -37,6 +37,27 @@ const getSettingConfig = (settingType) => {
   return config;
 };
 
+const waitForEnabledSettingOption = async (page, selector, timeoutMs) => {
+  await page.waitForFunction(({ settingSelector }) => {
+    const candidates = Array.from(document.querySelectorAll(settingSelector));
+    return candidates.length > 0 && candidates.some((candidate) => !candidate.disabled);
+  }, { settingSelector: selector }, { timeout: timeoutMs });
+};
+
+const retryWaitForEnabledSettingOption = async (page, selector) => {
+  try {
+    await waitForEnabledSettingOption(page, selector, 10000);
+    return;
+  } catch (_error) {
+    const activeExchangeTab = page.locator('[data-settings-exchange].is-active').first();
+    if (await activeExchangeTab.count()) {
+      await activeExchangeTab.click();
+      await page.waitForTimeout(300);
+    }
+    await waitForEnabledSettingOption(page, selector, 20000);
+  }
+};
+
 const waitForPairPersistence = async (page, exchangeKey, pairSymbol, expectedChecked) => {
   await page.waitForFunction(
     ({ targetExchangeKey, targetPairSymbol, expected }) => {
@@ -104,10 +125,7 @@ When('I toggle one {word} setting option', async function (settingType) {
   }
 
   await options.first().waitFor({ state: 'attached', timeout: 10000 });
-  await this.page.waitForFunction(({ selector }) => {
-    const candidates = Array.from(document.querySelectorAll(selector));
-    return candidates.length > 0 && candidates.some((candidate) => !candidate.disabled);
-  }, { selector: config.selector }, { timeout: 10000 });
+  await retryWaitForEnabledSettingOption(this.page, config.selector);
 
   const count = await options.count();
   assert.ok(count > 0, `Expected at least one ${settingType} setting option.`);
