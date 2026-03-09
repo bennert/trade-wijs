@@ -299,6 +299,51 @@ When('I toggle one {word} setting option', async function (settingType) {
     }
   }
 
+  if (!toggledSetting && settingType === 'quote') {
+    const activeExchangeTab = this.page.locator('[data-settings-exchange].is-active').first();
+    if (await activeExchangeTab.count()) {
+      await activeExchangeTab.click();
+      await this.page.waitForTimeout(300);
+
+      await this.page.waitForFunction(({ selector }) => {
+        return document.querySelectorAll(selector).length > 1;
+      }, { selector: config.selector }, { timeout: 8000 }).catch(() => {});
+
+      const retryGroups = preferredChecked
+        ? [
+            this.page.locator(`${config.selector}:not(:disabled):checked`),
+            this.page.locator(`${config.selector}:not(:disabled)`),
+          ]
+        : [this.page.locator(`${config.selector}:not(:disabled)`), this.page.locator(`${config.selector}:not(:disabled):checked`)];
+
+      for (const retryGroup of retryGroups) {
+        const retryCount = await retryGroup.count();
+        const retryLimit = Math.min(retryCount, 25);
+
+        for (let index = 0; index < retryLimit; index += 1) {
+          const option = retryGroup.nth(index);
+          const key = await option.getAttribute(config.attribute);
+          const before = await option.isChecked();
+          await option.click({ force: true });
+          const after = await option.isChecked();
+
+          if (before !== after && key) {
+            toggledSetting = {
+              settingType,
+              key,
+              expectedChecked: after,
+            };
+            break;
+          }
+        }
+
+        if (toggledSetting) {
+          break;
+        }
+      }
+    }
+  }
+
   assert.ok(toggledSetting, `Could not toggle any ${settingType} setting option.`);
   if (settingType === 'pair') {
     const activeExchangeKey = await this.page.evaluate(() => {

@@ -42,6 +42,14 @@ When('I make sure the exchange option for {word} is enabled', async function (ex
 });
 
 Then('the exchange editor controls are disabled', async function () {
+  await this.page.waitForFunction(() => {
+    const apiKey = document.querySelector('#settings-api-key');
+    const apiSecret = document.querySelector('#settings-api-secret');
+    const apiPassphrase = document.querySelector('#settings-api-passphrase');
+    const saveButton = document.querySelector('#settings-save-btn');
+    return Boolean(apiKey?.disabled && apiSecret?.disabled && apiPassphrase?.disabled && saveButton?.disabled);
+  }, { timeout: 5000 });
+
   const apiKeyDisabled = await this.page.locator('#settings-api-key').isDisabled();
   const apiSecretDisabled = await this.page.locator('#settings-api-secret').isDisabled();
   const apiPassphraseDisabled = await this.page.locator('#settings-api-passphrase').isDisabled();
@@ -63,6 +71,14 @@ Then('the exchange editor controls are disabled', async function () {
 });
 
 Then('the exchange editor controls are enabled', async function () {
+  await this.page.waitForFunction(() => {
+    const apiKey = document.querySelector('#settings-api-key');
+    const apiSecret = document.querySelector('#settings-api-secret');
+    const apiPassphrase = document.querySelector('#settings-api-passphrase');
+    const saveButton = document.querySelector('#settings-save-btn');
+    return Boolean(apiKey && !apiKey.disabled && apiSecret && !apiSecret.disabled && apiPassphrase && !apiPassphrase.disabled && saveButton && !saveButton.disabled);
+  }, { timeout: 5000 });
+
   const apiKeyDisabled = await this.page.locator('#settings-api-key').isDisabled();
   const apiSecretDisabled = await this.page.locator('#settings-api-secret').isDisabled();
   const apiPassphraseDisabled = await this.page.locator('#settings-api-passphrase').isDisabled();

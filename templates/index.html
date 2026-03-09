@@ -9759,6 +9759,12 @@
       }
 
       if (settingsPanelElement) {
+        const deferSettingsUpdate = (callback) => {
+          window.requestAnimationFrame(() => {
+            window.setTimeout(callback, 0);
+          });
+        };
+
         settingsPanelElement.addEventListener("click", (event) => {
           const categoryButton = event.target.closest("[data-settings-category]");
           if (categoryButton) {
@@ -9798,7 +9804,9 @@
               return;
             }
 
-            setEnabledExchanges(selectedExchangeKeys);
+            deferSettingsUpdate(() => {
+              setEnabledExchanges(selectedExchangeKeys);
+            });
             if (settingsSaveStatusElement) {
               settingsSaveStatusElement.textContent = "Exchanges updated";
             }
@@ -9820,7 +9828,9 @@
               return;
             }
 
-            setEnabledTimeframes(selectedTimeframes, { exchangeKey: activeSettingsExchangeKey });
+            deferSettingsUpdate(() => {
+              setEnabledTimeframes(selectedTimeframes, { exchangeKey: activeSettingsExchangeKey });
+            });
             if (settingsSaveStatusElement) {
               settingsSaveStatusElement.textContent = "Timeframes updated";
             }
@@ -9842,7 +9852,9 @@
               return;
             }
 
-            setEnabledQuoteCurrencies(selectedQuoteCurrencies, { exchangeKey: activeSettingsExchangeKey });
+            deferSettingsUpdate(() => {
+              setEnabledQuoteCurrencies(selectedQuoteCurrencies, { exchangeKey: activeSettingsExchangeKey });
+            });
             if (settingsSaveStatusElement) {
               settingsSaveStatusElement.textContent = "Quote currencies updated";
             }
@@ -9864,7 +9876,9 @@
               return;
             }
 
-            setEnabledPairs(selectedPairs, { exchangeKey: activeSettingsExchangeKey });
+            deferSettingsUpdate(() => {
+              setEnabledPairs(selectedPairs, { exchangeKey: activeSettingsExchangeKey });
+            });
             if (settingsSaveStatusElement) {
               settingsSaveStatusElement.textContent = "Pairs updated";
             }
@@ -9886,7 +9900,9 @@
               return;
             }
 
-            setEnabledIndicators(selectedIndicators);
+            deferSettingsUpdate(() => {
+              setEnabledIndicators(selectedIndicators);
+            });
             if (settingsSaveStatusElement) {
               settingsSaveStatusElement.textContent = "Indicators updated";
             }
@@ -9908,7 +9924,9 @@
               return;
             }
 
-            setEnabledTools(selectedTools);
+            deferSettingsUpdate(() => {
+              setEnabledTools(selectedTools);
+            });
             if (settingsSaveStatusElement) {
               settingsSaveStatusElement.textContent = "Tools updated";
             }
