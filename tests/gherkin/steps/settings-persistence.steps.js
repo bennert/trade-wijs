@@ -84,6 +84,28 @@ const waitForPairPersistence = async (page, exchangeKey, pairSymbol, expectedChe
   );
 };
 
+const waitForQuotePersistence = async (page, exchangeKey, quoteCurrency, expectedChecked) => {
+  await page.waitForFunction(
+    ({ targetExchangeKey, targetQuoteCurrency, expected }) => {
+      try {
+        const raw = localStorage.getItem('trade-wijs-enabled-quote-currencies');
+        const parsed = raw ? JSON.parse(raw) : {};
+        const enabledForExchange = Array.isArray(parsed?.[targetExchangeKey]) ? parsed[targetExchangeKey] : [];
+        const hasQuote = enabledForExchange.includes(targetQuoteCurrency);
+        return hasQuote === expected;
+      } catch (_error) {
+        return false;
+      }
+    },
+    {
+      targetExchangeKey: exchangeKey,
+      targetQuoteCurrency: quoteCurrency,
+      expected: expectedChecked,
+    },
+    { timeout: 5000 },
+  );
+};
+
 When('I open the general settings category', async function () {
   await this.page.locator('[data-settings-category="general"]').click();
   await this.page.locator('#settings-category-general.is-active').waitFor({ state: 'visible', timeout: 5000 });
@@ -344,6 +366,59 @@ When('I toggle one {word} setting option', async function (settingType) {
     }
   }
 
+  if (!toggledSetting && settingType === 'quote') {
+    const deterministicToggle = await this.page.evaluate(({ selector, attribute }) => {
+      const options = Array.from(document.querySelectorAll(selector)).filter((option) => !option.disabled);
+      if (options.length === 0) {
+        return null;
+      }
+
+      const checkedOptions = options.filter((option) => option.checked);
+      const uncheckedOptions = options.filter((option) => !option.checked);
+
+      let target = null;
+      if (uncheckedOptions.length > 0) {
+        target = uncheckedOptions[0];
+      } else if (checkedOptions.length > 1) {
+        target = checkedOptions[0];
+      }
+
+      if (!target) {
+        return null;
+      }
+
+      const key = target.getAttribute(attribute);
+      if (!key) {
+        return null;
+      }
+
+      const before = target.checked;
+      target.click();
+      const after = target.checked;
+      if (before === after) {
+        return null;
+      }
+
+      const activeExchangeTab = document.querySelector('[data-settings-exchange].is-active');
+      const exchangeKey = activeExchangeTab ? activeExchangeTab.getAttribute('data-settings-exchange') : null;
+
+      return {
+        key,
+        expectedChecked: after,
+        exchangeKey,
+      };
+    }, { selector: config.selector, attribute: config.attribute });
+
+    if (deterministicToggle) {
+      toggledSetting = {
+        settingType,
+        key: deterministicToggle.key,
+        expectedChecked: deterministicToggle.expectedChecked,
+        exchangeKey: deterministicToggle.exchangeKey,
+      };
+    }
+  }
+
   assert.ok(toggledSetting, `Could not toggle any ${settingType} setting option.`);
   if (settingType === 'pair') {
     const activeExchangeKey = await this.page.evaluate(() => {
@@ -354,6 +429,9 @@ When('I toggle one {word} setting option', async function (settingType) {
       await waitForPairPersistence(this.page, activeExchangeKey, toggledSetting.key, toggledSetting.expectedChecked);
       toggledSetting.exchangeKey = activeExchangeKey;
     }
+  }
+  if (settingType === 'quote' && toggledSetting.exchangeKey && toggledSetting.key) {
+    await waitForQuotePersistence(this.page, toggledSetting.exchangeKey, toggledSetting.key, toggledSetting.expectedChecked);
   }
   this.toggledSettingsByType = this.toggledSettingsByType || {};
   this.toggledSettingsByType[settingType] = toggledSetting;
