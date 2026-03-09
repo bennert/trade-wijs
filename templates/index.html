@@ -4060,6 +4060,28 @@
         renderSettingsPairsForExchange(exchangeKey);
       };
 
+      const clearSettingsOptionsUI = () => {
+        const timeframeGroupElement = settingsExchangeTimeframesPanelElement?.querySelector("[aria-label='Timeframes options']") || null;
+        const quoteCurrencyGroupElement = settingsExchangeTimeframesPanelElement?.querySelector("[aria-label='Quote currency options']") || null;
+
+        if (timeframeGroupElement) {
+          timeframeGroupElement.innerHTML = "";
+        }
+        if (quoteCurrencyGroupElement) {
+          quoteCurrencyGroupElement.innerHTML = "";
+        }
+        if (settingsPairsListElement) {
+          settingsPairsListElement.innerHTML = "";
+        }
+
+        settingsTimeframeToggleElements = [];
+        settingsQuoteCurrencyToggleElements = [];
+        settingsPairToggleElements = [];
+        validTimeframes = new Set();
+        validQuoteCurrencies = new Set();
+        validSettingsPairs = new Set();
+      };
+
       const loadSettingsOptionsForExchange = async (exchangeKey, options = {}) => {
         if (!validExchangeKeys.has(exchangeKey)) {
           return;
@@ -5526,6 +5548,18 @@
       const setSettingsExchangeTab = (exchangeKey) => {
         const nextExchangeKey = validExchangeKeys.has(exchangeKey) ? exchangeKey : currentExchangeKey;
         activeSettingsExchangeKey = nextExchangeKey;
+
+        const hasCachedTimeframes = Array.isArray(availableTimeframesByExchange[activeSettingsExchangeKey])
+          && availableTimeframesByExchange[activeSettingsExchangeKey].length > 0;
+        const hasCachedQuoteCurrencies = Array.isArray(availableQuoteCurrenciesByExchange[activeSettingsExchangeKey])
+          && availableQuoteCurrenciesByExchange[activeSettingsExchangeKey].length > 0;
+        const hasCachedSymbols = Array.isArray(availableSymbolsByExchange[activeSettingsExchangeKey])
+          && availableSymbolsByExchange[activeSettingsExchangeKey].length > 0;
+        const hasCachedSettingsOptions = hasCachedTimeframes && hasCachedQuoteCurrencies && hasCachedSymbols;
+
+        if (!hasCachedSettingsOptions) {
+          clearSettingsOptionsUI();
+        }
 
         settingsExchangeTabElements.forEach((button) => {
           const isActive = button.dataset.settingsExchange === activeSettingsExchangeKey;
