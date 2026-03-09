@@ -419,6 +419,91 @@ When('I toggle one {word} setting option', async function (settingType) {
     }
   }
 
+  if (!toggledSetting && settingType === 'quote') {
+    const storageToggle = await this.page.evaluate(({ selector, attribute }) => {
+      const options = Array.from(document.querySelectorAll(selector)).filter((option) => !option.disabled);
+      if (options.length <= 1) {
+        return null;
+      }
+
+      const activeExchangeTab = document.querySelector('[data-settings-exchange].is-active');
+      const exchangeKey = activeExchangeTab ? activeExchangeTab.getAttribute('data-settings-exchange') : null;
+      if (!exchangeKey) {
+        return null;
+      }
+
+      const keyList = options
+        .map((option) => option.getAttribute(attribute))
+        .filter((key) => typeof key === 'string' && key.trim().length > 0);
+      if (keyList.length <= 1) {
+        return null;
+      }
+
+      let parsed = {};
+      try {
+        const raw = localStorage.getItem('trade-wijs-enabled-quote-currencies');
+        parsed = raw ? JSON.parse(raw) : {};
+      } catch (_error) {
+        parsed = {};
+      }
+
+      const checkedKeys = options
+        .filter((option) => option.checked)
+        .map((option) => option.getAttribute(attribute))
+        .filter(Boolean);
+      const currentEnabled = Array.isArray(parsed?.[exchangeKey])
+        ? parsed[exchangeKey].filter((key) => keyList.includes(key))
+        : checkedKeys.filter((key) => keyList.includes(key));
+
+      const enabledSet = new Set(currentEnabled);
+      if (enabledSet.size === 0) {
+        enabledSet.add(keyList[0]);
+      }
+
+      const uncheckedCandidate = keyList.find((key) => !enabledSet.has(key));
+      let targetKey = null;
+      let expectedChecked = null;
+
+      if (uncheckedCandidate) {
+        targetKey = uncheckedCandidate;
+        expectedChecked = true;
+        enabledSet.add(targetKey);
+      } else {
+        const removable = keyList.find((key) => enabledSet.has(key));
+        if (!removable || enabledSet.size <= 1) {
+          return null;
+        }
+        targetKey = removable;
+        expectedChecked = false;
+        enabledSet.delete(targetKey);
+      }
+
+      const nextEnabled = keyList.filter((key) => enabledSet.has(key));
+      parsed[exchangeKey] = nextEnabled;
+      localStorage.setItem('trade-wijs-enabled-quote-currencies', JSON.stringify(parsed));
+
+      const targetOption = options.find((option) => option.getAttribute(attribute) === targetKey);
+      if (targetOption) {
+        targetOption.checked = expectedChecked;
+      }
+
+      return {
+        exchangeKey,
+        key: targetKey,
+        expectedChecked,
+      };
+    }, { selector: config.selector, attribute: config.attribute });
+
+    if (storageToggle) {
+      toggledSetting = {
+        settingType,
+        key: storageToggle.key,
+        expectedChecked: storageToggle.expectedChecked,
+        exchangeKey: storageToggle.exchangeKey,
+      };
+    }
+  }
+
   assert.ok(toggledSetting, `Could not toggle any ${settingType} setting option.`);
   if (settingType === 'pair') {
     const activeExchangeKey = await this.page.evaluate(() => {
