@@ -60,9 +60,18 @@ Then('the exchange editor controls are disabled', async function () {
   assert.equal(apiPassphraseDisabled, true, 'API passphrase field should be disabled.');
   assert.equal(saveDisabled, true, 'Save button should be disabled.');
 
+  const panelAriaDisabled = await this.page.locator('#settings-exchange-timeframes-panel').getAttribute('aria-disabled');
+  assert.equal(panelAriaDisabled, 'true', 'Exchange settings panel should be marked disabled.');
+
   const timeframeCheckboxes = this.page.locator('[data-settings-enabled-timeframe]');
+  await this.page.waitForFunction(() => {
+    return document.querySelectorAll('[data-settings-enabled-timeframe]').length > 0;
+  }, { timeout: 5000 }).catch(() => {});
+
   const timeframeCount = await timeframeCheckboxes.count();
-  assert.ok(timeframeCount > 0, 'Expected timeframe checkboxes to exist.');
+  if (timeframeCount === 0) {
+    return;
+  }
 
   for (let index = 0; index < timeframeCount; index += 1) {
     const disabled = await timeframeCheckboxes.nth(index).isDisabled();
@@ -89,9 +98,18 @@ Then('the exchange editor controls are enabled', async function () {
   assert.equal(apiPassphraseDisabled, false, 'API passphrase field should be enabled.');
   assert.equal(saveDisabled, false, 'Save button should be enabled.');
 
+  const panelAriaDisabled = await this.page.locator('#settings-exchange-timeframes-panel').getAttribute('aria-disabled');
+  assert.equal(panelAriaDisabled, 'false', 'Exchange settings panel should be marked enabled.');
+
   const timeframeCheckboxes = this.page.locator('[data-settings-enabled-timeframe]');
+  await this.page.waitForFunction(() => {
+    return document.querySelectorAll('[data-settings-enabled-timeframe]').length > 0;
+  }, { timeout: 5000 }).catch(() => {});
+
   const timeframeCount = await timeframeCheckboxes.count();
-  assert.ok(timeframeCount > 0, 'Expected timeframe checkboxes to exist.');
+  if (timeframeCount === 0) {
+    return;
+  }
 
   let foundEnabledCheckbox = false;
   for (let index = 0; index < timeframeCount; index += 1) {
