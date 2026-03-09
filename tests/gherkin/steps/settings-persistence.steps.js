@@ -37,6 +37,10 @@ const getSettingConfig = (settingType) => {
   return config;
 };
 
+const SETTINGS_OPTIONS_WAIT_FAST_MS = 4000;
+const SETTINGS_OPTIONS_WAIT_RETRY_MS = 8000;
+const SETTINGS_OPTIONS_WAIT_ATTACHED_MS = 5000;
+
 const waitForEnabledSettingOption = async (page, selector, timeoutMs) => {
   await page.waitForFunction(({ settingSelector }) => {
     const candidates = Array.from(document.querySelectorAll(settingSelector));
@@ -46,7 +50,7 @@ const waitForEnabledSettingOption = async (page, selector, timeoutMs) => {
 
 const retryWaitForEnabledSettingOption = async (page, selector) => {
   try {
-    await waitForEnabledSettingOption(page, selector, 10000);
+    await waitForEnabledSettingOption(page, selector, SETTINGS_OPTIONS_WAIT_FAST_MS);
     return;
   } catch (_error) {
     const activeExchangeTab = page.locator('[data-settings-exchange].is-active').first();
@@ -54,7 +58,7 @@ const retryWaitForEnabledSettingOption = async (page, selector) => {
       await activeExchangeTab.click();
       await page.waitForTimeout(300);
     }
-    await waitForEnabledSettingOption(page, selector, 20000);
+    await waitForEnabledSettingOption(page, selector, SETTINGS_OPTIONS_WAIT_RETRY_MS);
   }
 };
 
@@ -111,20 +115,20 @@ When('I toggle one {word} setting option', async function (settingType) {
     };
 
     try {
-      await waitForOptions(10000);
+      await waitForOptions(SETTINGS_OPTIONS_WAIT_FAST_MS);
     } catch (_error) {
       const activeExchangeTab = this.page.locator('[data-settings-exchange].is-active').first();
       if (await activeExchangeTab.count()) {
         await activeExchangeTab.click();
         await this.page.waitForTimeout(250);
       }
-      await waitForOptions(20000);
+      await waitForOptions(SETTINGS_OPTIONS_WAIT_RETRY_MS);
     }
 
     options = this.page.locator(config.selector);
   }
 
-  await options.first().waitFor({ state: 'attached', timeout: 10000 });
+  await options.first().waitFor({ state: 'attached', timeout: SETTINGS_OPTIONS_WAIT_ATTACHED_MS });
   await retryWaitForEnabledSettingOption(this.page, config.selector);
 
   const count = await options.count();
