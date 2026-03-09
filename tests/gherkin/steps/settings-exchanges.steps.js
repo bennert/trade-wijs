@@ -34,6 +34,13 @@ When('I enable the exchange option for {word}', async function (exchangeKey) {
   }
 });
 
+When('I make sure the exchange option for {word} is enabled', async function (exchangeKey) {
+  const checkbox = this.page.locator(`[data-settings-enabled-exchange="${exchangeKey}"]`);
+  if (!(await checkbox.isChecked())) {
+    await checkbox.click();
+  }
+});
+
 Then('the exchange editor controls are disabled', async function () {
   const apiKeyDisabled = await this.page.locator('#settings-api-key').isDisabled();
   const apiSecretDisabled = await this.page.locator('#settings-api-secret').isDisabled();

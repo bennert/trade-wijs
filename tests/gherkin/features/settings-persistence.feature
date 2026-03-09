@@ -5,11 +5,13 @@ Feature: Settings persistence after reload
     When I open the homepage
     And I open the settings view
     And I open the exchanges settings category
+    And I make sure the exchange option for binance is enabled
     And I open the exchange settings tab for binance
     And I toggle one <settingType> setting option
     And I reload the page
     And I open the settings view
     And I open the exchanges settings category
+    And I make sure the exchange option for binance is enabled
     And I open the exchange settings tab for binance
     Then the <settingType> setting option remains changed after reload
 
@@ -42,12 +44,14 @@ Feature: Settings persistence after reload
     When I open the homepage
     And I open the settings view
     And I open the exchanges settings category
+    And I make sure the exchange option for <exchangeKey> is enabled
     And I open the exchange settings tab for <exchangeKey>
     Then at least 1 pair 24h volume label is visible
     And I remember the pair 24h volume snapshot
     When I reload the page
     And I open the settings view
     And I open the exchanges settings category
+    And I make sure the exchange option for <exchangeKey> is enabled
     And I open the exchange settings tab for <exchangeKey>
     Then at least 1 pair 24h volume label is visible
     And the remembered pair 24h volume snapshot is still visible

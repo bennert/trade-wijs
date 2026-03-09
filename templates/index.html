@@ -1063,7 +1063,7 @@
         if (savedEnabledTimeframes && typeof savedEnabledTimeframes === "object") {
           const nextEnabledTimeframesByExchange = {};
           Object.keys(savedEnabledTimeframes).forEach((exchangeKey) => {
-            if (!validExchangeKeys.has(exchangeKey)) {
+            if (!validExchangeKeys.has(exchangeKey) || !enabledExchangeKeys.has(exchangeKey)) {
               return;
             }
 
@@ -1090,7 +1090,7 @@
         if (savedEnabledQuoteCurrencies && typeof savedEnabledQuoteCurrencies === "object") {
           const nextEnabledQuoteCurrenciesByExchange = {};
           Object.keys(savedEnabledQuoteCurrencies).forEach((exchangeKey) => {
-            if (!validExchangeKeys.has(exchangeKey)) {
+            if (!validExchangeKeys.has(exchangeKey) || !enabledExchangeKeys.has(exchangeKey)) {
               return;
             }
 
@@ -1117,7 +1117,7 @@
         if (savedEnabledPairs && typeof savedEnabledPairs === "object") {
           const nextEnabledPairsByExchange = {};
           Object.keys(savedEnabledPairs).forEach((exchangeKey) => {
-            if (!validExchangeKeys.has(exchangeKey)) {
+            if (!validExchangeKeys.has(exchangeKey) || !enabledExchangeKeys.has(exchangeKey)) {
               return;
             }
 
@@ -1201,8 +1201,30 @@
       try {
         const savedExchangeApiSettings = JSON.parse(localStorage.getItem(exchangeApiSettingsStorageKey) || "{}");
         if (savedExchangeApiSettings && typeof savedExchangeApiSettings === "object") {
-          exchangeApiSettings = savedExchangeApiSettings;
+          const sanitizedExchangeApiSettings = {};
+          Object.keys(savedExchangeApiSettings).forEach((exchangeKey) => {
+            if (!validExchangeKeys.has(exchangeKey) || !enabledExchangeKeys.has(exchangeKey)) {
+              return;
+            }
+
+            const settingsForExchange = savedExchangeApiSettings[exchangeKey];
+            if (!settingsForExchange || typeof settingsForExchange !== "object") {
+              return;
+            }
+
+            sanitizedExchangeApiSettings[exchangeKey] = settingsForExchange;
+          });
+
+          exchangeApiSettings = sanitizedExchangeApiSettings;
         }
+      } catch (_error) {
+      }
+
+      try {
+        localStorage.setItem(enabledTimeframesStorageKey, JSON.stringify(enabledTimeframesByExchange));
+        localStorage.setItem(enabledQuoteCurrenciesStorageKey, JSON.stringify(enabledQuoteCurrenciesByExchange));
+        localStorage.setItem(enabledPairsStorageKey, JSON.stringify(enabledPairsByExchange));
+        localStorage.setItem(exchangeApiSettingsStorageKey, JSON.stringify(exchangeApiSettings));
       } catch (_error) {
       }
 
@@ -1286,7 +1308,22 @@
           return new Set(sanitized);
         }
 
-        return new Set(validQuoteCurrencies);
+        const availableQuoteCurrencies = Array.isArray(availableQuoteCurrenciesByExchange[exchangeKey])
+          ? availableQuoteCurrenciesByExchange[exchangeKey]
+          : Array.from(validQuoteCurrencies);
+        const normalizedQuoteCurrencies = availableQuoteCurrencies
+          .map((quoteCurrency) => String(quoteCurrency || "").trim().toUpperCase())
+          .filter(Boolean);
+
+        const defaultQuoteCurrency = normalizedQuoteCurrencies.includes("USDT")
+          ? "USDT"
+          : (normalizedQuoteCurrencies.includes("USDC")
+            ? "USDC"
+            : (normalizedQuoteCurrencies.includes("EUR")
+              ? "EUR"
+              : (normalizedQuoteCurrencies[0] || "")));
+
+        return defaultQuoteCurrency ? new Set([defaultQuoteCurrency]) : new Set();
       };
 
       const getSymbolOptionsForExchange = (exchangeKey) => {
@@ -1343,10 +1380,6 @@
         }
 
         const fallbackPairs = Array.from(availableSymbols).filter(Boolean);
-        if (fallbackPairs.length > 0) {
-          return new Set(fallbackPairs);
-        }
-
         const fallbackPair = getDefaultEnabledPairForExchange(exchangeKey, fallbackPairs);
         return fallbackPair ? new Set([fallbackPair]) : new Set();
       };
@@ -3873,13 +3906,12 @@
       const applyEnabledPairsToUI = () => {
         const activeSettingsPairs = getEnabledPairsForExchange(activeSettingsExchangeKey);
         const isSettingsExchangeEnabled = enabledExchangeKeys.has(activeSettingsExchangeKey);
-        const enabledPairCount = activeSettingsPairs.size;
 
         settingsPairToggleElements.forEach((checkbox) => {
           const symbol = checkbox.dataset.settingsEnabledPair;
           const isEnabled = activeSettingsPairs.has(symbol);
           checkbox.checked = isEnabled;
-          checkbox.disabled = !isSettingsExchangeEnabled || (isEnabled && enabledPairCount === 1);
+          checkbox.disabled = !isSettingsExchangeEnabled;
         });
 
         if (settingsTogglePairsButtonElement) {
@@ -5758,7 +5790,31 @@
 
         const previousExchangeKey = currentExchangeKey;
         enabledExchangeKeys = nextEnabledExchangeKeys;
+
+        const pruneExchangeScopedState = (sourceObject) => {
+          const pruned = {};
+          Object.keys(sourceObject || {}).forEach((exchangeKey) => {
+            if (enabledExchangeKeys.has(exchangeKey)) {
+              pruned[exchangeKey] = sourceObject[exchangeKey];
+            }
+          });
+          return pruned;
+        };
+
+        enabledTimeframesByExchange = pruneExchangeScopedState(enabledTimeframesByExchange);
+        enabledQuoteCurrenciesByExchange = pruneExchangeScopedState(enabledQuoteCurrenciesByExchange);
+        enabledPairsByExchange = pruneExchangeScopedState(enabledPairsByExchange);
+        exchangeApiSettings = pruneExchangeScopedState(exchangeApiSettings);
+
         persistEnabledExchanges();
+        persistEnabledTimeframes();
+        persistEnabledQuoteCurrencies();
+        persistEnabledPairs();
+        try {
+          localStorage.setItem(exchangeApiSettingsStorageKey, JSON.stringify(exchangeApiSettings));
+        } catch (_error) {
+        }
+
         applyEnabledExchangesToUI();
 
         if (currentExchangeKey !== previousExchangeKey && options.refresh !== false) {
@@ -5794,12 +5850,11 @@
 
         const activeSettingsTimeframes = getEnabledTimeframesForExchange(activeSettingsExchangeKey);
         const isSettingsExchangeEnabled = enabledExchangeKeys.has(activeSettingsExchangeKey);
-        const enabledTimeframeCount = activeSettingsTimeframes.size;
         settingsTimeframeToggleElements.forEach((checkbox) => {
           const timeframe = checkbox.dataset.settingsEnabledTimeframe;
           const isEnabled = activeSettingsTimeframes.has(timeframe);
           checkbox.checked = isEnabled;
-          checkbox.disabled = !isSettingsExchangeEnabled || (isEnabled && enabledTimeframeCount === 1);
+          checkbox.disabled = !isSettingsExchangeEnabled;
         });
         sortSettingsOptionRows(timeframeGroupElement, "[data-settings-enabled-timeframe]", {
           getSortValue: (timeframeLabel) => parseTimeframeToMinutes(timeframeLabel),
@@ -5829,13 +5884,12 @@
 
         const activeSettingsQuoteCurrencies = getEnabledQuoteCurrenciesForExchange(activeSettingsExchangeKey);
         const isSettingsExchangeEnabled = enabledExchangeKeys.has(activeSettingsExchangeKey);
-        const enabledQuoteCurrencyCount = activeSettingsQuoteCurrencies.size;
 
         settingsQuoteCurrencyToggleElements.forEach((checkbox) => {
           const quoteCurrency = checkbox.dataset.settingsEnabledQuoteCurrency;
           const isEnabled = activeSettingsQuoteCurrencies.has(quoteCurrency);
           checkbox.checked = isEnabled;
-          checkbox.disabled = !isSettingsExchangeEnabled || (isEnabled && enabledQuoteCurrencyCount === 1);
+          checkbox.disabled = !isSettingsExchangeEnabled;
         });
         sortSettingsOptionRows(quoteCurrencyGroupElement, "[data-settings-enabled-quote-currency]");
 
@@ -8284,7 +8338,13 @@
 
           enabledQuoteCurrencies = getEnabledQuoteCurrenciesForExchange(currentExchangeKey);
           if (enabledQuoteCurrencies.size === 0 && normalizedQuoteCurrencies.length > 0) {
-            const defaultQuoteCurrency = normalizedQuoteCurrencies.includes("USDT") ? "USDT" : normalizedQuoteCurrencies[0];
+            const defaultQuoteCurrency = normalizedQuoteCurrencies.includes("USDT")
+              ? "USDT"
+              : (normalizedQuoteCurrencies.includes("USDC")
+                ? "USDC"
+                : (normalizedQuoteCurrencies.includes("EUR")
+                  ? "EUR"
+                  : normalizedQuoteCurrencies[0]));
             if (defaultQuoteCurrency) {
               setEnabledQuoteCurrencies([defaultQuoteCurrency], {
                 exchangeKey: currentExchangeKey,
@@ -8719,7 +8779,11 @@
               : Array.from(validQuoteCurrencies);
             const defaultQuoteCurrency = availableQuoteCurrencies.includes("USDT")
               ? "USDT"
-              : (availableQuoteCurrencies[0] || "");
+              : (availableQuoteCurrencies.includes("USDC")
+                ? "USDC"
+                : (availableQuoteCurrencies.includes("EUR")
+                  ? "EUR"
+                  : (availableQuoteCurrencies[0] || "")));
 
             try {
               localStorage.setItem(enabledExchangesStorageKey, JSON.stringify([defaultExchangeKey]));
