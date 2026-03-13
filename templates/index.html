@@ -786,7 +786,7 @@
       let activeSettingsGeneralItem = "indicators";
       let activeDisplayTheme = "dark";
       let exchangeApiSettings = {};
-      let enabledExchangeKeys = new Set(validExchangeKeys);
+      let enabledExchangeKeys = new Set(validExchangeKeys.has("bybit") ? ["bybit"] : [Array.from(validExchangeKeys)[0]].filter(Boolean));
       let enabledTimeframes = new Set(validTimeframes);
       let enabledTimeframesByExchange = {};
       let enabledQuoteCurrencies = new Set(validQuoteCurrencies);
@@ -1074,6 +1074,8 @@
           const sanitizedEnabledExchanges = savedEnabledExchanges.filter((exchangeKey) => validExchangeKeys.has(exchangeKey));
           if (sanitizedEnabledExchanges.length > 0) {
             enabledExchangeKeys = new Set(sanitizedEnabledExchanges);
+          } else {
+            enabledExchangeKeys = new Set(validExchangeKeys.has("bybit") ? ["bybit"] : [Array.from(validExchangeKeys)[0]].filter(Boolean));
           }
         }
       } catch (_error) {
@@ -4444,12 +4446,16 @@
         const selectedQuoteCurrencies = enabledQuoteCurrencies.size > 0
           ? enabledQuoteCurrencies
           : getEnabledQuoteCurrenciesForExchange(currentExchangeKey);
+        const selectedPairs = enabledPairs.size > 0
+          ? enabledPairs
+          : getEnabledPairsForExchange(currentExchangeKey);
         const symbolButtonElements = Array.from(pairSelectorMenuElement.querySelectorAll("[data-symbol]"));
 
         symbolButtonElements.forEach((button) => {
           const symbolQuote = (button.dataset.symbolQuote || getQuoteCurrencyFromSymbol(button.dataset.symbol || "")).toUpperCase();
           const hiddenByQuote = selectedQuoteCurrencies.size > 0 && !selectedQuoteCurrencies.has(symbolQuote);
-          button.hidden = hiddenByQuote;
+          const hiddenByPair = selectedPairs.size > 0 && !selectedPairs.has(button.dataset.symbol || "");
+          button.hidden = hiddenByQuote || hiddenByPair;
         });
 
         const visibleSymbols = symbolButtonElements
