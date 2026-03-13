@@ -817,6 +817,8 @@
       let contextMenuHorizontalLineEntry = null;
       let trendLineContextMenuElement = null;
       let contextMenuTrendLineEntry = null;
+      let candleOrderContextMenuElement = null;
+      let contextMenuCandleOrderPoint = null;
       const horizontalLineSelectionTolerancePx = 10;
       let selectedTrendLineEntry = null;
       const trendLineSelectionTolerancePx = 10;
@@ -7417,6 +7419,136 @@
         contextMenuTrendLineEntry = lineEntry;
       };
 
+      const hideCandleOrderContextMenu = () => {
+        contextMenuCandleOrderPoint = null;
+        if (!candleOrderContextMenuElement) {
+          return;
+        }
+
+        candleOrderContextMenuElement.classList.remove("is-visible");
+      };
+
+      const prepareOrderFromCandleContextMenu = (point, side) => {
+        const normalizedPrice = snapOrderPriceToTick(Number(point?.price));
+        if (!Number.isFinite(normalizedPrice) || normalizedPrice <= 0) {
+          return false;
+        }
+
+        const formattedPrice = formatOrderPriceInputValue(normalizedPrice);
+        if (!formattedPrice) {
+          return false;
+        }
+
+        setRightPanelTab("order");
+        setOrderActionSide(side === "sell" ? "sell" : "buy");
+
+        if (orderPriceInputElement) {
+          if (orderTotalInputElement && String(orderTotalInputElement.value || "").trim().length === 0) {
+            const defaultTotalValue = getDefaultOrderTotalAutofillValue();
+            const formattedTotalValue = formatOrderTotalInputValue(defaultTotalValue);
+            if (formattedTotalValue) {
+              orderTotalInputElement.value = formattedTotalValue;
+            }
+          }
+
+          if (String(orderPriceInputElement.value || "").trim() !== formattedPrice) {
+            orderPriceInputElement.value = formattedPrice;
+            orderPriceInputElement.dispatchEvent(new Event("input", { bubbles: true }));
+          } else {
+            renderChartOrderPreview();
+          }
+        }
+
+        setRefreshStatus(side === "sell" ? "Sell order prepared" : "Buy order prepared", "is-updating");
+        window.setTimeout(() => {
+          setRefreshStatus("Live", "is-live");
+        }, 700);
+
+        return true;
+      };
+
+      const ensureCandleOrderContextMenuElement = () => {
+        if (candleOrderContextMenuElement || !chartCanvas) {
+          return candleOrderContextMenuElement;
+        }
+
+        const menuElement = document.createElement("div");
+        menuElement.className = "horizontal-line-context-menu";
+        menuElement.setAttribute("role", "menu");
+
+        const createBuyButton = document.createElement("button");
+        createBuyButton.type = "button";
+        createBuyButton.className = "horizontal-line-context-menu__item";
+        createBuyButton.dataset.action = "create-buy-order";
+        createBuyButton.textContent = "Create Buy Order";
+
+        const createSellButton = document.createElement("button");
+        createSellButton.type = "button";
+        createSellButton.className = "horizontal-line-context-menu__item";
+        createSellButton.dataset.action = "create-sell-order";
+        createSellButton.textContent = "Create Sell Order";
+
+        menuElement.appendChild(createBuyButton);
+        menuElement.appendChild(createSellButton);
+        chartCanvas.appendChild(menuElement);
+        candleOrderContextMenuElement = menuElement;
+
+        menuElement.addEventListener("mousedown", (event) => {
+          event.stopPropagation();
+        });
+
+        menuElement.addEventListener("click", (event) => {
+          const actionButton = event.target.closest(".horizontal-line-context-menu__item");
+          if (!actionButton || !contextMenuCandleOrderPoint) {
+            hideCandleOrderContextMenu();
+            return;
+          }
+
+          if (actionButton.dataset.action === "create-buy-order") {
+            prepareOrderFromCandleContextMenu(contextMenuCandleOrderPoint, "buy");
+          }
+
+          if (actionButton.dataset.action === "create-sell-order") {
+            prepareOrderFromCandleContextMenu(contextMenuCandleOrderPoint, "sell");
+          }
+
+          hideCandleOrderContextMenu();
+        });
+
+        return candleOrderContextMenuElement;
+      };
+
+      const showCandleOrderContextMenu = (point, event) => {
+        if (!point || !chartCanvas) {
+          hideCandleOrderContextMenu();
+          return;
+        }
+
+        const menuElement = ensureCandleOrderContextMenuElement();
+        if (!menuElement) {
+          return;
+        }
+
+        const canvasRect = chartCanvas.getBoundingClientRect();
+        const relativeX = event.clientX - canvasRect.left;
+        const relativeY = event.clientY - canvasRect.top;
+
+        menuElement.classList.add("is-visible");
+        const menuWidth = menuElement.offsetWidth || 170;
+        const menuHeight = menuElement.offsetHeight || 76;
+        const maxLeft = Math.max(8, canvasRect.width - menuWidth - 8);
+        const maxTop = Math.max(8, canvasRect.height - menuHeight - 8);
+
+        const left = clamp(relativeX, 8, maxLeft);
+        const top = clamp(relativeY, 8, maxTop);
+
+        menuElement.style.left = `${left}px`;
+        menuElement.style.top = `${top}px`;
+        contextMenuCandleOrderPoint = {
+          price: Number(point.price),
+        };
+      };
+
       const applyHorizontalLineVisualState = (lineEntry) => {
         if (!lineEntry || lineEntry.removed || !lineEntry.priceLine) {
           return;
@@ -9147,7 +9279,8 @@
 
       const drawCaptureOverlay = ensureDrawCaptureOverlayElement();
       ensureHorizontalLineContextMenuElement();
-  ensureTrendLineContextMenuElement();
+        ensureTrendLineContextMenuElement();
+        ensureCandleOrderContextMenuElement();
       if (drawCaptureOverlay) {
         drawCaptureOverlay.addEventListener("mousemove", (event) => {
           if (!drawLineMode) {
@@ -9266,6 +9399,7 @@
 
           hideHorizontalLineContextMenu();
           hideTrendLineContextMenu();
+          hideCandleOrderContextMenu();
 
           const clickedPoint = resolveScreenPointFromCanvasClick(event);
           if (!clickedPoint) {
@@ -9423,6 +9557,7 @@
             setSelectedTrendLine(null);
             setSelectedHorizontalLine(nearestLineEntry);
             hideTrendLineContextMenu();
+            hideCandleOrderContextMenu();
             showHorizontalLineContextMenu(nearestLineEntry, event);
             return;
           }
@@ -9434,12 +9569,18 @@
             setSelectedHorizontalLine(null);
             setSelectedTrendLine(nearestTrendLineEntry);
             hideHorizontalLineContextMenu();
+            hideCandleOrderContextMenu();
             showTrendLineContextMenu(nearestTrendLineEntry, event);
             return;
           }
 
+          event.preventDefault();
+          event.stopPropagation();
           hideHorizontalLineContextMenu();
           hideTrendLineContextMenu();
+          setSelectedHorizontalLine(null);
+          setSelectedTrendLine(null);
+          showCandleOrderContextMenu(clickedPoint, event);
         });
       }
 
@@ -9463,8 +9604,11 @@
         const isTrendMenuVisible = Boolean(
           trendLineContextMenuElement && trendLineContextMenuElement.classList.contains("is-visible"),
         );
+        const isCandleOrderMenuVisible = Boolean(
+          candleOrderContextMenuElement && candleOrderContextMenuElement.classList.contains("is-visible"),
+        );
 
-        if (!isHorizontalMenuVisible && !isTrendMenuVisible) {
+        if (!isHorizontalMenuVisible && !isTrendMenuVisible && !isCandleOrderMenuVisible) {
           return;
         }
 
@@ -9476,8 +9620,13 @@
           return;
         }
 
+        if (isCandleOrderMenuVisible && clickTarget instanceof Node && candleOrderContextMenuElement.contains(clickTarget)) {
+          return;
+        }
+
         hideHorizontalLineContextMenu();
         hideTrendLineContextMenu();
+        hideCandleOrderContextMenu();
       });
 
       window.addEventListener("mouseup", () => {
