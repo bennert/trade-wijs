@@ -406,6 +406,7 @@
         <div id="right-panel-tabs" class="panel-tabs" role="tablist" aria-label="Right panel tabs">
           <button type="button" class="panel-tab is-active" role="tab" aria-selected="true" data-panel="order">Order Panel</button>
           <button type="button" class="panel-tab" role="tab" aria-selected="false" data-panel="watchlist">Watchlist</button>
+          <button type="button" class="panel-tab" role="tab" aria-selected="false" data-panel="signals">Signals</button>
         </div>
 
         <div id="panel-order" class="tab-panel is-active" role="tabpanel">
@@ -488,6 +489,13 @@
             <li>EURUSD</li>
             <li>NAS100</li>
           </ul>
+        </div>
+
+        <div id="panel-signals" class="tab-panel" role="tabpanel">
+          <div class="signals-panel-empty">
+            <h3 class="signals-panel-title">Signals</h3>
+            <p class="signals-panel-copy">No active signals yet for the current market tab.</p>
+          </div>
         </div>
 
         <div class="place-order-row">
@@ -643,6 +651,7 @@
       const panelTabButtons = Array.from(document.querySelectorAll(".panel-tab"));
       const panelOrderElement = document.getElementById("panel-order");
       const panelWatchlistElement = document.getElementById("panel-watchlist");
+      const panelSignalsElement = document.getElementById("panel-signals");
       const ohlcOpenElement = document.getElementById("ohlc-open");
       const ohlcHighElement = document.getElementById("ohlc-high");
       const ohlcLowElement = document.getElementById("ohlc-low");
@@ -5940,14 +5949,20 @@
       };
 
       const setRightPanelTab = (panelName) => {
-        const isOrder = panelName === "order";
+        const panelElementsByName = {
+          order: panelOrderElement,
+          watchlist: panelWatchlistElement,
+          signals: panelSignalsElement,
+        };
 
-        if (panelOrderElement) {
-          panelOrderElement.classList.toggle("is-active", isOrder);
-        }
-        if (panelWatchlistElement) {
-          panelWatchlistElement.classList.toggle("is-active", !isOrder);
-        }
+        Object.keys(panelElementsByName).forEach((name) => {
+          const panelElement = panelElementsByName[name];
+          if (!panelElement) {
+            return;
+          }
+
+          panelElement.classList.toggle("is-active", name === panelName);
+        });
 
         panelTabButtons.forEach((button) => {
           const isActive = button.dataset.panel === panelName;

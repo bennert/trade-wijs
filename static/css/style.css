@@ -1833,7 +1833,7 @@ body.is-dragging-pane-order {
 
 .panel-tabs {
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 6px;
   margin-bottom: 10px;
 }
@@ -1871,6 +1871,27 @@ body.is-dragging-pane-order {
 .watchlist-list li {
   padding: 10px 8px;
   border-bottom: 1px solid var(--border);
+}
+
+.signals-panel-empty {
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.02), rgba(255, 255, 255, 0.01));
+  padding: 14px 12px;
+}
+
+.signals-panel-title {
+  margin: 0 0 6px;
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--text);
+}
+
+.signals-panel-copy {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--muted);
 }
 
 .place-order-row {
