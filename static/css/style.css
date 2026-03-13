@@ -1451,8 +1451,16 @@ body {
   gap: 1px;
   color: #ffffff;
   font-weight: 700;
+}
+
+.pane-scale-label--price-up {
   border: 1px solid rgba(16, 117, 81, 0.9);
   background: rgba(41, 179, 125, 0.95);
+}
+
+.pane-scale-label--price-down {
+  border: 1px solid rgba(140, 48, 60, 0.9);
+  background: rgba(207, 95, 107, 0.95);
 }
 
 .pane-scale-label-main {

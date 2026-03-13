@@ -838,7 +838,8 @@
       let isDraggingPriceScale = false;
       let priceScaleDragStartRange = null;
       let priceScaleDragStartPrice = null;
-        let priceScaleDragStartClientY = null;
+      let priceScaleDragStartClientY = null;
+      let currentPriceLineTone = null;
       const indicatorState = {
         bb: true,
         smc: true,
@@ -2135,10 +2136,26 @@
 
           const latestCandle = chartData[chartData.length - 1] || null;
           if (latestCandle && Number.isFinite(Number(latestCandle.close))) {
+            const latestOpen = Number(latestCandle.open);
+            const latestClose = Number(latestCandle.close);
+            const isUpCandle = !Number.isFinite(latestOpen) || latestClose >= latestOpen;
+            const nextTone = isUpCandle ? "up" : "down";
+            const nextPriceLineColor = isUpCandle ? "#29b37d" : "#cf5f6b";
+
+            if (currentPriceLineTone !== nextTone) {
+              candleSeries.applyOptions({
+                priceLineColor: nextPriceLineColor,
+                priceLineStyle: LightweightCharts.LineStyle.Dashed,
+              });
+              currentPriceLineTone = nextTone;
+            }
+
             addPriorityPriceLabel(
               formatPriceScaleValue(latestCandle.close, { precision: 2 }),
               latestCandle.close,
-              "pane-scale-label--price-current",
+              isUpCandle
+                ? "pane-scale-label--price-current pane-scale-label--price-up"
+                : "pane-scale-label--price-current pane-scale-label--price-down",
               {
                 subText: getCurrentCandleCountdownText(),
                 labelHeightPx: 24,
