@@ -19,42 +19,48 @@
         <span class="brand-version">v{{ app_version }}</span>
       </div>
       <div class="market-selectors">
-        <button id="exchange-selector-btn" type="button" class="market-selector-btn" aria-haspopup="true" aria-expanded="false">
-          {{ market_data.exchange }}
-        </button>
-        <button id="pair-selector-btn" type="button" class="market-selector-btn" aria-haspopup="true" aria-expanded="false">
-          {{ market_data.display_symbol }}
-        </button>
-        <span id="timeframe-label" class="market-timeframe-label">{{ market_data.timeframe }}</span>
-
-        <div id="exchange-selector-menu" class="market-selector-menu" role="menu" aria-label="Select exchange">
-          {% for item in market_data.supported_exchanges %}
-            <button
-              type="button"
-              class="market-selector-menu-item{% if item.key == market_data.exchange_key %} is-active{% endif %}"
-              data-exchange="{{ item.key }}"
-              data-exchange-label="{{ item.label }}"
-              role="menuitem"
-            >
-              {{ item.label }}
-            </button>
-          {% endfor %}
+        <div class="market-tabs-row">
+          <div id="market-tabs" class="market-tabs" role="tablist" aria-label="Trading tabs"></div>
+          <button id="market-tab-add-btn" type="button" class="market-tab-add-btn" aria-label="Add trading tab" title="Add trading tab">+</button>
         </div>
+        <div class="market-selector-controls">
+          <button id="exchange-selector-btn" type="button" class="market-selector-btn" aria-haspopup="true" aria-expanded="false">
+            {{ market_data.exchange }}
+          </button>
+          <button id="pair-selector-btn" type="button" class="market-selector-btn" aria-haspopup="true" aria-expanded="false">
+            {{ market_data.display_symbol }}
+          </button>
+          <span id="timeframe-label" class="market-timeframe-label">{{ market_data.timeframe }}</span>
 
-        <div id="pair-selector-menu" class="market-selector-menu" role="menu" aria-label="Select trading pair">
-          {% for item in market_data.supported_symbols %}
-            <button
-              type="button"
-              class="market-selector-menu-item{% if item.symbol == market_data.symbol %} is-active{% endif %}"
-              data-symbol="{{ item.symbol }}"
-              data-symbol-volume-24h-usdt="{{ item.quote_volume_24h_usdt if item.quote_volume_24h_usdt is not none else '' }}"
-              data-symbol-volume-24h-usdt-compact="{{ item.quote_volume_24h_usdt_compact if item.quote_volume_24h_usdt_compact else '-' }}"
-              data-symbol-volume-24h-currency="{{ item.quote_volume_24h_currency or '' }}"
-              role="menuitem"
-            >
-              {{ item.display_symbol }}
-            </button>
-          {% endfor %}
+          <div id="exchange-selector-menu" class="market-selector-menu" role="menu" aria-label="Select exchange">
+            {% for item in market_data.supported_exchanges %}
+              <button
+                type="button"
+                class="market-selector-menu-item{% if item.key == market_data.exchange_key %} is-active{% endif %}"
+                data-exchange="{{ item.key }}"
+                data-exchange-label="{{ item.label }}"
+                role="menuitem"
+              >
+                {{ item.label }}
+              </button>
+            {% endfor %}
+          </div>
+
+          <div id="pair-selector-menu" class="market-selector-menu" role="menu" aria-label="Select trading pair">
+            {% for item in market_data.supported_symbols %}
+              <button
+                type="button"
+                class="market-selector-menu-item{% if item.symbol == market_data.symbol %} is-active{% endif %}"
+                data-symbol="{{ item.symbol }}"
+                data-symbol-volume-24h-usdt="{{ item.quote_volume_24h_usdt if item.quote_volume_24h_usdt is not none else '' }}"
+                data-symbol-volume-24h-usdt-compact="{{ item.quote_volume_24h_usdt_compact if item.quote_volume_24h_usdt_compact else '-' }}"
+                data-symbol-volume-24h-currency="{{ item.quote_volume_24h_currency or '' }}"
+                role="menuitem"
+              >
+                {{ item.display_symbol }}
+              </button>
+            {% endfor %}
+          </div>
         </div>
       </div>
       <div class="top-actions">
@@ -643,6 +649,8 @@
       const ohlcCloseElement = document.getElementById("ohlc-close");
       const ohlcBarVolumeElement = document.getElementById("ohlc-bar-volume");
       const ohlcVol24Element = document.getElementById("ohlc-vol24");
+      const marketTabsElement = document.getElementById("market-tabs");
+      const marketTabAddButtonElement = document.getElementById("market-tab-add-btn");
       const pairSelectorButtonElement = document.getElementById("pair-selector-btn");
       const exchangeSelectorButtonElement = document.getElementById("exchange-selector-btn");
       const timeframeLabelElement = document.getElementById("timeframe-label");
@@ -709,6 +717,8 @@
       const timeframeStorageKey = "trade-wijs-timeframe";
       const symbolStorageKey = "trade-wijs-symbol";
       const exchangeStorageKey = "trade-wijs-exchange";
+      const marketTabsStorageKey = "trade-wijs-market-tabs";
+      const activeMarketTabStorageKey = "trade-wijs-active-market-tab";
       const appViewModeStorageKey = "trade-wijs-app-view-mode";
       const rightPanelCollapseStorageKey = "trade-wijs-right-panel-collapsed";
       const settingsCategoryStorageKey = "trade-wijs-settings-category";
@@ -840,6 +850,8 @@
       let priceScaleDragStartPrice = null;
       let priceScaleDragStartClientY = null;
       let currentPriceLineTone = null;
+      let marketTabs = [];
+      let activeMarketTabId = "";
       const indicatorState = {
         bb: true,
         smc: true,
@@ -5453,6 +5465,275 @@
         }
       };
 
+      const createMarketTabId = () => `tab-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+
+      const persistMarketTabs = () => {
+        try {
+          localStorage.setItem(marketTabsStorageKey, JSON.stringify(marketTabs));
+          localStorage.setItem(activeMarketTabStorageKey, activeMarketTabId || "");
+        } catch (_error) {
+        }
+      };
+
+      const buildMarketTabLabel = (tabItem) => {
+        const exchangeLabel = getExchangeLabelByKey(tabItem?.exchangeKey) || String(tabItem?.exchangeKey || "").toUpperCase();
+        const displaySymbol = String(tabItem?.symbol || "").replace("/", "");
+        const timeframe = String(tabItem?.timeframe || "");
+        return `${exchangeLabel} ${displaySymbol} ${timeframe}`.trim();
+      };
+
+      const normalizeMarketTabContext = (tabItem) => {
+        const requestedExchangeKey = validExchangeKeys.has(tabItem?.exchangeKey)
+          ? tabItem.exchangeKey
+          : currentExchangeKey;
+
+        const availableTimeframes = Array.from(getEnabledTimeframesForExchange(requestedExchangeKey));
+        const requestedTimeframe = String(tabItem?.timeframe || "");
+        const resolvedTimeframe = availableTimeframes.includes(requestedTimeframe)
+          ? requestedTimeframe
+          : (availableTimeframes[0] || currentTimeframe);
+
+        const symbolOptions = getFilteredPairOptionsForExchange(requestedExchangeKey);
+        const availableSymbols = symbolOptions.map((item) => item.symbol).filter(Boolean);
+        const requestedSymbol = String(tabItem?.symbol || "");
+        const resolvedSymbol = availableSymbols.includes(requestedSymbol)
+          ? requestedSymbol
+          : (availableSymbols[0] || currentSymbol);
+
+        return {
+          id: String(tabItem?.id || createMarketTabId()),
+          exchangeKey: requestedExchangeKey,
+          symbol: resolvedSymbol,
+          timeframe: resolvedTimeframe,
+        };
+      };
+
+      const renderMarketTabs = () => {
+        if (!marketTabsElement) {
+          return;
+        }
+
+        marketTabsElement.innerHTML = "";
+        const fragment = document.createDocumentFragment();
+
+        marketTabs.forEach((tabItem) => {
+          const tabButton = document.createElement("button");
+          tabButton.type = "button";
+          tabButton.className = "market-tab";
+          tabButton.dataset.marketTabId = tabItem.id;
+          tabButton.setAttribute("role", "tab");
+          tabButton.setAttribute("aria-selected", tabItem.id === activeMarketTabId ? "true" : "false");
+          tabButton.classList.toggle("is-active", tabItem.id === activeMarketTabId);
+          tabButton.title = buildMarketTabLabel(tabItem);
+
+          const labelElement = document.createElement("span");
+          labelElement.className = "market-tab-label";
+          labelElement.textContent = buildMarketTabLabel(tabItem);
+
+          const closeButton = document.createElement("span");
+          closeButton.className = "market-tab-close";
+          closeButton.dataset.marketTabCloseId = tabItem.id;
+          closeButton.setAttribute("role", "button");
+          closeButton.setAttribute("tabindex", "0");
+          closeButton.setAttribute("aria-label", "Close tab");
+          closeButton.title = "Close tab";
+          closeButton.textContent = "×";
+
+          tabButton.appendChild(labelElement);
+          tabButton.appendChild(closeButton);
+          fragment.appendChild(tabButton);
+        });
+
+        marketTabsElement.appendChild(fragment);
+      };
+
+      const syncActiveMarketTabFromCurrentContext = () => {
+        const activeTab = marketTabs.find((tabItem) => tabItem.id === activeMarketTabId);
+        if (!activeTab) {
+          return;
+        }
+
+        activeTab.exchangeKey = currentExchangeKey;
+        activeTab.symbol = currentSymbol;
+        activeTab.timeframe = currentTimeframe;
+        renderMarketTabs();
+        persistMarketTabs();
+      };
+
+      const activateMarketTab = (tabId, options = {}) => {
+        const activeTab = marketTabs.find((tabItem) => tabItem.id === tabId);
+        if (!activeTab) {
+          return;
+        }
+
+        const normalizedTab = normalizeMarketTabContext(activeTab);
+        activeTab.exchangeKey = normalizedTab.exchangeKey;
+        activeTab.symbol = normalizedTab.symbol;
+        activeTab.timeframe = normalizedTab.timeframe;
+
+        activeMarketTabId = activeTab.id;
+
+        currentExchangeKey = activeTab.exchangeKey;
+        currentExchangeLabel = getExchangeLabelByKey(currentExchangeKey) || currentExchangeLabel;
+        enabledTimeframes = getEnabledTimeframesForExchange(currentExchangeKey);
+        enabledQuoteCurrencies = getEnabledQuoteCurrenciesForExchange(currentExchangeKey);
+        enabledPairs = getEnabledPairsForExchange(currentExchangeKey);
+        applyEnabledTimeframesToUI();
+        applyEnabledQuoteCurrenciesToUI();
+        applyEnabledPairsToUI();
+        syncSettingsExchangeWithCurrentExchange();
+
+        localStorage.setItem(exchangeStorageKey, currentExchangeKey);
+        setPreferenceCookie("trade_wijs_exchange", currentExchangeKey);
+
+        const exchangeSymbolOptions = getSymbolOptionsForExchange(currentExchangeKey);
+        if (exchangeSymbolOptions.length > 0) {
+          renderPairSelectorMenuOptions(exchangeSymbolOptions);
+        }
+
+        applyPairSelectorQuoteCurrencyFilter({ syncCurrentSymbol: false, persistSymbol: false });
+
+        const visibleSymbols = Array.from(pairSelectorMenuElement?.querySelectorAll("[data-symbol]") || [])
+          .filter((button) => !button.hidden)
+          .map((button) => button.dataset.symbol)
+          .filter(Boolean);
+        if (visibleSymbols.includes(activeTab.symbol)) {
+          currentSymbol = activeTab.symbol;
+        } else if (visibleSymbols.length > 0) {
+          currentSymbol = visibleSymbols[0];
+        }
+
+        currentDisplaySymbol = String(currentSymbol || "").replace("/", "");
+        localStorage.setItem(symbolStorageKey, currentSymbol);
+        setPreferenceCookie("trade_wijs_symbol", currentSymbol);
+
+        const availableTimeframes = Array.from(enabledTimeframes);
+        if (availableTimeframes.includes(activeTab.timeframe)) {
+          currentTimeframe = activeTab.timeframe;
+        } else if (availableTimeframes.length > 0) {
+          currentTimeframe = availableTimeframes[0];
+        }
+
+        localStorage.setItem(timeframeStorageKey, currentTimeframe);
+        setPreferenceCookie("trade_wijs_timeframe", currentTimeframe);
+
+        if (pairSelectorButtonElement) {
+          pairSelectorButtonElement.textContent = currentDisplaySymbol;
+        }
+        if (exchangeSelectorButtonElement) {
+          exchangeSelectorButtonElement.textContent = currentExchangeLabel;
+        }
+        if (timeframeLabelElement) {
+          timeframeLabelElement.textContent = currentTimeframe;
+        }
+
+        setActiveSelectorMenuItem(pairSelectorMenuElement, "data-symbol", currentSymbol);
+        setActiveSelectorMenuItem(exchangeSelectorMenuElement, "data-exchange", currentExchangeKey);
+        setActiveTimeframeButton(currentTimeframe);
+        updateOrderInputQuoteCurrency();
+
+        activeTab.exchangeKey = currentExchangeKey;
+        activeTab.symbol = currentSymbol;
+        activeTab.timeframe = currentTimeframe;
+
+        renderMarketTabs();
+        persistMarketTabs();
+
+        if (options.refresh !== false) {
+          pendingRestoreLogicalRange = null;
+          hasFitContent = false;
+          setLoadingTimeframeButton(currentTimeframe);
+          refreshChartData({ priority: true, showUpdatingStatus: true });
+          scheduleNextRefresh();
+        }
+      };
+
+      const addMarketTab = (tabContext, options = {}) => {
+        const nextTab = normalizeMarketTabContext({
+          id: createMarketTabId(),
+          exchangeKey: tabContext?.exchangeKey || currentExchangeKey,
+          symbol: tabContext?.symbol || currentSymbol,
+          timeframe: tabContext?.timeframe || currentTimeframe,
+        });
+
+        marketTabs.push(nextTab);
+        if (marketTabs.length > 8) {
+          marketTabs = marketTabs.slice(-8);
+        }
+
+        activeMarketTabId = nextTab.id;
+        renderMarketTabs();
+        persistMarketTabs();
+
+        if (options.activate !== false) {
+          activateMarketTab(nextTab.id, { refresh: options.refresh !== false });
+        }
+      };
+
+      const closeMarketTab = (tabId) => {
+        if (marketTabs.length <= 1) {
+          return;
+        }
+
+        const closingIndex = marketTabs.findIndex((tabItem) => tabItem.id === tabId);
+        if (closingIndex === -1) {
+          return;
+        }
+
+        const wasActive = marketTabs[closingIndex].id === activeMarketTabId;
+        marketTabs.splice(closingIndex, 1);
+
+        if (!wasActive) {
+          renderMarketTabs();
+          persistMarketTabs();
+          return;
+        }
+
+        const fallbackTab = marketTabs[Math.max(0, closingIndex - 1)] || marketTabs[0] || null;
+        if (!fallbackTab) {
+          return;
+        }
+
+        activeMarketTabId = fallbackTab.id;
+        renderMarketTabs();
+        persistMarketTabs();
+        activateMarketTab(fallbackTab.id, { refresh: true });
+      };
+
+      const initializeMarketTabs = () => {
+        let storedTabs = [];
+        let storedActiveTabId = "";
+
+        try {
+          const parsedTabs = JSON.parse(localStorage.getItem(marketTabsStorageKey) || "[]");
+          if (Array.isArray(parsedTabs)) {
+            storedTabs = parsedTabs;
+          }
+          storedActiveTabId = String(localStorage.getItem(activeMarketTabStorageKey) || "");
+        } catch (_error) {
+          storedTabs = [];
+          storedActiveTabId = "";
+        }
+
+        const normalizedTabs = storedTabs
+          .map((tabItem) => normalizeMarketTabContext(tabItem))
+          .filter((tabItem) => tabItem && tabItem.id);
+
+        marketTabs = normalizedTabs.length > 0
+          ? normalizedTabs
+          : [normalizeMarketTabContext({
+            id: createMarketTabId(),
+            exchangeKey: currentExchangeKey,
+            symbol: currentSymbol,
+            timeframe: currentTimeframe,
+          })];
+
+        const hasStoredActiveTab = marketTabs.some((tabItem) => tabItem.id === storedActiveTabId);
+        activeMarketTabId = hasStoredActiveTab ? storedActiveTabId : marketTabs[0].id;
+
+        activateMarketTab(activeMarketTabId, { refresh: false });
+      };
+
       const toggleSelectorMenu = (menuName) => {
         const nextMenu = activeSelectorMenu === menuName ? null : menuName;
         hideSelectorMenus();
@@ -8709,6 +8990,7 @@
         setActiveSelectorMenuItem(exchangeSelectorMenuElement, "data-exchange", currentExchangeKey);
         applyEnabledTimeframesToUI();
         applyEnabledQuoteCurrenciesToUI();
+        syncActiveMarketTabFromCurrentContext();
 
         if (marketTitleElement) {
           marketTitleElement.textContent = `${currentDisplaySymbol} Info`;
@@ -8931,6 +9213,7 @@
           }
           hasFitContent = false;
           setActiveTimeframeButton(currentTimeframe);
+          syncActiveMarketTabFromCurrentContext();
           setLoadingTimeframeButton(currentTimeframe);
           refreshChartData({ priority: true, showUpdatingStatus: true });
           scheduleNextRefresh();
@@ -8975,6 +9258,7 @@
           }
           pendingRestoreLogicalRange = null;
           hasFitContent = false;
+          syncActiveMarketTabFromCurrentContext();
 
           hideSelectorMenus();
           setLoadingTimeframeButton(currentTimeframe);
@@ -9011,6 +9295,7 @@
           }
           pendingRestoreLogicalRange = null;
           hasFitContent = false;
+          syncActiveMarketTabFromCurrentContext();
 
           hideSelectorMenus();
           setLoadingTimeframeButton(currentTimeframe);
@@ -9862,6 +10147,43 @@
         });
       }
 
+      if (marketTabsElement) {
+        marketTabsElement.addEventListener("click", (event) => {
+          const closeButton = event.target.closest("[data-market-tab-close-id]");
+          if (closeButton) {
+            event.preventDefault();
+            event.stopPropagation();
+            closeMarketTab(String(closeButton.dataset.marketTabCloseId || ""));
+            return;
+          }
+
+          const tabButton = event.target.closest("[data-market-tab-id]");
+          if (!tabButton) {
+            return;
+          }
+
+          const tabId = String(tabButton.dataset.marketTabId || "");
+          if (!tabId || tabId === activeMarketTabId) {
+            return;
+          }
+
+          activateMarketTab(tabId, { refresh: true });
+        });
+      }
+
+      if (marketTabAddButtonElement) {
+        marketTabAddButtonElement.addEventListener("click", () => {
+          addMarketTab({
+            exchangeKey: currentExchangeKey,
+            symbol: currentSymbol,
+            timeframe: currentTimeframe,
+          }, {
+            activate: true,
+            refresh: false,
+          });
+        });
+      }
+
       if (orderSellButtonElement) {
         orderSellButtonElement.addEventListener("click", () => {
           setOrderActionSide("sell");
@@ -10359,6 +10681,7 @@
       applyEnabledQuoteCurrenciesToUI();
       applyEnabledPairsToUI();
       applyPairSelectorQuoteCurrencyFilter({ syncCurrentSymbol: false, persistSymbol: false });
+      initializeMarketTabs();
       applyEnabledIndicatorsToUI();
       applyEnabledToolsToUI();
       applyDisplayTheme(activeDisplayTheme, { persist: false });

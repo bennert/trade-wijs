@@ -5,6 +5,7 @@
   --border: #2b3345;
   --text: #d8deea;
   --muted: #9aa5bd;
+  --topbar-height: 92px;
 }
 
 :root[data-theme="light"] {
@@ -36,7 +37,7 @@ body {
 .app-shell {
   display: grid;
   grid-template-columns: 88px minmax(0, 1fr) 400px;
-  grid-template-rows: 72px 1fr;
+  grid-template-rows: var(--topbar-height) 1fr;
   grid-template-areas:
     "topbar topbar topbar"
     "left chart right";
@@ -58,7 +59,7 @@ body {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
   align-items: center;
-  padding: 0 12px;
+  padding: 6px 12px;
   background: var(--panel-2);
 }
 
@@ -104,11 +105,88 @@ body {
   grid-column: 1;
   justify-self: start;
   min-width: 0;
+  display: inline-flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 8px;
+  color: var(--muted);
+}
+
+.market-tabs-row {
+  width: 100%;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.market-tabs {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  max-width: 720px;
+  overflow-x: auto;
+  padding-bottom: 2px;
+}
+
+.market-tab {
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--panel-2);
+  color: var(--muted);
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 1;
+  padding: 5px 6px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.market-tab.is-active {
+  color: #ffffff;
+  border-color: rgba(95, 168, 255, 0.65);
+  background: rgba(95, 168, 255, 0.2);
+}
+
+.market-tab-label {
+  max-width: 200px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.market-tab-close {
+  border: 0;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+  font-size: 12px;
+  line-height: 1;
+  padding: 0 2px;
+}
+
+.market-tab-add-btn {
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--panel-2);
+  color: var(--text);
+  width: 24px;
+  height: 24px;
+  cursor: pointer;
+  font-size: 14px;
+  font-weight: 700;
+  line-height: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.market-selector-controls {
   position: relative;
   display: inline-flex;
   align-items: center;
   gap: 8px;
-  color: var(--muted);
 }
 
 .market-selector-btn {
@@ -2185,7 +2263,7 @@ body.is-dragging-pane-order {
 @media (max-width: 900px) {
   .app-shell {
     grid-template-columns: 1fr;
-    grid-template-rows: 72px auto 1fr 220px;
+    grid-template-rows: var(--topbar-height) auto 1fr 220px;
     grid-template-areas:
       "topbar"
       "left"
@@ -2195,7 +2273,7 @@ body.is-dragging-pane-order {
 
   .app-shell.is-right-panel-collapsed {
     grid-template-columns: 1fr;
-    grid-template-rows: 72px auto 1fr;
+    grid-template-rows: var(--topbar-height) auto 1fr;
     grid-template-areas:
       "topbar"
       "left"
@@ -2209,7 +2287,7 @@ body.is-dragging-pane-order {
 
   .app-shell.is-settings-mode {
     grid-template-columns: 1fr;
-    grid-template-rows: 72px auto 1fr;
+    grid-template-rows: var(--topbar-height) auto 1fr;
     grid-template-areas:
       "topbar"
       "left"
