@@ -1395,6 +1395,21 @@ body {
   z-index: 3;
 }
 
+.price-label-interaction-panel {
+  position: absolute;
+  top: 0;
+  right: 0;
+  width: 72px;
+  height: 100%;
+  z-index: 4;
+  pointer-events: auto;
+  cursor: ns-resize;
+}
+
+.price-label-interaction-panel.is-dragging {
+  cursor: ns-resize;
+}
+
 .pane-scale-label {
   position: absolute;
   right: 4px;

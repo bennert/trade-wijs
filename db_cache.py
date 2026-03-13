@@ -18,6 +18,10 @@ _STATE = {"schema_ready": False}
 
 
 def is_enabled():
+    """Checks if database cache is enabled.
+    
+    Requires DATABASE_URL environment variable and psycopg2 installed.
+    """
     return bool(_DATABASE_URL) and _PSYCOPG2 is not None
 
 
@@ -36,6 +40,7 @@ def _connection():
 
 
 def ensure_schema():
+    """Ensures the database schema is ready for use."""
     if _STATE["schema_ready"] or not is_enabled():
         return
 
@@ -81,6 +86,7 @@ def ensure_schema():
 
 
 def upsert_market_snapshot(exchange_key, symbol, timeframe, payload):
+    """Inserts or updates a market snapshot in the database."""
     if not is_enabled() or not exchange_key or not symbol or not timeframe:
         return
 
@@ -92,7 +98,8 @@ def upsert_market_snapshot(exchange_key, symbol, timeframe, payload):
         with connection.cursor() as cursor:
             cursor.execute(
                 """
-                INSERT INTO market_snapshots (exchange_key, symbol, timeframe, payload_json, updated_at_unix)
+                INSERT INTO market_snapshots
+                (exchange_key, symbol, timeframe, payload_json, updated_at_unix)
                 VALUES (%s, %s, %s, %s, %s)
                 ON CONFLICT (exchange_key, symbol, timeframe)
                 DO UPDATE SET
@@ -105,6 +112,10 @@ def upsert_market_snapshot(exchange_key, symbol, timeframe, payload):
 
 
 def get_market_snapshot(exchange_key, symbol, timeframe, max_age_seconds=5):
+    """Retrieves a market snapshot from database.
+    
+    Returns None if cached data is older than max_age_seconds.
+    """
     if not is_enabled() or not exchange_key or not symbol or not timeframe:
         return None
 
@@ -127,7 +138,8 @@ def get_market_snapshot(exchange_key, symbol, timeframe, max_age_seconds=5):
 
     payload_json, updated_at_unix = row
     now_unix = int(time.time())
-    if not isinstance(updated_at_unix, int) or (now_unix - updated_at_unix) > int(max_age_seconds):
+    age_seconds = now_unix - updated_at_unix
+    if not isinstance(updated_at_unix, int) or age_seconds > int(max_age_seconds):
         return None
 
     try:
@@ -139,6 +151,7 @@ def get_market_snapshot(exchange_key, symbol, timeframe, max_age_seconds=5):
 
 
 def upsert_exchange_settings_payload(exchange_key, payload):
+    """Inserts or updates an exchange settings payload in the database."""
     if not is_enabled() or not exchange_key:
         return
 
@@ -163,6 +176,10 @@ def upsert_exchange_settings_payload(exchange_key, payload):
 
 
 def get_exchange_settings_payload(exchange_key, max_age_seconds=120):
+    """Retrieves an exchange settings payload from database.
+    
+    Returns None if cached data is older than max_age_seconds.
+    """
     if not is_enabled() or not exchange_key:
         return None
 
@@ -185,7 +202,10 @@ def get_exchange_settings_payload(exchange_key, max_age_seconds=120):
 
     payload_json, updated_at_unix = row
     now_unix = int(time.time())
-    if not isinstance(updated_at_unix, int) or (now_unix - updated_at_unix) > int(max_age_seconds):
+    age_seconds = now_unix - updated_at_unix
+    if not isinstance(updated_at_unix, int) or age_seconds > int(
+        max_age_seconds
+    ):
         return None
 
     try:
@@ -196,7 +216,10 @@ def get_exchange_settings_payload(exchange_key, max_age_seconds=120):
     return payload if isinstance(payload, dict) else None
 
 
-def upsert_chart_payload(exchange_key, symbol, timeframe, payload, payload_mode="full"):
+def upsert_chart_payload(
+    exchange_key, symbol, timeframe, payload, payload_mode="full"
+):
+    """Inserts or updates a chart payload in the database."""
     if not is_enabled() or not exchange_key or not symbol or not timeframe:
         return
 
@@ -208,19 +231,38 @@ def upsert_chart_payload(exchange_key, symbol, timeframe, payload, payload_mode=
         with connection.cursor() as cursor:
             cursor.execute(
                 """
-                INSERT INTO chart_payload_cache_v2 (exchange_key, symbol, timeframe, payload_mode, payload_json, updated_at_unix)
+                INSERT INTO chart_payload_cache_v2
+                (exchange_key, symbol, timeframe, payload_mode, payload_json,
+                 updated_at_unix)
                 VALUES (%s, %s, %s, %s, %s, %s)
                 ON CONFLICT (exchange_key, symbol, timeframe, payload_mode)
                 DO UPDATE SET
                     payload_json = EXCLUDED.payload_json,
                     updated_at_unix = EXCLUDED.updated_at_unix
                 """,
-                (exchange_key, symbol, timeframe, payload_mode, payload_json, updated_at_unix),
+                (
+                    exchange_key,
+                    symbol,
+                    timeframe,
+                    payload_mode,
+                    payload_json,
+                    updated_at_unix,
+                ),
             )
         connection.commit()
 
 
-def get_chart_payload(exchange_key, symbol, timeframe, max_age_seconds=15, payload_mode="full"):
+def get_chart_payload(
+    exchange_key,
+    symbol,
+    timeframe,
+    max_age_seconds=15,
+    payload_mode="full",
+):
+    """Retrieves a chart payload from database.
+    
+    Returns None if cached data is older than max_age_seconds.
+    """
     if not is_enabled() or not exchange_key or not symbol or not timeframe:
         return None
 
@@ -232,7 +274,8 @@ def get_chart_payload(exchange_key, symbol, timeframe, max_age_seconds=15, paylo
                 """
                 SELECT payload_json, updated_at_unix
                 FROM chart_payload_cache_v2
-                WHERE exchange_key = %s AND symbol = %s AND timeframe = %s AND payload_mode = %s
+                WHERE exchange_key = %s AND symbol = %s AND timeframe = %s
+                  AND payload_mode = %s
                 """,
                 (exchange_key, symbol, timeframe, payload_mode),
             )
@@ -243,7 +286,10 @@ def get_chart_payload(exchange_key, symbol, timeframe, max_age_seconds=15, paylo
 
     payload_json, updated_at_unix = row
     now_unix = int(time.time())
-    if not isinstance(updated_at_unix, int) or (now_unix - updated_at_unix) > int(max_age_seconds):
+    age_seconds = now_unix - updated_at_unix
+    if not isinstance(updated_at_unix, int) or age_seconds > int(
+        max_age_seconds
+    ):
         return None
 
     try:

@@ -1,11 +1,11 @@
-<!doctype html>
+﻿<!doctype html>
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Trade Wijs</title>
   <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}" />
-  <script src="https://unpkg.com/lightweight-charts@4.2.0/dist/lightweight-charts.standalone.production.js"></script>
+  <script src="https://unpkg.com/lightweight-charts@5.1.0/dist/lightweight-charts.standalone.production.js"></script>
 </head>
 <body>
   <div class="app-shell">
@@ -375,6 +375,7 @@
         <div id="trend-line-start-handle" class="trend-line-endpoint-handle" data-endpoint="start" aria-hidden="true"></div>
         <div id="trend-line-end-handle" class="trend-line-endpoint-handle" data-endpoint="end" aria-hidden="true"></div>
         <div id="pane-scale-overlay" class="pane-scale-overlay" aria-hidden="true"></div>
+        <div id="price-label-interaction-panel" class="price-label-interaction-panel" aria-hidden="true"></div>
         <div id="pane-reorder-overlay" class="pane-reorder-overlay" aria-hidden="true"></div>
         <button id="scroll-to-recent-btn" type="button" class="scroll-to-recent-btn" aria-label="Scroll to most recent bar">↦ Latest</button>
         <div id="stoch-divider" class="scale-divider scale-divider--stoch" role="separator" aria-orientation="horizontal" aria-label="Stoch scale divider"></div>
@@ -572,6 +573,7 @@
       const trendLineStartHandleElement = document.getElementById("trend-line-start-handle");
       const trendLineEndHandleElement = document.getElementById("trend-line-end-handle");
       const paneScaleOverlayElement = document.getElementById("pane-scale-overlay");
+      const priceLabelInteractionPanelElement = document.getElementById("price-label-interaction-panel");
       const paneReorderOverlayElement = document.getElementById("pane-reorder-overlay");
       const stochDividerElement = document.getElementById("stoch-divider");
       const stochDividerLabelElements = [
@@ -831,6 +833,10 @@
       let isDraggingScaleDivider = false;
       let isDraggingStochDivider = false;
       let isDraggingRsiDivider = false;
+      let isDraggingPriceScale = false;
+      let priceScaleDragStartRange = null;
+      let priceScaleDragStartPrice = null;
+        let priceScaleDragStartClientY = null;
       const indicatorState = {
         bb: true,
         smc: true,
@@ -1471,9 +1477,20 @@
         crosshair: {
           mode: LightweightCharts.CrosshairMode.Normal,
         },
+        handleScale: {
+          axisPressedMouseMove: true,
+          mouseWheel: true,
+          pinch: true,
+        },
+        handleScroll: {
+          pressedMouseMove: true,
+          mouseWheel: true,
+          horzTouchDrag: true,
+          vertTouchDrag: true,
+        },
       });
 
-      const candleSeries = chart.addCandlestickSeries({
+      const candleSeries = chart.addSeries(LightweightCharts.CandlestickSeries, {
         priceScaleId: "price",
         upColor: "#29b37d",
         downColor: "#cf5f6b",
@@ -1483,21 +1500,21 @@
         lastValueVisible: false,
       });
 
-      const bbUpperSeries = chart.addLineSeries({
+      const bbUpperSeries = chart.addSeries(LightweightCharts.LineSeries, {
         priceScaleId: "price",
         color: "#5fa8ff",
         lineWidth: 2,
         priceLineVisible: false,
       });
 
-      const bbMiddleSeries = chart.addLineSeries({
+      const bbMiddleSeries = chart.addSeries(LightweightCharts.LineSeries, {
         priceScaleId: "price",
         color: "#f6c23e",
         lineWidth: 2,
         priceLineVisible: false,
       });
 
-      const bbLowerSeries = chart.addLineSeries({
+      const bbLowerSeries = chart.addSeries(LightweightCharts.LineSeries, {
         priceScaleId: "price",
         color: "#5fa8ff",
         lineWidth: 2,
@@ -1518,7 +1535,7 @@
         },
       });
 
-      const stochKSeries = chart.addLineSeries({
+      const stochKSeries = chart.addSeries(LightweightCharts.LineSeries, {
         color: "#7dd3fc",
         lineWidth: 2,
         priceScaleId: "stoch",
@@ -1532,7 +1549,7 @@
         }),
       });
 
-      const stochDSeries = chart.addLineSeries({
+      const stochDSeries = chart.addSeries(LightweightCharts.LineSeries, {
         color: "#f59e0b",
         lineWidth: 2,
         priceScaleId: "stoch",
@@ -1546,7 +1563,7 @@
         }),
       });
 
-      const stochOverboughtSeries = chart.addLineSeries({
+      const stochOverboughtSeries = chart.addSeries(LightweightCharts.LineSeries, {
         color: "rgba(255, 255, 255, 1)",
         lineWidth: 1,
         lineStyle: LightweightCharts.LineStyle.Dashed,
@@ -1556,7 +1573,7 @@
         crosshairMarkerVisible: false,
       });
 
-      const stochOversoldSeries = chart.addLineSeries({
+      const stochOversoldSeries = chart.addSeries(LightweightCharts.LineSeries, {
         color: "rgba(255, 255, 255, 1)",
         lineWidth: 1,
         lineStyle: LightweightCharts.LineStyle.Dashed,
@@ -1578,7 +1595,7 @@
         },
       });
 
-      const rsiSeries = chart.addLineSeries({
+      const rsiSeries = chart.addSeries(LightweightCharts.LineSeries, {
         color: "#a78bfa",
         lineWidth: 2,
         priceScaleId: "rsi",
@@ -1592,7 +1609,7 @@
         }),
       });
 
-      const rsiOverboughtSeries = chart.addLineSeries({
+      const rsiOverboughtSeries = chart.addSeries(LightweightCharts.LineSeries, {
         color: "rgba(255, 255, 255, 1)",
         lineWidth: 1,
         lineStyle: LightweightCharts.LineStyle.Dashed,
@@ -1602,7 +1619,7 @@
         crosshairMarkerVisible: false,
       });
 
-      const rsiOversoldSeries = chart.addLineSeries({
+      const rsiOversoldSeries = chart.addSeries(LightweightCharts.LineSeries, {
         color: "rgba(255, 255, 255, 1)",
         lineWidth: 1,
         lineStyle: LightweightCharts.LineStyle.Dashed,
@@ -1624,7 +1641,7 @@
         },
       });
 
-      const volumeSeries = chart.addHistogramSeries({
+      const volumeSeries = chart.addSeries(LightweightCharts.HistogramSeries, {
         priceFormat: {
           type: "volume",
         },
@@ -3047,7 +3064,7 @@
         }
 
         const buildGuideSeries = (guide, style) => {
-          const series = chart.addLineSeries({
+          const series = chart.addSeries(LightweightCharts.LineSeries, {
             priceScaleId: "price",
             color: guide.color,
             lineWidth: style === "dashed" ? 1 : 2,
@@ -3109,6 +3126,141 @@
         schedulePaneScaleOverlayRender();
       }, { passive: true });
 
+      const getPriceScaleRange = () => {
+        const priceScaleApi = chart.priceScale("price");
+        const visibleRange = priceScaleApi.getVisibleRange();
+        const from = Number(visibleRange?.from);
+        const to = Number(visibleRange?.to);
+        if (!Number.isFinite(from) || !Number.isFinite(to) || to <= from) {
+           // Fallback: derive range from visible coordinates when autoscale is active
+           const candleSegment = renderedPaneLayout.candle || paneLayout.candle || null;
+           const chartRect = chartElement.getBoundingClientRect();
+           if (!candleSegment || chartRect.height <= 2) return null;
+           const topY = clamp(Number(candleSegment.top) * chartRect.height + 2, 1, chartRect.height - 1);
+           const bottomY = clamp(Number(candleSegment.bottom) * chartRect.height - 2, 1, chartRect.height - 1);
+           const topPrice = Number(candleSeries.coordinateToPrice(topY));
+           const bottomPrice = Number(candleSeries.coordinateToPrice(bottomY));
+           if (!Number.isFinite(topPrice) || !Number.isFinite(bottomPrice) || topPrice === bottomPrice) return null;
+           return { from: Math.min(topPrice, bottomPrice), to: Math.max(topPrice, bottomPrice) };
+        }
+        return { from, to };
+      };
+
+      const getPriceFromClientY = (clientY) => {
+        const chartRect = chartElement.getBoundingClientRect();
+        const y = clamp(Number(clientY) - chartRect.top, 1, chartRect.height - 1);
+        const value = Number(candleSeries.coordinateToPrice(y));
+        return Number.isFinite(value) ? value : null;
+      };
+
+      const setManualPriceScaleRange = (nextRange) => {
+        const from = Number(nextRange?.from);
+        const to = Number(nextRange?.to);
+        if (!Number.isFinite(from) || !Number.isFinite(to) || to <= from) {
+          return;
+        }
+        const priceScaleApi = chart.priceScale("price");
+        priceScaleApi.setAutoScale(false);
+        priceScaleApi.setVisibleRange({ from, to });
+        scheduleVisibleRangeRender();
+      };
+
+      const resetAutomaticPriceScale = () => {
+        const priceScaleApi = chart.priceScale("price");
+        priceScaleApi.setAutoScale(true);
+        scheduleVisibleRangeRender();
+      };
+
+      const zoomManualPriceScaleAtPoint = (clientY, deltaY) => {
+        const visibleRange = getPriceScaleRange();
+        if (!visibleRange) {
+          return;
+        }
+
+        const zoomDirection = Number(deltaY) > 0 ? 1 : -1;
+        const zoomFactor = zoomDirection > 0 ? 1.08 : (1 / 1.08);
+        const centerPrice = getPriceFromClientY(clientY) ?? ((visibleRange.from + visibleRange.to) / 2);
+        const nextFrom = centerPrice - ((centerPrice - visibleRange.from) * zoomFactor);
+        const nextTo = centerPrice + ((visibleRange.to - centerPrice) * zoomFactor);
+
+        if (Number.isFinite(nextFrom) && Number.isFinite(nextTo) && nextTo > nextFrom) {
+          setManualPriceScaleRange({ from: nextFrom, to: nextTo });
+        }
+      };
+
+      if (priceLabelInteractionPanelElement) {
+        priceLabelInteractionPanelElement.addEventListener("wheel", (event) => {
+          event.preventDefault();
+          event.stopPropagation();
+          zoomManualPriceScaleAtPoint(event.clientY, event.deltaY);
+          schedulePaneScaleOverlayRender();
+        }, { passive: false });
+
+        priceLabelInteractionPanelElement.addEventListener("mousedown", (event) => {
+          if (event.button !== 0) {
+            return;
+          }
+
+          event.preventDefault();
+          event.stopPropagation();
+          isDraggingPriceScale = true;
+          priceScaleDragStartRange = getPriceScaleRange();
+          priceScaleDragStartPrice = getPriceFromClientY(event.clientY);
+          priceScaleDragStartClientY = Number(event.clientY);
+          priceLabelInteractionPanelElement.classList.add("is-dragging");
+        });
+
+        priceLabelInteractionPanelElement.addEventListener("dblclick", (event) => {
+          event.preventDefault();
+          event.stopPropagation();
+          isDraggingPriceScale = false;
+          priceScaleDragStartRange = null;
+          priceScaleDragStartPrice = null;
+          priceScaleDragStartClientY = null;
+          priceLabelInteractionPanelElement.classList.remove("is-dragging");
+          resetAutomaticPriceScale();
+          schedulePaneScaleOverlayRender();
+        });
+      }
+
+      window.addEventListener("mousemove", (event) => {
+        if (!isDraggingPriceScale) {
+          return;
+        }
+
+        const dragStartRange = priceScaleDragStartRange;
+        const dragStartPrice = priceScaleDragStartPrice;
+        const dragStartClientY = priceScaleDragStartClientY;
+        const dragCurrentClientY = Number(event.clientY);
+        if (dragStartRange && Number.isFinite(dragStartPrice) && Number.isFinite(dragStartClientY) && Number.isFinite(dragCurrentClientY)) {
+          const pixelDelta = dragCurrentClientY - dragStartClientY;
+          const zoomFactor = Math.pow(1.08, pixelDelta / 48);
+          const nextFrom = dragStartPrice - ((dragStartPrice - dragStartRange.from) * zoomFactor);
+          const nextTo = dragStartPrice + ((dragStartRange.to - dragStartPrice) * zoomFactor);
+
+          if (Number.isFinite(nextFrom) && Number.isFinite(nextTo) && nextTo > nextFrom) {
+            setManualPriceScaleRange({
+              from: nextFrom,
+              to: nextTo,
+            });
+          }
+          schedulePaneScaleOverlayRender();
+        }
+      });
+
+      window.addEventListener("mouseup", () => {
+        if (!isDraggingPriceScale) {
+          return;
+        }
+
+        isDraggingPriceScale = false;
+        priceScaleDragStartRange = null;
+        priceScaleDragStartPrice = null;
+        priceScaleDragStartClientY = null;
+        priceLabelInteractionPanelElement?.classList.remove("is-dragging");
+        schedulePaneScaleOverlayRender();
+      });
+
       chartElement.addEventListener("pointermove", (event) => {
         if (event.buttons !== 0) {
           schedulePaneScaleOverlayRender();
@@ -3118,6 +3270,9 @@
       chartElement.addEventListener("pointerup", () => {
         schedulePaneScaleOverlayRender();
       });
+
+      // Native price-scale interactions are handled by Lightweight Charts via
+      // handleScale/handleScroll options configured at chart creation time.
 
       chart.timeScale().subscribeVisibleTimeRangeChange(() => {
         scheduleVisibleRangeRender();
@@ -6841,7 +6996,7 @@
         zones.forEach((zone) => {
           const zoneColor = zone.isBullish ? "rgba(41, 179, 125, 0.3)" : "rgba(207, 95, 107, 0.3)";
 
-          const upperSeries = chart.addLineSeries({
+          const upperSeries = chart.addSeries(LightweightCharts.LineSeries, {
             priceScaleId: "price",
             color: zoneColor,
             lineWidth: 1,
@@ -6850,7 +7005,7 @@
             crosshairMarkerVisible: false,
           });
 
-          const lowerSeries = chart.addLineSeries({
+          const lowerSeries = chart.addSeries(LightweightCharts.LineSeries, {
             priceScaleId: "price",
             color: zoneColor,
             lineWidth: 1,
@@ -7337,7 +7492,7 @@
           return null;
         }
 
-        const trendSeries = chart.addLineSeries({
+        const trendSeries = chart.addSeries(LightweightCharts.LineSeries, {
           priceScaleId: "price",
           color: horizontalLineColor,
           lineWidth: 3,
@@ -7438,7 +7593,7 @@
         }
 
         if (!drawTrendPreviewSeries) {
-          drawTrendPreviewSeries = chart.addLineSeries({
+          drawTrendPreviewSeries = chart.addSeries(LightweightCharts.LineSeries, {
             priceScaleId: "price",
             color: "rgba(255, 209, 102, 0.75)",
             lineWidth: 2,
@@ -8206,7 +8361,6 @@
         bbUpperSeries.setData(indicatorState.bb ? bollingerBands.upper : []);
         bbMiddleSeries.setData(indicatorState.bb ? bollingerBands.middle : []);
         bbLowerSeries.setData(indicatorState.bb ? bollingerBands.lower : []);
-        candleSeries.setMarkers([]);
         currentSmcZones = indicatorState.smc ? smcSignals.zones : [];
         currentSmcLabels = indicatorState.smc ? smcSignals.labels : [];
         renderSmcGuides(indicatorState.smc ? smcSignals : null);
