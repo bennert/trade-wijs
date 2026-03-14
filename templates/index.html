@@ -715,13 +715,13 @@
         return;
       }
 
-      let currentTimeframe = "{{ market_data.timeframe }}";
+      let currentTimeframe = {{ market_data.timeframe | tojson }};
       let latestServerTimestampSeconds = Number(marketUpdatedElement?.dataset.timestampUnix);
       let latestServerTimestampSetAtMs = Date.now();
-      let currentSymbol = "{{ market_data.symbol }}";
-      let currentDisplaySymbol = "{{ market_data.display_symbol }}";
-      let currentExchangeKey = "{{ market_data.exchange_key }}";
-      let currentExchangeLabel = "{{ market_data.exchange }}";
+      let currentSymbol = {{ market_data.symbol | tojson }};
+      let currentDisplaySymbol = {{ market_data.display_symbol | tojson }};
+      let currentExchangeKey = {{ market_data.exchange_key | tojson }};
+      let currentExchangeLabel = {{ market_data.exchange | tojson }};
       let activeSelectorMenu = null;
       const timeframeStorageKey = "trade-wijs-timeframe";
       const symbolStorageKey = "trade-wijs-symbol";
@@ -4136,24 +4136,24 @@
         supported_symbols: availableSymbolsByExchange[currentExchangeKey],
         supported_timeframes: Array.from(validTimeframes),
         supported_quote_currencies: Array.from(validQuoteCurrencies),
-        amount_step: "{{ market_data.amount_step or '' }}",
-        amount_min: "{{ market_data.amount_min if market_data.amount_min is not none else '' }}",
-        total_min: "{{ market_data.total_min if market_data.total_min is not none else '' }}",
-        price_min: "{{ market_data.price_min if market_data.price_min is not none else '' }}",
-        price_max: "{{ market_data.price_max if market_data.price_max is not none else '' }}",
-        price_step: "{{ market_data.price_step or '' }}",
-        amount_precision: "{{ market_data.amount_precision if market_data.amount_precision is not none else '' }}",
-        price_precision: "{{ market_data.price_precision if market_data.price_precision is not none else '' }}",
-        last: "{{ market_data.last if market_data.last is not none else '' }}",
-        bid: "{{ market_data.bid if market_data.bid is not none else '' }}",
-        ask: "{{ market_data.ask if market_data.ask is not none else '' }}",
-        high: "{{ market_data.high if market_data.high is not none else '' }}",
-        low: "{{ market_data.low if market_data.low is not none else '' }}",
-        quote_volume: "{{ market_data.quote_volume if market_data.quote_volume is not none else '' }}",
-        quote_volume_compact: "{{ market_data.quote_volume_compact or '' }}",
-        timestamp: "{{ market_data.timestamp or '' }}",
-        timestamp_unix: "{{ market_data.timestamp_unix if market_data.timestamp_unix is not none else '' }}",
-        error: "{{ market_data.error or '' }}",
+        amount_step: {{ (market_data.amount_step or '') | tojson }},
+        amount_min: {{ (market_data.amount_min if market_data.amount_min is not none else '') | tojson }},
+        total_min: {{ (market_data.total_min if market_data.total_min is not none else '') | tojson }},
+        price_min: {{ (market_data.price_min if market_data.price_min is not none else '') | tojson }},
+        price_max: {{ (market_data.price_max if market_data.price_max is not none else '') | tojson }},
+        price_step: {{ (market_data.price_step or '') | tojson }},
+        amount_precision: {{ (market_data.amount_precision if market_data.amount_precision is not none else '') | tojson }},
+        price_precision: {{ (market_data.price_precision if market_data.price_precision is not none else '') | tojson }},
+        last: {{ (market_data.last if market_data.last is not none else '') | tojson }},
+        bid: {{ (market_data.bid if market_data.bid is not none else '') | tojson }},
+        ask: {{ (market_data.ask if market_data.ask is not none else '') | tojson }},
+        high: {{ (market_data.high if market_data.high is not none else '') | tojson }},
+        low: {{ (market_data.low if market_data.low is not none else '') | tojson }},
+        quote_volume: {{ (market_data.quote_volume if market_data.quote_volume is not none else '') | tojson }},
+        quote_volume_compact: {{ (market_data.quote_volume_compact or '') | tojson }},
+        timestamp: {{ (market_data.timestamp or '') | tojson }},
+        timestamp_unix: {{ (market_data.timestamp_unix if market_data.timestamp_unix is not none else '') | tojson }},
+        error: {{ (market_data.error or '') | tojson }},
       });
 
       const cacheSettingsOptionsForExchange = (exchangeKey, options = {}) => {
