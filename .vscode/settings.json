@@ -3,5 +3,16 @@
   "python.terminal.activateEnvironment": true,
   "python.terminal.activateEnvInCurrentTerminal": true,
   "python.analysis.extraPaths": [],
-  "python.analysis.autoImportCompletions": true
+  "python.analysis.autoImportCompletions": true,
+  "cucumberautocomplete.steps": [
+    "tests/gherkin/steps/**/*.js"
+  ],
+  "cucumberautocomplete.syncfeatures": "tests/gherkin/features/**/*.feature",
+  "cucumberautocomplete.strictGherkinCompletion": true,
+  "cucumber.features": [
+    "tests/gherkin/features/**/*.feature"
+  ],
+  "cucumber.glue": [
+    "tests/gherkin/steps/**/*.js"
+  ]
 }

@@ -1847,6 +1847,7 @@ body.is-dragging-pane-order {
   padding: 8px;
   border-radius: 4px;
   cursor: pointer;
+  white-space: nowrap;
 }
 
 .panel-tab.is-active {

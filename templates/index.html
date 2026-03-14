@@ -761,6 +761,8 @@
       let isRefreshing = false;
       let refreshRequestCounter = 0;
       let pendingPriorityRefresh = false;
+      let pendingPriorityRefreshShowUpdating = false;
+      let pendingPriorityRefreshLabel = null;
       let forceFullChartRefresh = true;
       let lastChartContextKey = null;
       let loadingTimeframe = null;
@@ -795,7 +797,7 @@
       let activeSettingsGeneralItem = "indicators";
       let activeDisplayTheme = "dark";
       let exchangeApiSettings = {};
-      let enabledExchangeKeys = new Set(validExchangeKeys.has("bybit") ? ["bybit"] : [Array.from(validExchangeKeys)[0]].filter(Boolean));
+      let enabledExchangeKeys = new Set(validExchangeKeys);
       let enabledTimeframes = new Set(validTimeframes);
       let enabledTimeframesByExchange = {};
       let enabledQuoteCurrencies = new Set(validQuoteCurrencies);
@@ -861,6 +863,7 @@
       let currentPriceLineTone = null;
       let marketTabs = [];
       let activeMarketTabId = "";
+      let chartContextCache = {};
       const indicatorState = {
         bb: true,
         smc: true,
@@ -887,6 +890,9 @@
       let hoveredCandleTime = null;
       let savedChartViewByTimeframe = {};
       let pendingRestoreLogicalRange = null;
+      let lastAppliedChartWidth = 0;
+      let lastAppliedChartHeight = 0;
+      let pendingAppViewModeTaskToken = 0;
       const stochSplitStorageKey = "trade-wijs-stoch-split";
       let stochHeightRatio = 0.2;
       let lastStochHeightRatio = stochHeightRatio;
@@ -905,6 +911,73 @@
         exchangeKey = currentExchangeKey,
         symbol = currentSymbol,
       ) => `${timeframe}|${exchangeKey}|${symbol}`;
+
+      const getChartContextKey = (
+        exchangeKey = currentExchangeKey,
+        symbol = currentSymbol,
+        timeframe = currentTimeframe,
+      ) => `${exchangeKey}__${symbol}__${timeframe}`;
+
+      const cloneChartCacheMarketData = (marketData) => {
+        if (!marketData || typeof marketData !== "object") {
+          return null;
+        }
+
+        return {
+          ...marketData,
+          supported_symbols: Array.isArray(marketData.supported_symbols)
+            ? marketData.supported_symbols.map((item) => ({ ...item }))
+            : [],
+          supported_timeframes: Array.isArray(marketData.supported_timeframes)
+            ? marketData.supported_timeframes.slice()
+            : [],
+          supported_quote_currencies: Array.isArray(marketData.supported_quote_currencies)
+            ? marketData.supported_quote_currencies.slice()
+            : [],
+        };
+      };
+
+      const cacheChartContext = (contextKey, candles, marketData) => {
+        if (!contextKey || !Array.isArray(candles) || candles.length === 0 || !marketData) {
+          return;
+        }
+
+        chartContextCache[contextKey] = {
+          candles: candles.map((candle) => ({ ...candle })),
+          marketData: cloneChartCacheMarketData(marketData),
+          cachedAtMs: Date.now(),
+        };
+      };
+
+      const isChartContextCacheFresh = (contextKey, maxAgeMs = 5000) => {
+        const cachedEntry = chartContextCache[contextKey];
+        if (!cachedEntry) {
+          return false;
+        }
+
+        const cachedAtMs = Number(cachedEntry.cachedAtMs);
+        if (!Number.isFinite(cachedAtMs) || cachedAtMs <= 0) {
+          return false;
+        }
+
+        return Date.now() - cachedAtMs <= maxAgeMs;
+      };
+
+      const restoreChartContextFromCache = (contextKey) => {
+        const cachedEntry = chartContextCache[contextKey];
+        if (!cachedEntry || !Array.isArray(cachedEntry.candles) || cachedEntry.candles.length === 0 || !cachedEntry.marketData) {
+          return false;
+        }
+
+        allCandles = cachedEntry.candles.map((candle) => ({ ...candle }));
+        refreshMarketInfo(cloneChartCacheMarketData(cachedEntry.marketData));
+        redrawChart();
+        forceFullChartRefresh = false;
+        lastChartContextKey = contextKey;
+        setLoadingTimeframeButton(null);
+        setRefreshStatus("Live", "is-live");
+        return true;
+      };
 
       const getTimeframeDurationSeconds = (timeframe) => {
         if (typeof timeframe !== "string" || timeframe.length < 2) {
@@ -1083,8 +1156,6 @@
           const sanitizedEnabledExchanges = savedEnabledExchanges.filter((exchangeKey) => validExchangeKeys.has(exchangeKey));
           if (sanitizedEnabledExchanges.length > 0) {
             enabledExchangeKeys = new Set(sanitizedEnabledExchanges);
-          } else {
-            enabledExchangeKeys = new Set(validExchangeKeys.has("bybit") ? ["bybit"] : [Array.from(validExchangeKeys)[0]].filter(Boolean));
           }
         }
       } catch (_error) {
@@ -1411,9 +1482,7 @@
           return new Set(sanitized);
         }
 
-        const fallbackPairs = Array.from(availableSymbols).filter(Boolean);
-        const fallbackPair = getDefaultEnabledPairForExchange(exchangeKey, fallbackPairs);
-        return fallbackPair ? new Set([fallbackPair]) : new Set();
+        return new Set(Array.from(availableSymbols).filter(Boolean));
       };
 
       enabledTimeframes = getEnabledTimeframesForExchange(currentExchangeKey);
@@ -3128,11 +3197,29 @@
         guides.solid.forEach((guide) => buildGuideSeries(guide, "solid"));
       };
 
-      const chartResizeObserver = new ResizeObserver(() => {
+      const syncChartViewportSize = () => {
+        const nextWidth = chartElement ? chartElement.clientWidth : 0;
+        const nextHeight = chartElement ? chartElement.clientHeight : 0;
+
+        if (nextWidth <= 0 || nextHeight <= 0) {
+          return false;
+        }
+
+        if (nextWidth === lastAppliedChartWidth && nextHeight === lastAppliedChartHeight) {
+          return false;
+        }
+
+        lastAppliedChartWidth = nextWidth;
+        lastAppliedChartHeight = nextHeight;
         chart.applyOptions({
-          width: chartElement.clientWidth,
-          height: chartElement.clientHeight,
+          width: nextWidth,
+          height: nextHeight,
         });
+        return true;
+      };
+
+      const chartResizeObserver = new ResizeObserver(() => {
+        syncChartViewportSize();
         applyChartSplit();
         renderFvgOverlay();
         renderSmcOverlay();
@@ -4039,6 +4126,35 @@
           quote_volume_24h_currency: button.dataset.symbolVolume24hCurrency,
         })),
       );
+
+      cacheChartContext(getChartContextKey(), allCandles, {
+        symbol: currentSymbol,
+        display_symbol: currentDisplaySymbol,
+        exchange_key: currentExchangeKey,
+        exchange: currentExchangeLabel,
+        timeframe: currentTimeframe,
+        supported_symbols: availableSymbolsByExchange[currentExchangeKey],
+        supported_timeframes: Array.from(validTimeframes),
+        supported_quote_currencies: Array.from(validQuoteCurrencies),
+        amount_step: "{{ market_data.amount_step or '' }}",
+        amount_min: "{{ market_data.amount_min if market_data.amount_min is not none else '' }}",
+        total_min: "{{ market_data.total_min if market_data.total_min is not none else '' }}",
+        price_min: "{{ market_data.price_min if market_data.price_min is not none else '' }}",
+        price_max: "{{ market_data.price_max if market_data.price_max is not none else '' }}",
+        price_step: "{{ market_data.price_step or '' }}",
+        amount_precision: "{{ market_data.amount_precision if market_data.amount_precision is not none else '' }}",
+        price_precision: "{{ market_data.price_precision if market_data.price_precision is not none else '' }}",
+        last: "{{ market_data.last if market_data.last is not none else '' }}",
+        bid: "{{ market_data.bid if market_data.bid is not none else '' }}",
+        ask: "{{ market_data.ask if market_data.ask is not none else '' }}",
+        high: "{{ market_data.high if market_data.high is not none else '' }}",
+        low: "{{ market_data.low if market_data.low is not none else '' }}",
+        quote_volume: "{{ market_data.quote_volume if market_data.quote_volume is not none else '' }}",
+        quote_volume_compact: "{{ market_data.quote_volume_compact or '' }}",
+        timestamp: "{{ market_data.timestamp or '' }}",
+        timestamp_unix: "{{ market_data.timestamp_unix if market_data.timestamp_unix is not none else '' }}",
+        error: "{{ market_data.error or '' }}",
+      });
 
       const cacheSettingsOptionsForExchange = (exchangeKey, options = {}) => {
         if (!validExchangeKeys.has(exchangeKey)) {
@@ -5656,9 +5772,29 @@
 
         if (options.refresh !== false) {
           pendingRestoreLogicalRange = null;
+          const chartView =
+            savedChartViewByTimeframe[getChartViewKey(currentTimeframe, currentExchangeKey, currentSymbol)]
+            || savedChartViewByTimeframe[currentTimeframe];
+          if (
+            chartView
+            && Number.isFinite(Number(chartView.from))
+            && Number.isFinite(Number(chartView.to))
+          ) {
+            pendingRestoreLogicalRange = {
+              from: Number(chartView.from),
+              to: Number(chartView.to),
+            };
+          }
           hasFitContent = false;
-          setLoadingTimeframeButton(currentTimeframe);
-          refreshChartData({ priority: true, showUpdatingStatus: true });
+          const requestedContextKey = getChartContextKey(currentExchangeKey, currentSymbol, currentTimeframe);
+          const restoredFromCache = restoreChartContextFromCache(requestedContextKey);
+          const skipImmediateRefresh = restoredFromCache && isChartContextCacheFresh(requestedContextKey, 5000);
+          if (!restoredFromCache) {
+            setLoadingTimeframeButton(currentTimeframe);
+          }
+          if (!skipImmediateRefresh) {
+            refreshChartData({ priority: true, showUpdatingStatus: !restoredFromCache });
+          }
           scheduleNextRefresh();
         }
       };
@@ -5977,10 +6113,7 @@
         }
 
         window.requestAnimationFrame(() => {
-          chart.applyOptions({
-            width: chartElement.clientWidth,
-            height: chartElement.clientHeight,
-          });
+          syncChartViewportSize();
           applyChartSplit();
           renderFvgOverlay();
           renderSmcOverlay();
@@ -5992,8 +6125,16 @@
         });
       };
 
+      const schedulePostPaintTask = (callback) => {
+        window.requestAnimationFrame(() => {
+          window.setTimeout(callback, 0);
+        });
+      };
+
       const setAppViewMode = (mode) => {
         currentAppViewMode = mode === "settings" ? "settings" : "trade";
+        pendingAppViewModeTaskToken += 1;
+        const taskToken = pendingAppViewModeTaskToken;
 
         if (appShellElement) {
           appShellElement.classList.toggle("is-settings-mode", currentAppViewMode === "settings");
@@ -6011,14 +6152,20 @@
         } catch (_error) {
         }
 
-        if (currentAppViewMode === "trade") {
-          renderChartViewport();
-          return;
-        }
+        schedulePostPaintTask(() => {
+          if (taskToken !== pendingAppViewModeTaskToken) {
+            return;
+          }
 
-        if (activeSettingsCategory === "exchanges") {
-          syncSettingsExchangeWithCurrentExchange();
-        }
+          if (currentAppViewMode === "trade") {
+            renderChartViewport();
+            return;
+          }
+
+          if (activeSettingsCategory === "exchanges") {
+            syncSettingsExchangeWithCurrentExchange();
+          }
+        });
       };
 
       const setSettingsExchangeTab = (exchangeKey) => {
@@ -6114,6 +6261,15 @@
 
       const syncSettingsExchangeWithCurrentExchange = () => {
         if (!validExchangeKeys.has(currentExchangeKey)) {
+          return;
+        }
+
+        if (currentAppViewMode !== "settings") {
+          activeSettingsExchangeKey = currentExchangeKey;
+          try {
+            localStorage.setItem(settingsExchangeStorageKey, activeSettingsExchangeKey);
+          } catch (_error) {
+          }
           return;
         }
 
@@ -6868,6 +7024,31 @@
           await refreshChartData();
           scheduleNextRefresh();
         }, getNextRefreshDelayMs(currentTimeframe));
+      };
+
+      const queuePriorityRefresh = (options = {}) => {
+        pendingPriorityRefresh = true;
+        if (options.showUpdatingStatus === true) {
+          pendingPriorityRefreshShowUpdating = true;
+          pendingPriorityRefreshLabel = options.updatingLabel || pendingPriorityRefreshLabel;
+        }
+      };
+
+      const flushPendingPriorityRefresh = () => {
+        if (!pendingPriorityRefresh) {
+          return;
+        }
+
+        const showUpdatingStatus = pendingPriorityRefreshShowUpdating;
+        const updatingLabel = pendingPriorityRefreshLabel;
+        pendingPriorityRefresh = false;
+        pendingPriorityRefreshShowUpdating = false;
+        pendingPriorityRefreshLabel = null;
+        refreshChartData({
+          priority: true,
+          showUpdatingStatus,
+          updatingLabel,
+        });
       };
 
       const setLoadingTimeframeButton = (timeframe) => {
@@ -9061,7 +9242,10 @@
 
         if (isRefreshing) {
           if (isPriority) {
-            pendingPriorityRefresh = true;
+            queuePriorityRefresh({ showUpdatingStatus, updatingLabel });
+            if (showUpdatingStatus) {
+              setRefreshStatus(formatUpdatingStatusText(updatingLabel), "is-updating");
+            }
           }
           return;
         }
@@ -9070,7 +9254,7 @@
         pendingPriorityRefresh = false;
         const requestId = ++refreshRequestCounter;
         const requestedTimeframe = currentTimeframe;
-        const requestedChartContextKey = `${currentExchangeKey}__${currentSymbol}__${requestedTimeframe}`;
+        const requestedChartContextKey = getChartContextKey(currentExchangeKey, currentSymbol, requestedTimeframe);
         const requestMode = forceFullChartRefresh || requestedChartContextKey !== lastChartContextKey ? "full" : "delta";
         setLoadingTimeframeButton(requestedTimeframe);
         if (showUpdatingStatus) {
@@ -9089,10 +9273,7 @@
             setRefreshStatus("Retrying", "is-error");
             isRefreshing = false;
             setLoadingTimeframeButton(null);
-            if (pendingPriorityRefresh) {
-              pendingPriorityRefresh = false;
-              refreshChartData({ priority: true });
-            }
+            flushPendingPriorityRefresh();
             return;
           }
 
@@ -9102,10 +9283,7 @@
           if (requestId !== refreshRequestCounter || requestedTimeframe !== currentTimeframe) {
             isRefreshing = false;
             setLoadingTimeframeButton(null);
-            if (pendingPriorityRefresh) {
-              pendingPriorityRefresh = false;
-              refreshChartData({ priority: true });
-            }
+            flushPendingPriorityRefresh();
             return;
           }
 
@@ -9124,10 +9302,7 @@
             setRefreshStatus("Live", "is-live");
             isRefreshing = false;
             setLoadingTimeframeButton(null);
-            if (pendingPriorityRefresh) {
-              pendingPriorityRefresh = false;
-              refreshChartData({ priority: true });
-            }
+            flushPendingPriorityRefresh();
             return;
           }
 
@@ -9180,6 +9355,7 @@
 
           refreshMarketInfo(payload.market_data);
           redrawChart();
+          cacheChartContext(requestedChartContextKey, allCandles, payload.market_data);
           const refreshedCurrentPrice = Number.isFinite(Number(payload.market_data?.last))
             ? Number(payload.market_data.last)
             : Number(payload.market_data?.ask);
@@ -9197,10 +9373,7 @@
         }
 
         isRefreshing = false;
-        if (pendingPriorityRefresh) {
-          pendingPriorityRefresh = false;
-          refreshChartData({ priority: true });
-        }
+        flushPendingPriorityRefresh();
       };
 
       if (timeframeButtonsElement) {
