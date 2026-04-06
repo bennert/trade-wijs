@@ -28,10 +28,32 @@ services:
       - "3175:3175"
     restart: unless-stopped
 
-  trade-wijs-worker:
+  trade-wijs-worker-market-snapshots:
     build: .
-    container_name: trade-wijs-worker
-    command: ["python", "worker.py"]
+    container_name: trade-wijs-worker-market-snapshots
+    command: ["python", "-m", "trade_wijs.workers.market_snapshot_worker"]
+    environment:
+      DATABASE_URL: postgresql://trade_wijs:trade_wijs@db:5432/trade_wijs
+    depends_on:
+      db:
+        condition: service_healthy
+    restart: unless-stopped
+
+  trade-wijs-worker-exchange-settings:
+    build: .
+    container_name: trade-wijs-worker-exchange-settings
+    command: ["python", "-m", "trade_wijs.workers.exchange_settings_worker"]
+    environment:
+      DATABASE_URL: postgresql://trade_wijs:trade_wijs@db:5432/trade_wijs
+    depends_on:
+      db:
+        condition: service_healthy
+    restart: unless-stopped
+
+  trade-wijs-worker-chart-warmer:
+    build: .
+    container_name: trade-wijs-worker-chart-warmer
+    command: ["python", "-m", "trade_wijs.workers.chart_warmer_worker"]
     environment:
       DATABASE_URL: postgresql://trade_wijs:trade_wijs@db:5432/trade_wijs
     depends_on:

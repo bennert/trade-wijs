@@ -34,15 +34,18 @@ if (-not (Test-Path $helpersPath)) {
 
 Add-UserPythonPath
 $env:PODMAN_COMPOSE_WARNING_LOGS = "false"
-Write-Host "Selected container runtime: podman" -ForegroundColor Cyan
 
 if (-not (Ensure-VenvRequirements -ProjectRoot $PSScriptRoot)) {
     exit 1
 }
 
-if (-not (Test-PodmanAvailable)) {
+$composeRunner = @(Resolve-ComposeRunner -ProjectRoot $PSScriptRoot -InstallPodmanComposeIfMissing | Where-Object { $_ }) | Select-Object -First 1
+if (-not $composeRunner) {
     exit 1
 }
+
+Write-Host "Selected container runtime: $($composeRunner.Runtime.Name)" -ForegroundColor Cyan
+Write-Host "Selected compose runner: $($composeRunner.Name)" -ForegroundColor DarkGray
 
 $venvPython = if (Test-IsWindows) {
     Join-Path $PSScriptRoot ".venv\Scripts\python.exe"
@@ -54,7 +57,7 @@ else {
 if (Test-Path $venvPython) {
     $previousAppVersion = $env:APP_VERSION
     Remove-Item Env:APP_VERSION -ErrorAction SilentlyContinue
-    $resolvedVersion = (& $venvPython -c "import app; print(app._get_git_version())" 2>$null | Select-Object -First 1)
+    $resolvedVersion = (& $venvPython -c "import app_services_market; print(app_services_market._get_git_version())" 2>$null | Select-Object -First 1)
     if ($resolvedVersion) {
         $resolvedVersion = $resolvedVersion.ToString().Trim()
         if ($resolvedVersion) {
@@ -73,7 +76,7 @@ if ($env:APP_VERSION) {
     Write-Host "Using APP_VERSION=$($env:APP_VERSION)" -ForegroundColor DarkGray
 }
 
-$composeArgs = @("compose", "up", "--build", "-d")
+$composeArgs = @("up", "--build", "-d", "--remove-orphans")
 
 $appHost = "localhost"
 $appPort = 3175
@@ -81,7 +84,7 @@ $appUrl = "http://${appHost}:$appPort"
 
 Write-Host "Starting containers in detached mode..." -ForegroundColor Cyan
 
-$composeExitCode = Invoke-PodmanCommand -Arguments $composeArgs
+$composeExitCode = Invoke-ComposeCommand -ComposeRunner $composeRunner -Arguments $composeArgs
 if ($composeExitCode -ne 0) {
     exit $composeExitCode
 }
@@ -90,7 +93,11 @@ Write-Host "Streaming startup logs while waiting for readiness..." -ForegroundCo
 $logJob = Start-Job -ScriptBlock {
     param($projectRoot)
     Set-Location $projectRoot
-    & podman compose logs -f 2>&1
+    . (Join-Path $projectRoot "ps-helpers.ps1")
+    $jobComposeRunner = @(Resolve-ComposeRunner -ProjectRoot $projectRoot | Where-Object { $_ }) | Select-Object -First 1
+    if ($jobComposeRunner) {
+        Invoke-ComposeCommand -ComposeRunner $jobComposeRunner -Arguments @("logs", "-f") | Out-Null
+    }
 } -ArgumentList $PSScriptRoot
 
 Write-Host "Waiting for app readiness on $appUrl ..." -ForegroundColor Yellow
@@ -128,4 +135,4 @@ else {
     Write-Host "Containers started, but app is not reachable yet at: $appUrl" -ForegroundColor Yellow
 }
 
-Write-Host "View logs: podman compose logs -f" -ForegroundColor Cyan
+Write-Host "View logs: .\logs.ps1" -ForegroundColor Cyan

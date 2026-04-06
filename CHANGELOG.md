@@ -26,6 +26,13 @@ All notable changes to this project are documented in this file.
 	- Pair selector flow now remains selectable under async UI refresh/filter transitions.
 	- Pair selector visibility defaults now keep alternative symbols available for manual switching.
 	- Settings persistence toggle waits now retry while exchange option lists finish loading.
+- Runtime entrypoints are now module-based:
+	- Removed legacy root wrappers `app.py` and `worker.py`.
+	- Docker/CI startup now uses `python -m trade_wijs.api.app`.
+- Compatibility hardening:
+	- Removed broad compatibility re-export file `app_services.py`.
+	- Updated use cases and workers to import directly from split target modules.
+	- Updated installer packaging to include `trade_wijs/` plus required root compatibility modules without relying on wrappers.
 
 ### Verification
 

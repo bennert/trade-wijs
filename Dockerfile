@@ -9,4 +9,4 @@ COPY . .
 
 EXPOSE 3175
 
-CMD ["python", "app.py"]
+CMD ["python", "-m", "trade_wijs.api.app"]

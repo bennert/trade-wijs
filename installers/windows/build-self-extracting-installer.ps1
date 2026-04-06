@@ -51,7 +51,13 @@ New-Item -Path (Join-Path $DistPath "installers\windows") -ItemType Directory -F
 Copy-ToDist -SourcePath (Join-Path $ProjectRoot "docker-compose.yml") -DestinationPath (Join-Path $DistPath "docker-compose.yml")
 Copy-ToDist -SourcePath (Join-Path $ProjectRoot "Dockerfile") -DestinationPath (Join-Path $DistPath "Dockerfile")
 Copy-ToDist -SourcePath (Join-Path $ProjectRoot "requirements.txt") -DestinationPath (Join-Path $DistPath "requirements.txt")
-Copy-ToDist -SourcePath (Join-Path $ProjectRoot "app.py") -DestinationPath (Join-Path $DistPath "app.py")
+Copy-ToDist -SourcePath (Join-Path $ProjectRoot "app_services_config.py") -DestinationPath (Join-Path $DistPath "app_services_config.py")
+Copy-ToDist -SourcePath (Join-Path $ProjectRoot "app_services_exchange.py") -DestinationPath (Join-Path $DistPath "app_services_exchange.py")
+Copy-ToDist -SourcePath (Join-Path $ProjectRoot "app_services_market.py") -DestinationPath (Join-Path $DistPath "app_services_market.py")
+Copy-ToDist -SourcePath (Join-Path $ProjectRoot "app_services_payloads.py") -DestinationPath (Join-Path $DistPath "app_services_payloads.py")
+Copy-ToDist -SourcePath (Join-Path $ProjectRoot "app_services_shared.py") -DestinationPath (Join-Path $DistPath "app_services_shared.py")
+Copy-ToDist -SourcePath (Join-Path $ProjectRoot "db_cache.py") -DestinationPath (Join-Path $DistPath "db_cache.py")
+Copy-ToDist -SourcePath (Join-Path $ProjectRoot "trade_wijs") -DestinationPath (Join-Path $DistPath "trade_wijs") -Recurse
 Copy-ToDist -SourcePath (Join-Path $ProjectRoot "ps-helpers.ps1") -DestinationPath (Join-Path $DistPath "ps-helpers.ps1")
 Copy-ToDist -SourcePath (Join-Path $ProjectRoot "installers\README.md") -DestinationPath (Join-Path $DistPath "installers\README.md")
 Copy-ToDist -SourcePath (Join-Path $ProjectRoot "static") -DestinationPath (Join-Path $DistPath "static") -Recurse

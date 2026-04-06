@@ -119,6 +119,14 @@ CI note:
 ## Recent updates
 
 - Undo history for drawing tools is now persisted in local storage and restored after a page reload.
+- Target architecture and modularization roadmap are documented in [docs/modularization-plan.md](docs/modularization-plan.md).
+- Worker responsibilities have been split into separate market snapshot, exchange settings, and chart warmer workers.
+- **Phase 2: Thin Routes** — HTTP route handlers were slimmed down. All business logic was moved to `trade_wijs.application.use_cases` with type-safe request/response dataclasses.
+- **Phase 3: Exchange & Cache Contracts** — Explicit domain models (`ChartPayload`, `MarketQuote`, `ExchangeSettings`) and repository interfaces (`CacheRepository`, `ExchangeGateway`) isolate business logic from CCXT/PostgreSQL implementation details.
+- **Phase 4: Worker Health & Logging** — All three workers now have structured JSON logging, health checks, and cycle tracking for improved observability and diagnostics.
+- **Phase 5: Frontend Modularization** — The large inline JavaScript in the template was moved to `static/js/index-app.js`, with runtime bootstrap data via an `application/json` script node.
+- **Phase 6: Wrapper Entrypoints Removed** — Legacy root wrappers (`app.py`, `worker.py`) were removed; runtime now starts directly via package modules (`python -m trade_wijs.api.app` and `python -m trade_wijs.workers.*`).
+- **Phase 7: Compatibility Layer Reduced** — Broad re-export in `app_services.py` was removed; use cases and workers now import directly from target modules (`app_services_payloads.py`, `app_services_exchange.py`, `app_services_market.py`, `app_services_config.py`).
 
 ## What's included in v1?
 
