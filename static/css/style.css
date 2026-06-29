@@ -1466,6 +1466,35 @@ body {
   font-weight: 700;
 }
 
+.chart-marker-tooltip {
+  position: absolute;
+  left: 0;
+  top: 0;
+  z-index: 7;
+  pointer-events: none;
+  opacity: 0;
+  visibility: hidden;
+  transform: translateY(4px);
+  transition: opacity 120ms ease, transform 120ms ease;
+  max-width: 340px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: color-mix(in srgb, var(--panel-2) 92%, black 8%);
+  color: var(--text);
+  box-shadow: 0 8px 22px rgba(0, 0, 0, 0.32);
+  padding: 8px 10px;
+  white-space: pre-line;
+  font-size: 11px;
+  line-height: 1.4;
+  font-weight: 600;
+}
+
+.chart-marker-tooltip.is-visible {
+  opacity: 1;
+  visibility: visible;
+  transform: translateY(0);
+}
+
 .pane-scale-overlay {
   position: absolute;
   inset: 0;
@@ -2035,6 +2064,55 @@ body.is-dragging-pane-order {
   grid-template-columns: 1fr 1fr;
   gap: 8px;
   margin-bottom: 10px;
+}
+
+.paper-trade-summary {
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--panel-2);
+  padding: 10px;
+  display: grid;
+  gap: 6px;
+}
+
+.paper-trade-title {
+  margin: 0;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--text);
+}
+
+.paper-trade-balance,
+.paper-trade-position,
+.paper-trade-orders {
+  margin: 0;
+  font-size: 11px;
+  color: var(--muted);
+}
+
+.paper-trade-orders {
+  min-height: 36px;
+  white-space: pre-line;
+  line-height: 1.4;
+}
+
+.paper-trade-orders-list {
+  min-height: 36px;
+  white-space: pre-line;
+  line-height: 1.4;
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.paper-trade-actions {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  margin-top: 4px;
+}
+
+.paper-trade-reset-btn {
+  width: 100%;
 }
 
 .order-input-field--full {

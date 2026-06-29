@@ -1,4 +1,8 @@
-﻿    (function () {
+    (function () {
+      // Skip SMC/FVG overlays during price-scale wheel interaction
+      let isPriceScaleWheelInteracting = false;
+      let priceScaleWheelIdleTimerId = null;
+      let pendingOverlayRenderTimerId = null;
       const bootstrapElement = document.getElementById("trade-wijs-bootstrap");
       const bootstrap = bootstrapElement ? JSON.parse(bootstrapElement.textContent || "{}") : {};
       const appShellElement = document.querySelector(".app-shell");
@@ -22,6 +26,7 @@
       const priceHoverGuideLineElement = document.getElementById("price-hover-guide-line");
       const priceHoverGuideLabelElement = document.getElementById("price-hover-guide-label");
       const priceHoverGuideValueElement = document.getElementById("price-hover-guide-value");
+      let chartMarkerTooltipElement = null;
       const horizontalLineSelectionHandleElement = document.getElementById("horizontal-line-selection-handle");
       const trendLineStartHandleElement = document.getElementById("trend-line-start-handle");
       const trendLineEndHandleElement = document.getElementById("trend-line-end-handle");
@@ -132,8 +137,15 @@
       const orderActionButtonElements = Array.from(document.querySelectorAll("#panel-order .trade-btn"));
       const placeOrderButtonElement = document.getElementById("place-order-btn");
       const placeOrderModalElement = document.getElementById("place-order-modal");
+      const placeOrderModalTitleElement = document.getElementById("place-order-modal-title");
       const placeOrderModalPayloadElement = document.getElementById("place-order-modal-payload");
       const placeOrderModalCloseButtonElement = document.getElementById("place-order-modal-close-btn");
+      const paperTradeBalanceElement = document.getElementById("paper-trade-balance");
+      const paperTradePositionElement = document.getElementById("paper-trade-position");
+      const paperTradeOpenOrdersListElement = document.getElementById("paper-trade-open-orders-list");
+      const paperTradeClosedOrdersListElement = document.getElementById("paper-trade-closed-orders-list");
+      const paperTradeResetExchangeButtonElement = document.getElementById("paper-trade-reset-exchange-btn");
+      const paperTradeResetAllButtonElement = document.getElementById("paper-trade-reset-all-btn");
       const orderBuyButtonElement = document.querySelector("#panel-order .buy-btn");
       const orderSellButtonElement = document.querySelector("#panel-order .sell-btn");
       const orderFillButtonElements = Array.from(document.querySelectorAll("[data-order-fill-source]"));
@@ -260,6 +272,8 @@
       let currentPriceCountdownIntervalId = null;
       let liveQuotePollIntervalId = null;
       let liveQuoteRequestInFlight = false;
+      let paperTradeStateRequestId = 0;
+      let isSubmittingPaperOrder = false;
       const LIVE_QUOTE_POLL_INTERVAL_MS = 3000;
       const EXCHANGE_RETRIEVAL_STATUS_DELAY_MS = 1000;
       const EXCHANGE_RETRIEVAL_STATUS_TEXT = "Updating: Retrieving data from exchange";
@@ -342,6 +356,15 @@
       let isDraggingChartOrderPreview = false;
       let isDraggingChartStopPreview = false;
       let lockedOrderValueField = "total";
+      let currentPaperTradeState = null;
+      const paperTradeMarkerDetailsByTime = new Map();
+
+      if (chartCanvas) {
+        chartMarkerTooltipElement = document.createElement("div");
+        chartMarkerTooltipElement.className = "chart-marker-tooltip";
+        chartMarkerTooltipElement.setAttribute("aria-hidden", "true");
+        chartCanvas.appendChild(chartMarkerTooltipElement);
+      }
 
       const clamp = (value, min, max) => Math.max(min, Math.min(max, value));
 
@@ -1471,12 +1494,22 @@
             return;
           }
 
-          const topPercent = Number.parseFloat(dividerElement.style.top || "");
-          if (!Number.isFinite(topPercent)) {
+          const topValue = dividerElement.style.top || "";
+          if (!topValue) {
             return;
           }
+          
+          try {
+            const topPercent = Number.parseFloat(topValue);
+            if (!Number.isFinite(topPercent) || topPercent < 0 || topPercent > 100) {
+              return;
+            }
 
-          dividerPositionsPx.push((topPercent / 100) * canvasHeight);
+            dividerPositionsPx.push((topPercent / 100) * canvasHeight);
+          } catch (_e) {
+            // Skip invalid dividers
+            return;
+          }
         });
 
         const resolveDividerCollision = (labelTopPx, paneMinTopPx, paneMaxTopPx) => {
@@ -2636,6 +2669,18 @@
         guides.solid.forEach((guide) => buildGuideSeries(guide, "solid"));
       };
 
+      // Debounce overlay rendering to prevent excessive DOM mutations during rapid updates
+      const scheduleOverlayRender = () => {
+        if (pendingOverlayRenderTimerId !== null) {
+          return; // Already scheduled
+        }
+        pendingOverlayRenderTimerId = window.setTimeout(() => {
+          pendingOverlayRenderTimerId = null;
+          renderFvgOverlay();
+          renderSmcOverlay();
+        }, 50); // Debounce 50ms to batch rapid render calls
+      };
+
       const syncChartViewportSize = () => {
         const nextWidth = chartElement ? chartElement.clientWidth : 0;
         const nextHeight = chartElement ? chartElement.clientHeight : 0;
@@ -2690,8 +2735,20 @@
         });
       };
 
-      chartElement.addEventListener("wheel", () => {
+      // Throttle wheel events to improve zoom performance
+      let wheelEventThrottleTimeoutId = null;
+      const throttledSchedulePaneScaleOverlayRender = () => {
+        if (wheelEventThrottleTimeoutId !== null) {
+          return;
+        }
         schedulePaneScaleOverlayRender();
+        wheelEventThrottleTimeoutId = window.setTimeout(() => {
+          wheelEventThrottleTimeoutId = null;
+        }, 50);
+      };
+
+      chartElement.addEventListener("wheel", () => {
+        throttledSchedulePaneScaleOverlayRender();
       }, { passive: true });
 
       const getPriceScaleRange = () => {
@@ -2745,8 +2802,14 @@
           return;
         }
 
-        const zoomDirection = Number(deltaY) > 0 ? 1 : -1;
-        const zoomFactor = zoomDirection > 0 ? 1.08 : (1 / 1.08);
+        const normalizedDelta = Number(deltaY);
+        if (!Number.isFinite(normalizedDelta) || normalizedDelta === 0) {
+          return;
+        }
+
+        // Convert wheel delta into bounded zoom steps so trackpads and mice both feel responsive.
+        const zoomSteps = clamp(normalizedDelta / 100, -6, 6);
+        const zoomFactor = Math.pow(1.08, zoomSteps);
         const centerPrice = getPriceFromClientY(clientY) ?? ((visibleRange.from + visibleRange.to) / 2);
         const nextFrom = centerPrice - ((centerPrice - visibleRange.from) * zoomFactor);
         const nextTo = centerPrice + ((visibleRange.to - centerPrice) * zoomFactor);
@@ -2757,11 +2820,55 @@
       };
 
       if (priceLabelInteractionPanelElement) {
+        let pendingPriceScaleWheelDelta = 0;
+        let pendingPriceScaleWheelClientY = null;
+        let priceScaleWheelFlushTimerId = null;
+        const PRICE_SCALE_WHEEL_FLUSH_MS = 150;
+
+        const flushPriceScaleWheelZoom = () => {
+          priceScaleWheelFlushTimerId = null;
+
+          const deltaToApply = pendingPriceScaleWheelDelta;
+          const clientYToApply = pendingPriceScaleWheelClientY;
+          pendingPriceScaleWheelDelta = 0;
+          pendingPriceScaleWheelClientY = null;
+
+          if (!Number.isFinite(deltaToApply) || deltaToApply === 0) {
+            return;
+          }
+
+          // Mark as interacting
+          isPriceScaleWheelInteracting = true;
+          if (priceScaleWheelIdleTimerId !== null) {
+            clearTimeout(priceScaleWheelIdleTimerId);
+            priceScaleWheelIdleTimerId = null;
+          }
+          // Cancel pending overlay projection to avoid race condition
+          if (overlayProjectionTimerId !== null) {
+            clearTimeout(overlayProjectionTimerId);
+            overlayProjectionTimerId = null;
+          }
+          zoomManualPriceScaleAtPoint(clientYToApply, deltaToApply);
+          throttledSchedulePaneScaleOverlayRender();
+          // Start idle timer to end interaction after 200ms
+          priceScaleWheelIdleTimerId = window.setTimeout(() => {
+            isPriceScaleWheelInteracting = false;
+            priceScaleWheelIdleTimerId = null;
+            // Force all overlays to render after idle
+            scheduleOverlayRender();
+            renderPaneScaleOverlay();
+          }, 200);
+        };
+
         priceLabelInteractionPanelElement.addEventListener("wheel", (event) => {
           event.preventDefault();
           event.stopPropagation();
-          zoomManualPriceScaleAtPoint(event.clientY, event.deltaY);
-          schedulePaneScaleOverlayRender();
+
+          pendingPriceScaleWheelDelta += Number(event.deltaY) || 0;
+          pendingPriceScaleWheelClientY = Number(event.clientY);
+          if (priceScaleWheelFlushTimerId === null) {
+            priceScaleWheelFlushTimerId = window.setTimeout(flushPriceScaleWheelZoom, PRICE_SCALE_WHEEL_FLUSH_MS);
+          }
         }, { passive: false });
 
         priceLabelInteractionPanelElement.addEventListener("mousedown", (event) => {
@@ -2847,8 +2954,10 @@
       });
 
       const CHART_VIEW_STORAGE_DEBOUNCE_MS = 250;
+      const OVERLAY_PROJECTION_THROTTLE_MS = 120;
       let visibleRangeRenderRafId = null;
       let chartViewStorageTimerId = null;
+      let overlayProjectionTimerId = null;
 
       const persistChartViewToStorage = () => {
         try {
@@ -2864,10 +2973,15 @@
 
         visibleRangeRenderRafId = window.requestAnimationFrame(() => {
           visibleRangeRenderRafId = null;
-          renderFvgOverlay();
-          renderSmcOverlay();
-          renderChartOrderPreview();
-          renderDynamicPriceScaleLines();
+          // Skip overlay render if price-scale wheel is active to avoid race condition
+          if (!isPriceScaleWheelInteracting) {
+            if (overlayProjectionTimerId === null) {
+              overlayProjectionTimerId = window.setTimeout(() => {
+                overlayProjectionTimerId = null;
+                scheduleOverlayRender();
+              }, OVERLAY_PROJECTION_THROTTLE_MS);
+            }
+          }
           schedulePaneScaleOverlayRender();
           updateScrollToRecentButtonVisibility();
         });
@@ -4159,6 +4273,429 @@
         placeOrderModalElement.setAttribute("aria-hidden", "true");
       };
 
+      const formatPaperTradeNumber = (value, digits = 8) => {
+        const parsedValue = Number(value);
+        if (!Number.isFinite(parsedValue)) {
+          return "-";
+        }
+
+        const precision = Math.max(0, Math.min(12, Number(digits) || 8));
+        return parsedValue.toLocaleString(undefined, {
+          minimumFractionDigits: 0,
+          maximumFractionDigits: precision,
+        });
+      };
+
+      const formatPaperTradeTimestamp = (value) => {
+        const timestampText = String(value || "").trim();
+        if (!timestampText) {
+          return "-";
+        }
+
+        // If already in UTC format (YYYY-MM-DD HH:MM:SS UTC), return as-is
+        if (timestampText.match(/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2} UTC$/)) {
+          return timestampText;
+        }
+
+        // Parse and convert to ISO 8601 format with UTC timezone
+        const parsedDate = new Date(timestampText.replace(" UTC", "Z"));
+        if (Number.isNaN(parsedDate.getTime())) {
+          return timestampText;
+        }
+
+        // Return in unambiguous format: YYYY-MM-DD HH:MM:SS UTC
+        const isoString = parsedDate.toISOString();
+        return isoString.replace('T', ' ').slice(0, 19) + ' UTC';
+      };
+
+      const parsePaperTradeTimestampToUnixSeconds = (value) => {
+        if (value === null || value === undefined) {
+          return null;
+        }
+
+        if (typeof value === "number" && Number.isFinite(value)) {
+          return value > 1_000_000_000_000 ? Math.floor(value / 1000) : Math.floor(value);
+        }
+
+        const timestampText = String(value).trim();
+        if (!timestampText) {
+          return null;
+        }
+
+        if (/^\d+$/.test(timestampText)) {
+          const numeric = Number(timestampText);
+          if (!Number.isFinite(numeric)) {
+            return null;
+          }
+          return numeric > 1_000_000_000_000 ? Math.floor(numeric / 1000) : Math.floor(numeric);
+        }
+
+        const parsedDate = new Date(timestampText.replace(" UTC", "Z").replace(" ", "T"));
+        if (Number.isNaN(parsedDate.getTime())) {
+          return null;
+        }
+
+        return Math.floor(parsedDate.getTime() / 1000);
+      };
+
+      const toTimeframeBucketTime = (unixSeconds) => {
+        const normalizedUnixSeconds = Number(unixSeconds);
+        if (!Number.isFinite(normalizedUnixSeconds) || normalizedUnixSeconds <= 0) {
+          return null;
+        }
+
+        const timeframeSeconds = Math.max(60, getTimeframeDurationSeconds(currentTimeframe));
+        return Math.floor(normalizedUnixSeconds / timeframeSeconds) * timeframeSeconds;
+      };
+
+      const hidePaperTradeMarkerTooltip = () => {
+        if (!chartMarkerTooltipElement) {
+          return;
+        }
+
+        chartMarkerTooltipElement.classList.remove("is-visible");
+        chartMarkerTooltipElement.textContent = "";
+      };
+
+      const showPaperTradeMarkerTooltip = (param) => {
+        if (!chartMarkerTooltipElement || !chartCanvas || !param || !param.point) {
+          hidePaperTradeMarkerTooltip();
+          return;
+        }
+
+        const hoveredTime = Number(param.time);
+        if (!Number.isFinite(hoveredTime)) {
+          hidePaperTradeMarkerTooltip();
+          return;
+        }
+
+        const markerEntries = paperTradeMarkerDetailsByTime.get(hoveredTime);
+        if (!Array.isArray(markerEntries) || markerEntries.length === 0) {
+          hidePaperTradeMarkerTooltip();
+          return;
+        }
+
+        const tooltipRows = markerEntries.slice(0, 4).map((entry) => {
+          const sideLabel = entry.side === "buy" ? "BUY" : "SELL";
+          const amountLabel = formatPaperTradeNumber(entry.amount, 8);
+          const priceLabel = formatPaperTradeNumber(entry.price, 8);
+          const filledAtLabel = formatPaperTradeTimestamp(entry.filledAt);
+          const orderIdLabel = entry.id !== null && entry.id !== undefined ? `#${entry.id}` : "#?";
+          return `${sideLabel} ${orderIdLabel} ${amountLabel} @ ${priceLabel} | ${filledAtLabel}`;
+        });
+
+        const remainingCount = markerEntries.length - tooltipRows.length;
+        if (remainingCount > 0) {
+          tooltipRows.push(`+${remainingCount} more fills`);
+        }
+
+        chartMarkerTooltipElement.textContent = tooltipRows.join("\n");
+        chartMarkerTooltipElement.classList.add("is-visible");
+
+        const canvasWidth = chartCanvas.clientWidth;
+        const canvasHeight = chartCanvas.clientHeight;
+        if (canvasWidth <= 0 || canvasHeight <= 0) {
+          hidePaperTradeMarkerTooltip();
+          return;
+        }
+
+        const tooltipRect = chartMarkerTooltipElement.getBoundingClientRect();
+        const tooltipWidth = Math.ceil(tooltipRect.width || 220);
+        const tooltipHeight = Math.ceil(tooltipRect.height || 56);
+
+        const baseX = Number(param.point.x) + 14;
+        const baseY = Number(param.point.y) + 14;
+        const clampedX = clamp(baseX, 8, Math.max(8, canvasWidth - tooltipWidth - 8));
+        const clampedY = clamp(baseY, 8, Math.max(8, canvasHeight - tooltipHeight - 8));
+
+        chartMarkerTooltipElement.style.left = `${clampedX}px`;
+        chartMarkerTooltipElement.style.top = `${clampedY}px`;
+      };
+
+
+
+      const updatePaperTradeOrderMarkers = (paperState) => {
+        try {
+          paperTradeMarkerDetailsByTime.clear();
+
+          if (!paperState || typeof paperState !== "object") {
+            hidePaperTradeMarkerTooltip();
+            if (candleSeries) {
+              candleSeries.setMarkers([]);
+            }
+            return;
+          }
+
+          const markers = [];
+
+          // Show only filled executions as TradingView-like buy/sell markers.
+          const closedOrders = Array.isArray(paperState.closed_orders) ? paperState.closed_orders : [];
+          closedOrders.forEach((order) => {
+            const side = String(order?.side || "").toLowerCase();
+            const status = String(order?.status || "").toLowerCase();
+            if (status !== "filled") {
+              return;
+            }
+
+            if (side !== "buy" && side !== "sell") {
+              return;
+            }
+
+            const unixSeconds = parsePaperTradeTimestampToUnixSeconds(order?.filled_at || order?.timestamp);
+            const bucketTime = toTimeframeBucketTime(unixSeconds);
+            if (bucketTime === null) {
+              return;
+            }
+
+            const amount = Number(order?.amount || 0);
+            const price = Number(order?.price || 0);
+            const filledAt = order?.filled_at || order?.timestamp;
+            const sideIsBuy = side === "buy";
+            const markerText = sideIsBuy ? "B" : "S";
+            const markerColor = sideIsBuy ? "#22ab94" : "#f6465d";
+
+            markers.push({
+              time: bucketTime,
+              position: sideIsBuy ? "belowBar" : "aboveBar",
+              color: markerColor,
+              shape: sideIsBuy ? "arrowUp" : "arrowDown",
+              text: markerText,
+              title: `${markerText} #${order?.id || "?"} ${formatPaperTradeNumber(amount, 8)} @ ${formatPaperTradeNumber(price, 8)}`,
+            });
+
+            if (!paperTradeMarkerDetailsByTime.has(bucketTime)) {
+              paperTradeMarkerDetailsByTime.set(bucketTime, []);
+            }
+            paperTradeMarkerDetailsByTime.get(bucketTime).push({
+              id: order?.id,
+              side,
+              amount,
+              price,
+              filledAt,
+            });
+          });
+
+          const sortedMarkers = markers.sort((left, right) => Number(left.time) - Number(right.time));
+
+          // Set markers on the candle series.
+          if (candleSeries && typeof candleSeries.setMarkers === "function") {
+            candleSeries.setMarkers(sortedMarkers);
+          }
+        } catch (error) {
+          console.error("Error in updatePaperTradeOrderMarkers:", error);
+        }
+      };
+
+      const renderPaperTradeState = (paperState) => {
+        if (!paperState || typeof paperState !== "object") {
+          currentPaperTradeState = null;
+          return;
+        }
+
+        currentPaperTradeState = paperState;
+
+        const symbol = String(paperState.symbol || currentSymbol || "");
+        const parts = symbol.split("/");
+        const baseCurrency = parts[0] || "BASE";
+        const quoteCurrency = parts[1] || "QUOTE";
+
+        const balances = paperState.balances && typeof paperState.balances === "object"
+          ? paperState.balances
+          : {};
+        const baseBalance = Number(balances[baseCurrency]);
+        const quoteBalance = Number(balances[quoteCurrency]);
+
+        if (paperTradeBalanceElement) {
+          paperTradeBalanceElement.textContent = `Balance: ${formatPaperTradeNumber(baseBalance)} ${baseCurrency} | ${formatPaperTradeNumber(quoteBalance, 2)} ${quoteCurrency}`;
+        }
+
+        const position = paperState.position && typeof paperState.position === "object"
+          ? paperState.position
+          : {};
+        if (paperTradePositionElement) {
+          const sizeValue = formatPaperTradeNumber(position.size, 8);
+          const avgEntryValue = formatPaperTradeNumber(position.avg_entry_price, 8);
+          const realizedPnlValue = formatPaperTradeNumber(position.realized_pnl_quote, 4);
+          paperTradePositionElement.textContent = `Position: ${sizeValue} ${baseCurrency} | Avg. entry: ${avgEntryValue} | Realized PnL: ${realizedPnlValue} ${quoteCurrency}`;
+        }
+
+        // Render open orders
+        if (paperTradeOpenOrdersListElement) {
+          const openOrders = Array.isArray(paperState.open_orders) ? paperState.open_orders : [];
+          if (openOrders.length === 0) {
+            paperTradeOpenOrdersListElement.textContent = "No open orders.";
+          } else {
+            const orderRows = openOrders.map((order) => {
+              const orderId = order?.id || "?";
+              const side = String(order?.side || "").toUpperCase();
+              const type = String(order?.type || "").toUpperCase();
+              const amount = formatPaperTradeNumber(order?.amount, 8);
+              const price = formatPaperTradeNumber(order?.price, 8);
+              const status = String(order?.status || "pending").toUpperCase();
+              return `#${orderId} ${side} ${type} ${amount} @ ${price} [${status}]`;
+            });
+            paperTradeOpenOrdersListElement.textContent = orderRows.join("\n");
+          }
+        }
+
+        // Render closed orders
+        if (paperTradeClosedOrdersListElement) {
+          const closedOrders = Array.isArray(paperState.closed_orders) ? paperState.closed_orders.slice(-5).reverse() : [];
+          if (closedOrders.length === 0) {
+            paperTradeClosedOrdersListElement.textContent = "No filled or cancelled orders yet.";
+          } else {
+            const orderRows = closedOrders.map((order) => {
+              const orderId = order?.id || "?";
+              const normalizedSide = String(order?.side || "").trim().toLowerCase();
+              const side = normalizedSide.toUpperCase();
+              const sideIcon = normalizedSide === "buy" ? "↑" : normalizedSide === "sell" ? "↓" : "•";
+              const type = String(order?.type || "").toUpperCase();
+              const amount = formatPaperTradeNumber(order?.amount, 8);
+              const price = formatPaperTradeNumber(order?.price, 8);
+              const status = String(order?.status || "filled").toUpperCase();
+              if (status === "FILLED") {
+                const filledAt = formatPaperTradeTimestamp(order?.filled_at || order?.timestamp);
+                return `${sideIcon} #${orderId} ${side} ${type} ${amount} @ ${price} [${status}] | Filled at: ${filledAt}`;
+              }
+              return `${sideIcon} #${orderId} ${side} ${type} ${amount} @ ${price} [${status}]`;
+            });
+            paperTradeClosedOrdersListElement.textContent = orderRows.join("\n");
+          }
+        }
+
+        // Update chart markers for orders
+        updatePaperTradeOrderMarkers(paperState);
+      };
+
+      const refreshPaperTradeState = async () => {
+        const requestId = ++paperTradeStateRequestId;
+        try {
+          const query = new URLSearchParams({
+            exchange: currentExchangeKey,
+            symbol: currentSymbol,
+          });
+
+          const response = await fetch(`/api/paper-trade/state?${query.toString()}`, { cache: "no-store" });
+          if (!response.ok || requestId !== paperTradeStateRequestId) {
+            return;
+          }
+
+          const payload = await response.json();
+          if (requestId !== paperTradeStateRequestId) {
+            return;
+          }
+
+          renderPaperTradeState(payload);
+        } catch (_error) {
+          if (paperTradeBalanceElement) {
+            paperTradeBalanceElement.textContent = "Balance unavailable";
+          }
+          if (paperTradePositionElement) {
+            paperTradePositionElement.textContent = "Position unavailable";
+          }
+        }
+      };
+
+      const submitPaperOrder = async () => {
+        if (isSubmittingPaperOrder) {
+          return;
+        }
+
+        isSubmittingPaperOrder = true;
+        const payload = buildPlaceOrderPayload();
+
+        if (orderActionStatusElement) {
+          orderActionStatusElement.textContent = "Placing paper order...";
+        }
+
+        try {
+          const response = await fetch("/api/paper-trade/order", {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify(payload),
+          });
+
+          const responsePayload = await response.json();
+          if (!response.ok) {
+            const errorMessage = String(responsePayload?.error || "Paper order failed");
+            if (orderActionStatusElement) {
+              orderActionStatusElement.textContent = errorMessage;
+            }
+            openPlaceOrderPayloadModal(responsePayload, "Paper order error");
+            return;
+          }
+
+          if (responsePayload?.state) {
+            renderPaperTradeState(responsePayload.state);
+          }
+
+          if (orderActionStatusElement) {
+            const orderId = responsePayload?.order?.id;
+            orderActionStatusElement.textContent = Number.isFinite(Number(orderId))
+              ? `Paper order #${orderId} filled`
+              : "Paper order filled";
+          }
+
+          openPlaceOrderPayloadModal(responsePayload, "Paper order response");
+        } catch (_error) {
+          if (orderActionStatusElement) {
+            orderActionStatusElement.textContent = "Paper order failed due to a network error";
+          }
+        } finally {
+          isSubmittingPaperOrder = false;
+        }
+      };
+
+      const resetPaperTradeState = async (options = {}) => {
+        const resetAll = options.resetAll === true;
+        const confirmMessage = resetAll
+          ? "Reset all paper trading state for all exchanges?"
+          : `Reset paper trading state for ${currentExchangeKey}?`;
+
+        if (!window.confirm(confirmMessage)) {
+          return;
+        }
+
+        if (orderActionStatusElement) {
+          orderActionStatusElement.textContent = resetAll
+            ? "Resetting all paper state..."
+            : `Resetting paper state for ${currentExchangeKey}...`;
+        }
+
+        try {
+          const response = await fetch("/api/paper-trade/reset", {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({
+              exchange: currentExchangeKey,
+              reset_all: resetAll,
+            }),
+          });
+
+          const payload = await response.json();
+          if (!response.ok) {
+            if (orderActionStatusElement) {
+              orderActionStatusElement.textContent = String(payload?.error || "Reset failed");
+            }
+            return;
+          }
+
+          if (orderActionStatusElement) {
+            orderActionStatusElement.textContent = String(payload?.message || "Paper state reset");
+          }
+
+          await refreshPaperTradeState();
+        } catch (_error) {
+          if (orderActionStatusElement) {
+            orderActionStatusElement.textContent = "Reset failed due to a network error";
+          }
+        }
+      };
+
       const buildPlaceOrderPayload = () => {
         const orderType = getSelectedOrderTypeValue();
         const payload = {
@@ -4188,12 +4725,17 @@
         return payload;
       };
 
-      const openPlaceOrderPayloadModal = () => {
+      const openPlaceOrderPayloadModal = (payloadOverride = null, modalTitle = "Order payload") => {
         if (!placeOrderModalElement || !placeOrderModalPayloadElement) {
           return;
         }
 
-        const payload = buildPlaceOrderPayload();
+        const payload = payloadOverride && typeof payloadOverride === "object"
+          ? payloadOverride
+          : buildPlaceOrderPayload();
+        if (placeOrderModalTitleElement) {
+          placeOrderModalTitleElement.textContent = modalTitle;
+        }
         placeOrderModalPayloadElement.textContent = JSON.stringify(payload, null, 2);
         placeOrderModalElement.classList.add("is-visible");
         placeOrderModalElement.setAttribute("aria-hidden", "false");
@@ -8471,6 +9013,7 @@
         }
 
         volumeSeries.setData(indicatorState.volume ? calculateVolume(renderCandles) : []);
+        updatePaperTradeOrderMarkers(currentPaperTradeState);
         renderFvgZones(chartData);
         updateCountdownAnchor();
           const latestBar = chartData[chartData.length - 1];
@@ -8502,6 +9045,7 @@
 
         if (!param || !param.point || !param.time) {
           hoveredCandleTime = null;
+          hidePaperTradeMarkerTooltip();
           hidePriceHoverGuide();
           const latestBar = chartData[chartData.length - 1] || null;
           const latestVolume = latestBar ? candleVolumeByTime.get(Number(latestBar.time)) ?? null : null;
@@ -8513,6 +9057,7 @@
         const candleAtCrosshair = param.seriesData.get(candleSeries);
         if (!candleAtCrosshair) {
           hoveredCandleTime = null;
+          hidePaperTradeMarkerTooltip();
           hidePriceHoverGuide();
           const latestBar = chartData[chartData.length - 1] || null;
           const latestVolume = latestBar ? candleVolumeByTime.get(Number(latestBar.time)) ?? null : null;
@@ -8526,6 +9071,7 @@
         updatePriceHoverGuide(param);
         const hoveredVolume = candleVolumeByTime.get(hoveredTime) ?? null;
         updateOHLCDisplay(candleAtCrosshair, hoveredVolume);
+        showPaperTradeMarkerTooltip(param);
         renderPaneScaleOverlay();
       });
 
@@ -8533,6 +9079,9 @@
         if (!marketData) {
           return;
         }
+
+        const previousSymbol = currentSymbol;
+        const previousExchangeKey = currentExchangeKey;
 
         applyOrderAmountInputConstraints(marketData);
 
@@ -8667,6 +9216,10 @@
           : Number(marketData.ask);
         if (Number.isFinite(currentPriceValue) && currentPriceValue > 0) {
           lastObservedCurrentPrice = currentPriceValue;
+        }
+
+        if (previousSymbol !== currentSymbol || previousExchangeKey !== currentExchangeKey) {
+          refreshPaperTradeState();
         }
       };
 
@@ -9858,7 +10411,19 @@
 
       if (placeOrderButtonElement) {
         placeOrderButtonElement.addEventListener("click", () => {
-          openPlaceOrderPayloadModal();
+          submitPaperOrder();
+        });
+      }
+
+      if (paperTradeResetExchangeButtonElement) {
+        paperTradeResetExchangeButtonElement.addEventListener("click", () => {
+          resetPaperTradeState({ resetAll: false });
+        });
+      }
+
+      if (paperTradeResetAllButtonElement) {
+        paperTradeResetAllButtonElement.addEventListener("click", () => {
+          resetPaperTradeState({ resetAll: true });
         });
       }
 
@@ -10339,6 +10904,7 @@
       applyOrderTypeInputsVisibility();
       validateStopPriceLimits();
       updateOrderActionButtonsState();
+      refreshPaperTradeState();
       if (shouldInitialTimeframeRefresh) {
         refreshChartData({ priority: true });
       }
