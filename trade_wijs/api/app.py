@@ -1,9 +1,11 @@
 """Flask application entrypoint for Trade Wijs."""
 
+import json
 from pathlib import Path
 
 from flask import Flask, jsonify, make_response, render_template, request
 
+from app_services_paper_trading import _update_order_status as app_update_order_status
 from trade_wijs.application.use_cases import (
     ChartRequest,
     FetchChartUseCase,
@@ -11,6 +13,12 @@ from trade_wijs.application.use_cases import (
     FetchMarketQuoteUseCase,
     ExchangeSettingsRequest,
     FetchExchangeSettingsUseCase,
+    PaperTradeStateRequest,
+    FetchPaperTradeStateUseCase,
+    PlacePaperOrderRequest,
+    PlacePaperOrderUseCase,
+    ResetPaperTradeStateRequest,
+    ResetPaperTradeStateUseCase,
 )
 
 _PROJECT_ROOT = Path(__file__).resolve().parents[2]
@@ -24,6 +32,9 @@ app = Flask(
 _fetch_chart_use_case = FetchChartUseCase()
 _fetch_market_quote_use_case = FetchMarketQuoteUseCase()
 _fetch_exchange_settings_use_case = FetchExchangeSettingsUseCase()
+_fetch_paper_trade_state_use_case = FetchPaperTradeStateUseCase()
+_place_paper_order_use_case = PlacePaperOrderUseCase()
+_reset_paper_trade_state_use_case = ResetPaperTradeStateUseCase()
 
 
 @app.route("/")
@@ -89,6 +100,83 @@ def exchange_settings_options():
     
     # Return JSON response
     return jsonify(settings_response.payload)
+
+
+@app.route("/api/paper-trade/state")
+def paper_trade_state():
+    """API route for fetching current paper trade balances, position, and recent orders."""
+    state_request = PaperTradeStateRequest.from_flask_args(request.args)
+    state_response = _fetch_paper_trade_state_use_case(state_request)
+    return jsonify(state_response.payload)
+
+
+@app.route("/api/paper-trade/order", methods=["POST"])
+def place_paper_order():
+    """API route for placing a paper trade order using simulated execution."""
+    try:
+        payload = request.get_json(silent=True)
+        if not isinstance(payload, dict):
+            try:
+                payload = json.loads((request.data or b"{}").decode("utf-8"))
+            except (ValueError, TypeError, UnicodeDecodeError):
+                payload = {}
+
+        place_order_request = PlacePaperOrderRequest.from_json(payload)
+        place_order_response = _place_paper_order_use_case(place_order_request)
+        return jsonify(place_order_response.payload)
+    except ValueError as error:
+        return jsonify({"error": str(error), "paper_mode": True}), 400
+
+
+@app.route("/api/paper-trade/reset", methods=["POST"])
+def reset_paper_trade_state():
+    """API route for resetting paper trade state for one exchange or all exchanges."""
+    payload = request.get_json(silent=True)
+    if not isinstance(payload, dict):
+        try:
+            payload = json.loads((request.data or b"{}").decode("utf-8"))
+        except (ValueError, TypeError, UnicodeDecodeError):
+            payload = {}
+
+    reset_request = ResetPaperTradeStateRequest.from_json(payload)
+    reset_response = _reset_paper_trade_state_use_case(reset_request)
+    return jsonify(reset_response.payload)
+
+
+@app.route("/api/paper-trade/orders/<int:order_id>/fill", methods=["POST"])
+def fill_paper_order(order_id):
+    """API route for filling a pending paper trade order."""
+    try:
+        payload = request.get_json(silent=True)
+        if not isinstance(payload, dict):
+            try:
+                payload = json.loads((request.data or b"{}").decode("utf-8"))
+            except (ValueError, TypeError, UnicodeDecodeError):
+                payload = {}
+
+        exchange = payload.get("exchange", "")
+        result = app_update_order_status(exchange, order_id, "filled")
+        return jsonify(result)
+    except ValueError as error:
+        return jsonify({"error": str(error), "paper_mode": True}), 400
+
+
+@app.route("/api/paper-trade/orders/<int:order_id>/cancel", methods=["POST"])
+def cancel_paper_order(order_id):
+    """API route for cancelling a pending paper trade order."""
+    try:
+        payload = request.get_json(silent=True)
+        if not isinstance(payload, dict):
+            try:
+                payload = json.loads((request.data or b"{}").decode("utf-8"))
+            except (ValueError, TypeError, UnicodeDecodeError):
+                payload = {}
+
+        exchange = payload.get("exchange", "")
+        result = app_update_order_status(exchange, order_id, "cancelled")
+        return jsonify(result)
+    except ValueError as error:
+        return jsonify({"error": str(error), "paper_mode": True}), 400
 
 
 def main():

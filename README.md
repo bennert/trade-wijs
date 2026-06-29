@@ -118,6 +118,7 @@ CI note:
 
 ## Recent updates
 
+- **Paper Trading via CCXT added** - The order panel now submits simulated paper orders against live CCXT prices (buy uses ask, sell uses bid), tracks balances/positions, shows recent paper orders per market, and supports reset for the current exchange or all exchanges.
 - Undo history for drawing tools is now persisted in local storage and restored after a page reload.
 - Target architecture and modularization roadmap are documented in [docs/modularization-plan.md](docs/modularization-plan.md).
 - Worker responsibilities have been split into separate market snapshot, exchange settings, and chart warmer workers.
@@ -139,7 +140,7 @@ CI note:
 - Right order/position panels (placeholders)
 - Bottom tab bar
 
-There is no trading functionality in this version yet.
+Paper trading is now available in the order panel (simulation only, no real exchange orders).
 
 ## Version format
 

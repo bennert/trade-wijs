@@ -479,6 +479,30 @@
               </div>
             </label>
           </div>
+          <section class="paper-trade-summary" aria-label="Paper trading summary">
+            <h3 class="paper-trade-title">Paper Trading (CCXT price feed)</h3>
+            <div id="paper-trade-balance" class="paper-trade-balance">Loading balance...</div>
+            <div id="paper-trade-position" class="paper-trade-position">Loading position...</div>
+            
+            <div id="paper-trade-open-orders" class="paper-trade-orders-section" aria-label="Open pending orders">
+              <h4 class="paper-trade-orders-title">Open Orders</h4>
+              <div id="paper-trade-open-orders-list" class="paper-trade-orders-list" aria-live="polite"></div>
+            </div>
+            
+            <div id="paper-trade-closed-orders" class="paper-trade-orders-section" aria-label="Filled and cancelled orders">
+              <h4 class="paper-trade-orders-title">Recent Fills & Cancellations</h4>
+              <div id="paper-trade-closed-orders-list" class="paper-trade-orders-list" aria-live="polite"></div>
+            </div>
+            
+            <div class="paper-trade-actions">
+              <button id="paper-trade-reset-exchange-btn" type="button" class="settings-save-btn paper-trade-reset-btn">Reset current exchange</button>
+              <button id="paper-trade-reset-all-btn" type="button" class="settings-save-btn settings-factory-reset-btn paper-trade-reset-btn">Reset all</button>
+            </div>
+          </section>
+
+          <div class="place-order-row">
+            <button id="place-order-btn" type="button" class="place-order-btn">Place Order</button>
+          </div>
         </div>
 
         <div id="panel-watchlist" class="tab-panel" role="tabpanel">
@@ -498,9 +522,6 @@
           </div>
         </div>
 
-        <div class="place-order-row">
-          <button id="place-order-btn" type="button" class="place-order-btn">Place Order</button>
-        </div>
       </section>
 
       <div id="place-order-modal" class="place-order-modal" aria-hidden="true" role="dialog" aria-modal="true" aria-labelledby="place-order-modal-title">

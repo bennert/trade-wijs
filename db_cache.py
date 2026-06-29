@@ -80,6 +80,15 @@ def ensure_schema():
                 )
                 """
             )
+            cursor.execute(
+                """
+                CREATE TABLE IF NOT EXISTS paper_trading_state (
+                    exchange_key TEXT PRIMARY KEY,
+                    state_json TEXT NOT NULL,
+                    updated_at_unix BIGINT NOT NULL
+                )
+                """
+            )
         connection.commit()
 
     _STATE["schema_ready"] = True
@@ -298,3 +307,90 @@ def get_chart_payload(
         return None
 
     return payload if isinstance(payload, dict) else None
+
+
+def upsert_paper_trading_state(exchange_key, state_payload):
+    """Inserts or updates paper trading state for one exchange."""
+    if not is_enabled() or not exchange_key or not isinstance(state_payload, dict):
+        return
+
+    ensure_schema()
+    updated_at_unix = int(time.time())
+    payload_json = json.dumps(state_payload)
+
+    with _connection() as connection:
+        with connection.cursor() as cursor:
+            cursor.execute(
+                """
+                INSERT INTO paper_trading_state (exchange_key, state_json, updated_at_unix)
+                VALUES (%s, %s, %s)
+                ON CONFLICT (exchange_key)
+                DO UPDATE SET
+                    state_json = EXCLUDED.state_json,
+                    updated_at_unix = EXCLUDED.updated_at_unix
+                """,
+                (exchange_key, payload_json, updated_at_unix),
+            )
+        connection.commit()
+
+
+def get_paper_trading_state(exchange_key):
+    """Retrieves persisted paper trading state for one exchange."""
+    if not is_enabled() or not exchange_key:
+        return None
+
+    ensure_schema()
+
+    with _connection() as connection:
+        with connection.cursor() as cursor:
+            cursor.execute(
+                """
+                SELECT state_json
+                FROM paper_trading_state
+                WHERE exchange_key = %s
+                """,
+                (exchange_key,),
+            )
+            row = cursor.fetchone()
+
+    if not row:
+        return None
+
+    try:
+        payload = json.loads(row[0])
+    except (TypeError, ValueError):
+        return None
+
+    return payload if isinstance(payload, dict) else None
+
+
+def delete_paper_trading_state(exchange_key):
+    """Deletes persisted paper trading state for one exchange."""
+    if not is_enabled() or not exchange_key:
+        return
+
+    ensure_schema()
+
+    with _connection() as connection:
+        with connection.cursor() as cursor:
+            cursor.execute(
+                """
+                DELETE FROM paper_trading_state
+                WHERE exchange_key = %s
+                """,
+                (exchange_key,),
+            )
+        connection.commit()
+
+
+def delete_all_paper_trading_state():
+    """Deletes all persisted paper trading state rows."""
+    if not is_enabled():
+        return
+
+    ensure_schema()
+
+    with _connection() as connection:
+        with connection.cursor() as cursor:
+            cursor.execute("DELETE FROM paper_trading_state")
+        connection.commit()

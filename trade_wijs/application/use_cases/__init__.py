@@ -15,6 +15,17 @@ from .fetch_exchange_settings_use_case import (
     ExchangeSettingsResponse,
     FetchExchangeSettingsUseCase,
 )
+from .paper_trade_use_case import (
+    PaperTradeStateRequest,
+    PaperTradeStateResponse,
+    FetchPaperTradeStateUseCase,
+    PlacePaperOrderRequest,
+    PlacePaperOrderResponse,
+    PlacePaperOrderUseCase,
+    ResetPaperTradeStateRequest,
+    ResetPaperTradeStateResponse,
+    ResetPaperTradeStateUseCase,
+)
 
 __all__ = [
     "ChartRequest",
@@ -26,4 +37,13 @@ __all__ = [
     "ExchangeSettingsRequest",
     "ExchangeSettingsResponse",
     "FetchExchangeSettingsUseCase",
+    "PaperTradeStateRequest",
+    "PaperTradeStateResponse",
+    "FetchPaperTradeStateUseCase",
+    "PlacePaperOrderRequest",
+    "PlacePaperOrderResponse",
+    "PlacePaperOrderUseCase",
+    "ResetPaperTradeStateRequest",
+    "ResetPaperTradeStateResponse",
+    "ResetPaperTradeStateUseCase",
 ]
