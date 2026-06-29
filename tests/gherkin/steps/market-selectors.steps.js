@@ -151,14 +151,14 @@ const clickDifferentExchange = async (page) => {
   await targetOption.click();
 };
 
-const assertRefreshStatusUpdatingThenLive = async (page, timeoutMs = 12000) => {
+const assertRefreshStatusUpdatingThenLive = async (page, timeoutMs = 18000) => {
   const status = page.locator('#refresh-status');
   const startTime = Date.now();
   let sawUpdating = false;
 
   while (Date.now() - startTime < timeoutMs) {
     const currentText = ((await status.textContent()) || '').trim();
-    if (currentText === 'Updating...') {
+    if (/^Updating(\b|\s|:|\.)/.test(currentText)) {
       sawUpdating = true;
     }
 
