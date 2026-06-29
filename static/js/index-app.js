@@ -1,4 +1,4 @@
-    (function () {
+﻿    (function () {
       // Skip SMC/FVG overlays during price-scale wheel interaction
       let isPriceScaleWheelInteracting = false;
       let priceScaleWheelIdleTimerId = null;
@@ -358,6 +358,7 @@
       let lockedOrderValueField = "total";
       let currentPaperTradeState = null;
       const paperTradeMarkerDetailsByTime = new Map();
+      let candleSeriesMarkersPrimitive = null;
 
       if (chartCanvas) {
         chartMarkerTooltipElement = document.createElement("div");
@@ -4412,7 +4413,31 @@
         chartMarkerTooltipElement.style.top = `${clampedY}px`;
       };
 
+      const applyCandleSeriesMarkers = (markers) => {
+        const safeMarkers = Array.isArray(markers) ? markers : [];
+        if (!candleSeries) {
+          return;
+        }
 
+        if (typeof candleSeries.setMarkers === "function") {
+          candleSeries.setMarkers(safeMarkers);
+          return;
+        }
+
+        if (window.LightweightCharts && typeof window.LightweightCharts.createSeriesMarkers === "function") {
+          if (!candleSeriesMarkersPrimitive) {
+            candleSeriesMarkersPrimitive = window.LightweightCharts.createSeriesMarkers(candleSeries, safeMarkers);
+            return;
+          }
+
+          if (typeof candleSeriesMarkersPrimitive.setMarkers === "function") {
+            candleSeriesMarkersPrimitive.setMarkers(safeMarkers);
+            return;
+          }
+
+          candleSeriesMarkersPrimitive = window.LightweightCharts.createSeriesMarkers(candleSeries, safeMarkers);
+        }
+      };
 
       const updatePaperTradeOrderMarkers = (paperState) => {
         try {
@@ -4420,9 +4445,7 @@
 
           if (!paperState || typeof paperState !== "object") {
             hidePaperTradeMarkerTooltip();
-            if (candleSeries) {
-              candleSeries.setMarkers([]);
-            }
+            applyCandleSeriesMarkers([]);
             return;
           }
 
@@ -4478,9 +4501,7 @@
           const sortedMarkers = markers.sort((left, right) => Number(left.time) - Number(right.time));
 
           // Set markers on the candle series.
-          if (candleSeries && typeof candleSeries.setMarkers === "function") {
-            candleSeries.setMarkers(sortedMarkers);
-          }
+          applyCandleSeriesMarkers(sortedMarkers);
         } catch (error) {
           console.error("Error in updatePaperTradeOrderMarkers:", error);
         }
